@@ -5,20 +5,16 @@ ROOT_DIR="$(pwd)"
 
 VERSION="${1:-}"
 if [ -z "${VERSION}" ]; then
-  if [ -f "package.json" ]; then
-    VERSION=$(node -p "require('./package.json').version" 2>/dev/null || echo "0.1.5")
-  else
-    VERSION="0.1.5"
-  fi
+  VERSION="0.1.6"
 fi
 
 VERSION="${VERSION#v}"
 
-BINARY_PATH="src-tauri/target/release/veluna"
+BINARY_PATH="target/release/veluna"
 
 if [ ! -f "${BINARY_PATH}" ]; then
   echo "Error: Binary not found at ${BINARY_PATH}." >&2
-  echo "Please build the Tauri release binary first ('npm run tauri build' or 'cargo build --release --manifest-path src-tauri/Cargo.toml')." >&2
+  echo "Please build the release binary first: cargo build --release -p veluna" >&2
   exit 1
 fi
 
@@ -45,14 +41,8 @@ if [ -f "packaging/veluna.desktop" ]; then
   install -Dm644 "packaging/veluna.desktop" "${PKG_DIR}/usr/share/applications/veluna.desktop"
 fi
 
-if [ -f "src-tauri/icons/32x32.png" ]; then
-  install -Dm644 "src-tauri/icons/32x32.png" "${PKG_DIR}/usr/share/icons/hicolor/32x32/apps/veluna.png"
-fi
-if [ -f "src-tauri/icons/128x128.png" ]; then
-  install -Dm644 "src-tauri/icons/128x128.png" "${PKG_DIR}/usr/share/icons/hicolor/128x128/apps/veluna.png"
-fi
-if [ -f "src-tauri/icons/128x128@2x.png" ]; then
-  install -Dm644 "src-tauri/icons/128x128@2x.png" "${PKG_DIR}/usr/share/icons/hicolor/256x256/apps/veluna.png"
+if [ -f "assets/linux/veluna.svg" ]; then
+  install -Dm644 "assets/linux/veluna.svg" "${PKG_DIR}/usr/share/icons/hicolor/scalable/apps/veluna.svg"
 fi
 
 if [ -f "LICENSE" ]; then
@@ -66,20 +56,18 @@ cat <<EOF >"${PKG_DIR}/.PKGINFO"
 pkgname = veluna
 pkgbase = veluna
 pkgver = ${VERSION}-1
-pkgdesc = Ad-free desktop music streaming powered by YouTube
+pkgdesc = Ad-free desktop music streaming powered by YouTube Music and Spotify
 url = https://github.com/rry0ku/veluna
 builddate = ${BUILD_DATE}
 packager = Veluna CI <https://github.com/rry0ku/veluna>
 size = ${PKG_SIZE}
 arch = x86_64
 license = MIT
-depend = mpv
-depend = yt-dlp
-depend = ffmpeg
-depend = webkit2gtk-4.1
-depend = libayatana-appindicator
-depend = gtk3
-depend = hicolor-icon-theme
+depend = alsa-lib
+depend = dbus
+depend = sqlite
+depend = libxkbcommon
+depend = wayland
 EOF
 
 if command -v bsdtar >/dev/null 2>&1; then

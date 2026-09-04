@@ -1,13 +1,13 @@
 # Maintainer: rry0ku <https://github.com/rry0ku>
 pkgname=veluna
-pkgver=0.1.5
+pkgver=0.1.6
 pkgrel=1
-pkgdesc="Ad-free desktop music streaming powered by YouTube"
+pkgdesc="Ad-free desktop music streaming powered by YouTube Music and Spotify"
 arch=('x86_64')
 url="https://github.com/rry0ku/veluna"
 license=('MIT')
-depends=('mpv' 'yt-dlp' 'ffmpeg' 'webkit2gtk-4.1' 'libayatana-appindicator' 'gtk3' 'hicolor-icon-theme')
-makedepends=('cargo' 'nodejs' 'npm' 'pkg-config' 'openssl' 'librsvg')
+depends=('alsa-lib' 'dbus' 'sqlite' 'libxkbcommon' 'wayland')
+makedepends=('cargo' 'pkg-config')
 source=("${pkgname}-v${pkgver}.tar.gz::https://github.com/rry0ku/${pkgname}/archive/refs/tags/v${pkgver}.tar.gz"
         "veluna.desktop")
 sha256sums=('SKIP'
@@ -15,30 +15,24 @@ sha256sums=('SKIP'
 
 build() {
     cd "${srcdir}/${pkgname}-${pkgver}"
-    npm ci
-    npx tauri build --no-bundle
+    cargo build --release -p veluna
 }
 
 package() {
     cd "${srcdir}/${pkgname}-${pkgver}"
 
     # Install compiled binary
-    install -Dm755 "src-tauri/target/release/veluna" "${pkgdir}/usr/bin/veluna"
+    install -Dm755 "target/release/veluna" "${pkgdir}/usr/bin/veluna"
 
     # Install desktop entry
     install -Dm644 "${srcdir}/veluna.desktop" "${pkgdir}/usr/share/applications/veluna.desktop"
 
-    # Install application icons
-    if [ -f "src-tauri/icons/32x32.png" ]; then
-        install -Dm644 "src-tauri/icons/32x32.png" "${pkgdir}/usr/share/icons/hicolor/32x32/apps/veluna.png"
+    # Install application icon
+    if [ -f "assets/linux/veluna.svg" ]; then
+        install -Dm644 "assets/linux/veluna.svg" "${pkgdir}/usr/share/icons/hicolor/scalable/apps/veluna.svg"
     fi
-    if [ -f "src-tauri/icons/128x128.png" ]; then
-        install -Dm644 "src-tauri/icons/128x128.png" "${pkgdir}/usr/share/icons/hicolor/128x128/apps/veluna.png"
-    fi
-    if [ -f "src-tauri/icons/128x128@2x.png" ]; then
-        install -Dm644 "src-tauri/icons/128x128@2x.png" "${pkgdir}/usr/share/icons/hicolor/256x256/apps/veluna.png"
-    fi
-    # Install application license
+
+    # Install license
     if [ -f "LICENSE" ]; then
         install -Dm644 "LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
     fi

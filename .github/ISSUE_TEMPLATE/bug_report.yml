@@ -13,6 +13,7 @@ body:
       label: Veluna Version
       description: What version of Veluna are you running?
       options:
+        - v0.1.6
         - v0.1.5
         - Built from source (main branch)
         - Other (specify in description)
@@ -50,8 +51,8 @@ body:
         - Native Arch package (PKGBUILD / makepkg / pkg.tar.zst)
         - Debian package (.deb)
         - RPM package (.rpm)
-        - Windows installer (.exe)
-        - Built from source (npm run tauri dev / build)
+        - Windows binary (.zip / .exe)
+        - Built from source (cargo build --release)
     validations:
       required: true
   - type: textarea

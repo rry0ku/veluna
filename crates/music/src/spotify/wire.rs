@@ -1,0 +1,144 @@
+use std::fmt::Write as _;
+
+use librespot_protocol::playlist4_external::{ListAttributes, SelectedListContent as RootList};
+use serde::Deserialize;
+
+use crate::models;
+
+pub const UNKNOWN: &str = "Unknown";
+const IMAGE_CDN: &str = "https://i.scdn.co/image/";
+const BLEND: &str = "blend";
+const BY_SIZE: [&str; 4] = ["xlarge", "large", "default", "small"];
+
+pub fn image_url(file_id: &[u8]) -> Option<String> {
+    if file_id.is_empty() {
+        return None;
+    }
+
+    let hex = file_id.iter().fold(String::new(), |mut hex, byte| {
+        let _ = write!(hex, "{byte:02x}");
+        hex
+    });
+    Some(format!("{IMAGE_CDN}{hex}"))
+}
+
+pub fn blend(attributes: &ListAttributes) -> bool {
+    if attributes.format().to_ascii_lowercase().contains(BLEND) {
+        return true;
+    }
+
+    attributes
+        .format_attributes
+        .iter()
+        .any(|attribute| attribute.key().to_ascii_lowercase().starts_with(BLEND))
+}
+
+pub fn fetchable(url: &str) -> bool {
+    url.starts_with("http://") || url.starts_with("https://")
+}
+
+fn playlist_cover(attributes: &ListAttributes) -> Option<String> {
+    for target in BY_SIZE {
+        if let Some(size) = attributes
+            .picture_size
+            .iter()
+            .find(|size| size.target_name() == target)
+            .filter(|size| fetchable(size.url()))
+        {
+            return Some(size.url().to_owned());
+        }
+    }
+
+    attributes
+        .picture_size
+        .first()
+        .map(|size| size.url())
+        .filter(|url| fetchable(url))
+        .map(str::to_owned)
+        .or_else(|| image_url(attributes.picture()))
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct Named {
+    pub display_name: Option<String>,
+    pub name: Option<String>,
+}
+
+impl Named {
+    pub fn label(&self) -> Option<&str> {
+        self.display_name
+            .as_deref()
+            .or(self.name.as_deref())
+            .filter(|label| !label.is_empty())
+    }
+}
+
+pub fn playlist_from(id: &str, content: &RootList, username: &str) -> models::Playlist {
+    let owner = match content.owner_username() {
+        "" => UNKNOWN,
+        owner => owner,
+    };
+    let name = match content.attributes.name() {
+        "" => UNKNOWN,
+        name => name,
+    };
+
+    models::Playlist {
+        id: id.to_owned(),
+        name: name.to_owned(),
+        owner: owner.to_owned(),
+        owner_id: content.owner_username().to_owned(),
+        owned: owner == username,
+        collaborative: content.attributes.collaborative(),
+        blend: blend(&content.attributes),
+        public: false,
+        cover: playlist_cover(&content.attributes),
+        track_count: content.length().max(0) as u32,
+        modified_at: seconds(content.timestamp()),
+    }
+}
+
+pub fn playlists_from(rootlist: &RootList) -> Vec<models::Playlist> {
+    let contents = &rootlist.contents;
+    let meta = &contents.meta_items;
+
+    contents
+        .items
+        .iter()
+        .enumerate()
+        .filter_map(|(index, item)| {
+            let id = item.uri().strip_prefix("spotify:playlist:")?;
+            let meta = meta.get(index);
+
+            let name = meta
+                .map(|meta| meta.attributes.name())
+                .filter(|name| !name.is_empty())
+                .unwrap_or(UNKNOWN);
+            let owner = meta
+                .map(|meta| meta.owner_username())
+                .filter(|owner| !owner.is_empty())
+                .unwrap_or(UNKNOWN);
+
+            Some(models::Playlist {
+                id: id.to_owned(),
+                name: name.to_owned(),
+                owner: owner.to_owned(),
+                owner_id: meta
+                    .map(|meta| meta.owner_username())
+                    .unwrap_or_default()
+                    .to_owned(),
+                owned: false,
+                collaborative: meta.is_some_and(|meta| meta.attributes.collaborative()),
+                blend: meta.is_some_and(|meta| blend(&meta.attributes)),
+                public: item.attributes.public(),
+                cover: meta.and_then(|meta| playlist_cover(&meta.attributes)),
+                track_count: meta.map(|meta| meta.length()).unwrap_or_default().max(0) as u32,
+                modified_at: None,
+            })
+        })
+        .collect()
+}
+
+pub fn seconds(millis: i64) -> Option<i64> {
+    (millis > 0).then_some(millis / 1_000)
+}

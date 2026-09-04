@@ -42,8 +42,8 @@ Describe the steps performed to verify these changes:
 - [ ] My code follows the style guidelines of this project.
 - [ ] I have performed a self-review of my code.
 - [ ] I have tested these changes across the indicated platforms.
-- [ ] Frontend build succeeds without errors: `npm run build`
-- [ ] Backend check passes without errors: `cargo check --manifest-path src-tauri/Cargo.toml`
+- [ ] Workspace check passes without errors: `cargo check --workspace`
+- [ ] All tests pass: `cargo test --workspace`
 - [ ] I have added comments to code where necessary, particularly in complex logic.
 - [ ] I have updated relevant documentation where applicable.
 - [ ] My changes introduce no new compiler warnings or build regressions.

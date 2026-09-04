@@ -10,7 +10,7 @@ permissions:
   contents: write
 
 jobs:
-  release-linux:
+  linux-build:
     name: 'Linux build'
     runs-on: ubuntu-22.04
 
@@ -18,111 +18,95 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 26
-          cache: 'npm'
-
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './src-tauri -> target'
 
       - name: Install Linux system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libwebkit2gtk-4.1-dev \
-            build-essential \
-            curl \
-            wget \
-            file \
-            libxdo-dev \
-            libssl-dev \
-            libayatana-appindicator3-dev \
-            librsvg2-dev \
-            rpm \
+            pkg-config \
+            libasound2-dev \
+            libdbus-1-dev \
+            libsqlite3-dev \
+            libxkbcommon-dev \
+            libwayland-dev \
             zstd \
             libarchive-tools
 
-      - name: Install frontend dependencies
-        run: npm ci
+      - name: Install packaging tools
+        run: |
+          cargo install cargo-deb --locked
+          cargo install cargo-generate-rpm --locked
 
-      - name: Build Tauri Application & Publish Release
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'v__VERSION__'
-          releaseBody: 'See the assets below to download Veluna for your platform.'
-          releaseDraft: false
-          prerelease: false
+      - name: Build release binary
+        run: cargo build --release -p veluna
 
-      - name: Build Arch Linux package (.pkg.tar.zst)
+      - name: Build .deb package
+        run: cargo deb -p veluna --no-build
+
+      - name: Build .rpm package
+        run: |
+          strip target/release/veluna
+          cargo generate-rpm -p crates/veluna
+
+      - name: Build .pkg.tar.zst (Arch Linux)
         run: |
           chmod +x ./scripts/build-arch-pkg.sh
           ./scripts/build-arch-pkg.sh "${{ github.ref_name }}"
 
-      - name: Upload Arch Linux .pkg.tar.zst to Release
+      - name: Create GitHub Release and upload Linux packages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ github.ref_name }} veluna-*.pkg.tar.zst --clobber
+          VERSION="${{ github.ref_name }}"
+          gh release create "${VERSION}" \
+            --title "Veluna ${VERSION}" \
+            --notes "See the assets below to download Veluna for your platform." \
+            --draft=false \
+            --prerelease=false \
+            || true
+          gh release upload "${VERSION}" \
+            target/debian/veluna_*.deb \
+            target/generate-rpm/veluna-*.rpm \
+            veluna-*.pkg.tar.zst \
+            --clobber
 
-  release-windows:
+  windows-build:
     name: 'Windows build'
     runs-on: windows-latest
+    needs: linux-build
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 26
-          cache: 'npm'
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './src-tauri -> target'
 
-      - name: Download Windows bundled binaries
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          node ./scripts/setup-deps.js
+      - name: Build release binary
+        run: cargo build --release -p veluna
 
-      - name: Create binaries.zip
+      - name: Package Windows binary
         shell: pwsh
         run: |
-          Compress-Archive -Path "src-tauri/binaries/*.exe" -DestinationPath "binaries.zip" -Force
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          Compress-Archive `
+            -Path "target/release/veluna.exe" `
+            -DestinationPath "veluna-${version}-windows-x86_64.zip" `
+            -Force
 
-      - name: Install frontend dependencies
-        run: npm ci
-
-      - name: Build Tauri Application & Publish Release
-        uses: tauri-apps/tauri-action@v0
+      - name: Upload Windows package to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'v__VERSION__'
-          releaseBody: 'See the assets below to download Veluna for your platform.'
-          releaseDraft: false
-          prerelease: false
-
-      - name: Upload binaries.zip to Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
         run: |
-          gh release upload ${{ github.ref_name }} binaries.zip --clobber
+          $version = "${{ github.ref_name }}"
+          $zip = Get-ChildItem "veluna-*-windows-x86_64.zip" | Select-Object -First 1
+          gh release upload $version $zip.Name --clobber

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Veluna
+GenericName=Music Player
+Comment=A native music streaming client, built with Rust and GPUI
+Icon=veluna
+Exec=veluna %u
+Terminal=false
+Categories=AudioVideo;Audio;Player;
+Keywords=music;spotify;audio;player;
+MimeType=x-scheme-handler/spotify;
+StartupWMClass=veluna
+StartupNotify=true

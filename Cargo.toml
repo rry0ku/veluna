@@ -1,0 +1,124 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.6"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/rry0ku/veluna"
+
+[workspace.dependencies]
+embed = { path = "crates/embed" }
+i18n = { path = "crates/i18n" }
+icons = { path = "crates/icons" }
+music = { path = "crates/music" }
+state = { path = "crates/state" }
+input = { path = "crates/input" }
+router = { path = "crates/router" }
+ui = { path = "crates/ui" }
+views = { path = "crates/views" }
+
+anyhow = "1.0"
+async-trait = "0.1"
+base64 = "0.22"
+bytes = "1"
+flate2 = "1"
+cpal = "0.17"
+dirs = "6.0"
+discord-rich-presence = "1.1.0"
+deunicode = "1.6"
+env_logger = "0.11"
+fastrand = "2.5"
+futures = "0.3"
+fluent-bundle = "0.16"
+gpui = { git = "https://github.com/nolight132/gpui", rev = "96ffcd35c2d1eaccb2a27dddf3de588476b72000" }
+gpui_platform = { git = "https://github.com/nolight132/gpui", rev = "96ffcd35c2d1eaccb2a27dddf3de588476b72000", features = [
+  "font-kit",
+  "wayland",
+  "x11",
+] }
+http = "1.3"
+winresource = "0.1"
+windows-sys = { version = "0.61", features = ["Win32_Graphics_Dwm"] }
+interprocess = "2.4"
+image = { version = "0.25", default-features = false, features = [
+  "jpeg",
+  "png",
+  "webp",
+] }
+jiff = { version = "0.2", default-features = false, features = ["std"] }
+kakasi = "0.1"
+ksni = { version = "0.3", default-features = false, features = ["async-io", "blocking"] }
+libc = "0.2"
+lofty = "0.25"
+log = "0.4"
+moka = { version = "0.12.15", features = ["future", "sync"] }
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSResponder", "NSRunningApplication"] }
+reqwest = { version = "0.12", default-features = false, features = [
+  "json",
+  "rustls-tls-native-roots",
+] }
+raw-window-handle = "0.6"
+roxmltree = "0.21"
+rodio = { version = "0.22", default-features = false, features = ["playback"] }
+rtrb = "0.3"
+rusqlite = { version = "0.32" }
+rustfft = "6.4"
+serde = { version = "1.0", features = ["derive", "rc"] }
+serde_json = "1.0"
+serde_norway = "0.9"
+sha2 = "0.10"
+souvlaki = "0.8"
+sys-locale = "0.3"
+tray-icon = { version = "0.24", default-features = false }
+unic-langid = { version = "0.9", features = ["macros"] }
+unicode-segmentation = "1.12"
+ytmusic = { git = "https://github.com/nolight132/ytmusic-rs", rev = "0b2b13a32c16e4245b6c9001f8088a75c83a638c" }
+
+librespot-core = { version = "0.8.0", default-features = false, features = [
+  "rustls-tls-native-roots",
+] }
+librespot-oauth = { version = "0.8.0", default-features = false, features = [
+  "rustls-tls-native-roots",
+] }
+librespot-playback = { version = "0.8.0", default-features = false, features = [
+  "rodio-backend",
+  "rustls-tls-native-roots",
+] }
+librespot-protocol = "0.8.0"
+percent-encoding = "2.3"
+protobuf = "3"
+tokio = { version = "1.53", features = [
+  "rt-multi-thread",
+  "net",
+  "io-util",
+  "macros",
+  "sync",
+  "time",
+] }
+
+[patch.crates-io]
+librespot-audio = { git = "https://github.com/nolight132/librespot", rev = "e7eb953d5848fd97bacd00e6c0e33500765eaa63" }
+librespot-core = { git = "https://github.com/nolight132/librespot", rev = "e7eb953d5848fd97bacd00e6c0e33500765eaa63" }
+librespot-metadata = { git = "https://github.com/nolight132/librespot", rev = "e7eb953d5848fd97bacd00e6c0e33500765eaa63" }
+librespot-oauth = { git = "https://github.com/nolight132/librespot", rev = "e7eb953d5848fd97bacd00e6c0e33500765eaa63" }
+librespot-playback = { git = "https://github.com/nolight132/librespot", rev = "e7eb953d5848fd97bacd00e6c0e33500765eaa63" }
+librespot-protocol = { git = "https://github.com/nolight132/librespot", rev = "e7eb953d5848fd97bacd00e6c0e33500765eaa63" }
+rodio = { git = "https://github.com/RustAudio/rodio", rev = "4aa22e85e5ad5565c45dfdda95051158eb6b56c3" }
+
+[profile.dev]
+split-debuginfo = "unpacked"
+
+[profile.dev.package.ui]
+debug = false
+opt-level = 2
+
+[profile.dev.package.views]
+debug = false
+opt-level = 2
+
+[profile.dev.package."*"]
+debug = false
+opt-level = 2

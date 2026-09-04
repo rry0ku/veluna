@@ -123,7 +123,6 @@ Veluna was built from scratch to be the opposite: a lightweight, native desktop 
 
 ### Desktop Integration and Privacy
 - Discord Rich Presence: displays active track, artist, elapsed time, and artwork on your profile.
-- Last.fm Scrobbling: real-time Now Playing status and smart 50% scrobble scheduler.
 - Native Linux MPRIS2 D-Bus service (`org.mpris.MediaPlayer2.veluna`) supporting playerctl, GNOME, KDE, and lockscreen controls.
 - System tray minimization with quick media controls.
 - Global hardware media key support.
@@ -221,8 +220,8 @@ veluna/
 │   │   ├── SettingsPanel.tsx  # Audio, appearance, network, storage, and backup settings
 │   │   ├── TrackRow.tsx       # Track row component with hover actions
 │   │   └── VirtualTrackList.tsx # Windowed virtualizer for high performance on budget hardware
-│   ├── hooks/                 # Audio player, queue, search, playlists, stats, lyrics, scrobbler, theme hooks
-│   ├── services/              # SQLite, IndexedDB, and Last.fm API clients
+│   ├── hooks/                 # Audio player, queue, search, playlists, stats, lyrics, theme hooks
+│   ├── services/              # SQLite and IndexedDB storage clients
 │   ├── types.ts               # Core TypeScript type definitions
 │   ├── utils.ts               # Utility helpers, metadata parsers, and validators
 │   └── App.tsx                # Main view router and keyboard shortcut listeners

@@ -1,0 +1,21 @@
+mod chrome;
+mod root;
+mod screens;
+mod shared;
+mod shells;
+
+pub use root::Root;
+use screens::artist::ArtistView;
+use screens::detail::DetailView;
+use screens::downloads::DownloadsView;
+use screens::genre::GenreView;
+use screens::history::HistoryView;
+use screens::home::HomeView;
+pub use screens::library::{LibraryView, Shelf};
+pub use screens::login::LoginView;
+pub use screens::settings::SettingsView;
+use screens::song::SongView;
+use screens::stats::StatsView;
+use screens::user::UserView;
+use shared::adaptive::Adaptive;
+use shells::fullscreen::FullscreenView;

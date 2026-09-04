@@ -1,44 +1,17 @@
-# Logs
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# Node / Vite
-node_modules/
-dist/
-dist-ssr/
-.vite/
-
-# Environment
-.env
-.env.*
-*.local
-
-# Rust / Tauri
+# ── Rust ──────────────────────────────────────────────────────────────────────
 target/
-src-tauri/target/
+Cargo.lock
 
-# Tauri bundles
-src-tauri/gen/
-src-tauri/bundle/
-src-tauri/binaries/*.exe
-src-tauri/binaries/*.zip
-src-tauri/binaries/*.7z
-
-# OS files
+# ── OS files ───────────────────────────────────────────────────────────────────
 .DS_Store
+.DS_Store?
 Thumbs.db
+ehthumbs.db
+desktop.ini
 
-# Editors
+# ── Editors / IDEs ─────────────────────────────────────────────────────────────
 .idea/
-.agents/
 .vscode/
-
-# Misc editor files
 *.suo
 *.ntvs*
 *.njsproj
@@ -46,17 +19,27 @@ Thumbs.db
 *.swp
 *.swo
 *~
+*.orig
 
-# Coverage / caches
-coverage/
-.nyc_output/
-.cache/
-.eslintcache
+# ── Logs ───────────────────────────────────────────────────────────────────────
+*.log
+logs/
 
-# Temporary files
+# ── Temp / build artifacts ─────────────────────────────────────────────────────
 tmp/
 temp/
 *.tmp
 
-# Others
+# ── Environment ────────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Release packages (built by CI, don't commit) ──────────────────────────────
+*.deb
+*.rpm
+*.pkg.tar.zst
+*.pkg.tar.xz
+
+# ── Misc ───────────────────────────────────────────────────────────────────────
 SKILLS.md
