@@ -464,7 +464,7 @@ settings-tab-about = 情報
 settings-version = バージョン
 settings-version-detail = 実行中の Veluna のビルド
 settings-license = ライセンス
-settings-license-detail = MIT ライセンス
+settings-license-detail = GNU 一般公衆利用許諾書 v3.0 (GPL-3.0)
 settings-license-view = ライセンスを読む
 settings-source = ソースコード
 settings-source-detail = このビルドの対応ソース
@@ -474,7 +474,7 @@ settings-team-github = GitHub
 settings-role-lead-maintainer = リードメンテナー
 settings-role-maintainer = メンテナー
 settings-role-contributor = コントリビューター
-settings-notice = Copyright © 2026 Veluna Contributors. Veluna は完全に無保証です。フリーソフトウェアであり、MIT ライセンスの条件のもとで自由に再配布できます。Veluna は非公式であり、Spotify AB とは無関係です。
+settings-notice = Copyright © 2026 Veluna Contributors. Veluna は完全に無保証です。フリーかつオープンソースのソフトウェアであり、GNU 一般公衆利用許諾書バージョン 3 (GPL-3.0) の条件のもとで自由に再配布できます。Veluna は非公式であり、Spotify AB とは無関係です。
 
 # themes
 theme-system = システム

@@ -529,7 +529,7 @@ settings-tab-about = About
 settings-version = Version
 settings-version-detail = The build of veluna you are running
 settings-license = License
-settings-license-detail = MIT License
+settings-license-detail = GNU General Public License v3.0 (GPL-3.0)
 settings-license-view = Read the license
 settings-source = Source code
 settings-source-detail = The corresponding source for this build
@@ -539,7 +539,7 @@ settings-team-github = GitHub
 settings-role-lead-maintainer = Lead Maintainer
 settings-role-maintainer = Maintainer
 settings-role-contributor = Contributor
-settings-notice = Copyright © 2026 Veluna Contributors. Veluna comes with absolutely no warranty. It is open source software, and you are welcome to redistribute it under the terms of the MIT License. Veluna is unofficial and is not affiliated with Spotify AB.
+settings-notice = Copyright © 2026 Veluna Contributors. Veluna comes with absolutely no warranty. It is free and open source software, and you are welcome to redistribute it under the terms of the GNU General Public License version 3 (GPL-3.0). Veluna is unofficial and is not affiliated with Spotify AB.
 
 # themes
 theme-system = System

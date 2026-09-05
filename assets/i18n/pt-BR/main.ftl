@@ -508,7 +508,7 @@ settings-tab-about = Sobre
 settings-version = Versão
 settings-version-detail = A compilação do veluna que você está executando
 settings-license = Licença
-settings-license-detail = Licença MIT
+settings-license-detail = Licença Pública Geral GNU v3.0 (GPL-3.0)
 settings-license-view = Ler a licença
 settings-source = Código-fonte
 settings-source-detail = O código-fonte correspondente a esta compilação
@@ -518,7 +518,7 @@ settings-team-github = GitHub
 settings-role-lead-maintainer = Mantenedor Principal
 settings-role-maintainer = Mantenedor
 settings-role-contributor = Contribuidor
-settings-notice = Copyright © 2026 Contribuidores do Veluna. O Veluna é distribuído com ABSOLUTAMENTE NENHUMA GARANTIA. É um software livre, e você pode redistribuí-lo sob os termos da Licença MIT. O Veluna não é oficial e não é afiliado ao Spotify AB.
+settings-notice = Copyright © 2026 Contribuidores do Veluna. O Veluna é distribuído com ABSOLUTAMENTE NENHUMA GARANTIA. É um software livre e de código aberto, e você pode redistribuí-lo sob os termos da Licença Pública Geral GNU versão 3 (GPL-3.0). O Veluna não é oficial e não é afiliado ao Spotify AB.
 
 # themes
 theme-system = Sistema

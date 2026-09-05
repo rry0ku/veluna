@@ -27,7 +27,7 @@ No subscriptions. No advertisements. No accounts. Zero telemetry.<br/>
 
 <p align="center">
   <a href="https://github.com/rry0ku/veluna/releases"><img src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows-informational?style=flat-square&logo=linux&logoColor=white" alt="Platform" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-39FF14?style=flat-square" alt="License" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-39FF14?style=flat-square" alt="License" /></a>
   <a href="https://tauri.app"><img src="https://img.shields.io/badge/Tauri-v2-FFC131?style=flat-square&logo=tauri&logoColor=white" alt="Tauri" /></a>
   <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/Rust-stable-CE422B?style=flat-square&logo=rust&logoColor=white" alt="Rust" /></a>
   <a href="https://react.dev"><img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React" /></a>
@@ -267,8 +267,8 @@ Veluna is a local playback client. It does not host, cache, or redistribute copy
 ---
 
 ## License
-
-MIT License. Copyright (c) [rry0ku](https://github.com/rry0ku).
+ 
+GPL-3.0 License. Copyright (c) [rry0ku](https://github.com/rry0ku).
 
 ---
 
