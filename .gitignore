@@ -43,3 +43,6 @@ temp/
 
 # ── Misc ───────────────────────────────────────────────────────────────────────
 SKILLS.md
+
+# Vite cache (accidentally generated)
+.vite/
