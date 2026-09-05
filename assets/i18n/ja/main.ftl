@@ -464,7 +464,7 @@ settings-tab-about = 情報
 settings-version = バージョン
 settings-version-detail = 実行中の Veluna のビルド
 settings-license = ライセンス
-settings-license-detail = GNU General Public License バージョン 3 以降
+settings-license-detail = MIT ライセンス
 settings-license-view = ライセンスを読む
 settings-source = ソースコード
 settings-source-detail = このビルドの対応ソース
@@ -474,7 +474,7 @@ settings-team-github = GitHub
 settings-role-lead-maintainer = リードメンテナー
 settings-role-maintainer = メンテナー
 settings-role-contributor = コントリビューター
-settings-notice = Copyright © 2026 Veluna Contributors. Veluna は完全に無保証です。フリーソフトウェアであり、GNU General Public License バージョン 3 以降の条件のもとで自由に再配布できます。Veluna は非公式であり、Spotify AB とは無関係です。
+settings-notice = Copyright © 2026 Veluna Contributors. Veluna は完全に無保証です。フリーソフトウェアであり、MIT ライセンスの条件のもとで自由に再配布できます。Veluna は非公式であり、Spotify AB とは無関係です。
 
 # themes
 theme-system = システム
@@ -546,14 +546,22 @@ lyrics-writers = 作詞: { $writers }
 
 update-available = Veluna { $version } が公開されました
 update-detail = 現在のバージョンは { $running } です。変更点を読むか、今すぐ更新できます。
-update-detail-notes = 現在のバージョンは { $running } です。変更点を読んでから、インストールした方法で Veluna を更新してください。
+update-detail-notes = 現在のバージョンは { $running } です。GitHub から最新リリースをダウンロードして更新してください。
+update-download = ダウンロード
 update-notes = 変更点
 update-now = 更新
 update-later = 後で
 update-working = 更新をダウンロードしています…
 update-failed = 更新をインストールできませんでした。リリースページからもう一度お試しください。
 settings-check-updates = 更新を確認
-settings-check-updates-detail = 起動時に一度、新しいバージョンがあるか GitHub に確認する。Veluna が自動で更新するのは Windows のみで、他の環境では変更点を案内する
+settings-check-updates-detail = 起動時に新しいバージョンがあるか GitHub に確認する
+settings-check-now = 手動アップデート確認
+settings-check-now-detail = GitHub で Veluna の最新バージョンを確認する
+settings-check-now-btn = 今すぐ確認
+settings-checking-updates = 確認中…
+toast-update-available = アップデートがあります: { $name }
+toast-update-up-to-date = 最新バージョンです
+toast-update-failed = アップデートの確認に失敗しました
 
 # tags
 tags-edit-title = タグを編集

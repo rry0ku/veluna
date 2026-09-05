@@ -26,7 +26,7 @@ use ui::{
 };
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const LICENSE_URL: &str = "https://www.gnu.org/licenses/gpl-3.0.html";
+const LICENSE_URL: &str = "https://github.com/rry0ku/veluna/blob/main/LICENSE";
 const SOURCE_URL: &str = "https://github.com/rry0ku/veluna";
 
 const THEMES: &str = "themes";
@@ -142,9 +142,11 @@ impl SettingsView {
         cx: &mut Context<Self>,
     ) -> Self {
         let settings = Veluna::global(cx).settings.clone();
+        let updates = Veluna::global(cx).updates.clone();
         cx.observe(&session, |_, _, cx| cx.notify()).detach();
         cx.observe(&settings, |_, _, cx| cx.notify()).detach();
         cx.observe(&playback, |_, _, cx| cx.notify()).detach();
+        cx.observe(&updates, |_, _, cx| cx.notify()).detach();
         let me = cx.entity_id();
         let languages = SearchPopup::new("settings-language-search", me, cx);
         cx.observe(&languages.input(), |this, _, cx| {
@@ -228,10 +230,6 @@ impl SettingsView {
                 Row::Item(self.karaoke_lyrics_row(cx).into_any_element()),
                 Row::Item(self.romanized_lyrics_row(cx).into_any_element()),
             ],
-            SettingsTab::Downloads => vec![
-                Row::Item(self.download_folder_row(cx).into_any_element()),
-                Row::Item(self.download_quality_row(cx).into_any_element()),
-            ],
             SettingsTab::Integrations => {
                 let mut rows = vec![
                     Row::Item(self.discord_rpc_row(cx).into_any_element()),
@@ -243,12 +241,10 @@ impl SettingsView {
                 }
                 rows
             }
-            SettingsTab::Privacy => vec![Row::Item(
-                self.lyrics_for_local_files_row(cx).into_any_element(),
-            )],
             SettingsTab::About => vec![
                 Row::Item(self.version_row(cx).into_any_element()),
                 Row::Item(self.updates_row(cx).into_any_element()),
+                Row::Item(self.check_now_row(cx).into_any_element()),
                 self.title("settings-group-project", cx),
                 Row::Item(self.license_row(cx).into_any_element()),
                 Row::Item(self.source_row(cx).into_any_element()),
@@ -1094,6 +1090,34 @@ impl SettingsView {
         )
     }
 
+    fn check_now_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
+        let theme = *cx.theme();
+        let muted = theme.muted_foreground;
+        let small = theme.text(Text::Small);
+        let updates = Veluna::global(cx).updates.clone();
+        let checking = updates.read(cx).is_checking();
+
+        self.row(
+            t!("settings-check-now"),
+            t!("settings-check-now-detail"),
+            muted,
+            small,
+            Button::new("check-now")
+                .small()
+                .outline()
+                .disabled(checking)
+                .icon("icons/refresh-cw.svg")
+                .label(match checking {
+                    true => t!("settings-checking-updates"),
+                    false => t!("settings-check-now-btn"),
+                })
+                .on_click(cx.listener(move |_, _, _, cx| {
+                    updates.update(cx, |updates, cx| updates.check_now(cx));
+                }))
+                .into_any_element(),
+        )
+    }
+
     fn panel_lyrics_size_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
         let scale = self.settings.read(cx).panel_lyrics_scale();
 
@@ -1165,27 +1189,6 @@ impl SettingsView {
             muted,
             small,
             actions.into_any_element(),
-        )
-    }
-
-    fn lyrics_for_local_files_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = *cx.theme();
-        let muted = theme.muted_foreground;
-        let small = theme.text(Text::Small);
-        let on = self.settings.read(cx).lyrics_for_local_files();
-
-        self.row(
-            t!("settings-lyrics-for-local-files"),
-            t!("settings-lyrics-for-local-files-detail"),
-            muted,
-            small,
-            Switch::new("lyrics-for-local-files", on)
-                .on_click(cx.listener(move |this, _, _, cx| {
-                    this.settings.update(cx, |settings, cx| {
-                        settings.set_lyrics_for_local_files(!on, cx)
-                    });
-                }))
-                .into_any_element(),
         )
     }
 
@@ -1627,7 +1630,7 @@ impl SettingsView {
             t!("settings-version-detail"),
             theme.muted_foreground,
             theme.text(Text::Small),
-            div().child(VERSION).into_any_element(),
+            div().child(format!("v{VERSION}")).into_any_element(),
         )
     }
 
@@ -1721,72 +1724,6 @@ impl SettingsView {
                                 .child(member.role.label()),
                         )
                 })),
-        )
-    }
-
-    fn download_folder_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = *cx.theme();
-        let muted = theme.muted_foreground;
-        let small = theme.text(Text::Small);
-        let path = self.settings.read(cx).download_dir().unwrap_or_else(|| {
-            dirs::audio_dir()
-                .unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join("Music"))
-                .join("Veluna")
-        });
-        let path_str = path.display().to_string();
-
-        let button = Button::new("open-download-dir-setting")
-            .outline()
-            .icon("icons/folder-plus.svg")
-            .label("Open Folder")
-            .on_click(cx.listener(move |_, _, _, _| {
-                std::fs::create_dir_all(&path).ok();
-                #[cfg(target_os = "linux")]
-                Command::new("xdg-open").arg(&path).spawn().ok();
-                #[cfg(target_os = "macos")]
-                Command::new("open").arg(&path).spawn().ok();
-                #[cfg(target_os = "windows")]
-                Command::new("explorer").arg(&path).spawn().ok();
-            }));
-
-        self.row(
-            "Download Location".into(),
-            path_str.into(),
-            muted,
-            small,
-            button.into_any_element(),
-        )
-    }
-
-    fn download_quality_row(&self, cx: &mut Context<Self>) -> impl IntoElement {
-        let theme = *cx.theme();
-        let muted = theme.muted_foreground;
-        let small = theme.text(Text::Small);
-        let current_quality = self.settings.read(cx).download_quality().to_owned();
-        let current_label = SharedString::from(current_quality.clone());
-
-        let qualities = ["Auto (Highest)", "320 kbps", "256 kbps", "192 kbps", "128 kbps"];
-        let picker = Picker::new("download-quality-picker", &self.popovers, current_label)
-            .width(Picker::NARROW)
-            .items(qualities.into_iter().map(|q| {
-                let is_selected = q == current_quality;
-                let q_str = q.to_string();
-                MenuItem::new(q, q)
-                    .selected(is_selected)
-                    .on_click(cx.listener(move |this, _, _, cx| {
-                        this.settings.update(cx, |settings, cx| {
-                            settings.set_download_quality(&q_str, cx);
-                        });
-                        cx.notify();
-                    }))
-            }));
-
-        self.row(
-            "Audio Quality".into(),
-            "Stream download bitrate preset".into(),
-            muted,
-            small,
-            picker.into_any_element(),
         )
     }
 

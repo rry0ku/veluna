@@ -21,7 +21,7 @@ use ui::{
 
 use crate::chrome::{Aside, TitleBarOptions};
 use crate::shared::menus::ItemMenu;
-use crate::shared::transport::{NOTCH, download, like, moved, percent, transport, volume_icon};
+use crate::shared::transport::{NOTCH, like, moved, percent, transport, volume_icon};
 use crate::shared::visualizer::VisualizerDrive;
 use crate::shells::Shell;
 
@@ -425,8 +425,7 @@ impl FullscreenView {
                             .items_center()
                             .gap_1()
                             .opacity(1. - hide)
-                            .child(like(track.clone(), cx))
-                            .child(download(track.clone(), cx)),
+                            .child(like(track.clone(), cx)),
                     ),
             )
             .when_some(track, |this, track| {
@@ -524,8 +523,7 @@ impl FullscreenView {
                                     .items_center()
                                     .gap_1()
                                     .opacity(1. - hide)
-                                    .child(like(track.clone(), cx))
-                                    .child(download(track.clone(), cx)),
+                                    .child(like(track.clone(), cx)),
                             ),
                     )
                     .when_some(track, |this, track| {

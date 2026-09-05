@@ -1,19 +1,11 @@
-use std::path::{Path, PathBuf};
-use std::process::Command;
-
 use anyhow::{Context as _, Result};
 use gpui::{Context, Entity, Task};
 use serde::Deserialize;
-use sha2::{Digest as _, Sha256};
 
-use crate::{AppSettings, Io, join};
+use crate::{AppSettings, Io, Outcome, Toasts, join};
 
 const LATEST: &str = "https://api.github.com/repos/rry0ku/veluna/releases/latest";
-const INSTALLER: &str = "Veluna-Setup.exe";
-const SUMS: &str = "SHA256SUMS";
-const UNINSTALLER: &str = "unins000.exe";
 const RUNNING: &str = env!("CARGO_PKG_VERSION");
-const INSTALLABLE: bool = cfg!(target_os = "windows");
 const AGENT: &str = concat!(
     "veluna/",
     env!("CARGO_PKG_VERSION"),
@@ -24,16 +16,12 @@ const AGENT: &str = concat!(
 pub struct Release {
     pub version: String,
     pub page: String,
-    installer: Option<String>,
-    sums: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum UpdateState {
     Quiet,
     Offered(Release),
-    Fetching,
-    Failed,
 }
 
 pub struct Updates {
@@ -41,6 +29,7 @@ pub struct Updates {
     settings: Entity<AppSettings>,
     http: reqwest::Client,
     io: Io,
+    checking: bool,
     task: Option<Task<()>>,
 }
 
@@ -51,9 +40,10 @@ impl Updates {
             settings,
             http: reqwest::Client::new(),
             io,
+            checking: false,
             task: None,
         };
-        updates.look(cx);
+        updates.check_on_startup(cx);
         updates
     }
 
@@ -68,12 +58,8 @@ impl Updates {
         }
     }
 
-    pub fn installable(&self) -> bool {
-        INSTALLABLE
-            && installed()
-            && self
-                .offered()
-                .is_some_and(|release| release.installer.is_some() && release.sums.is_some())
+    pub fn is_checking(&self) -> bool {
+        self.checking
     }
 
     pub fn dismiss(&mut self, cx: &mut Context<Self>) {
@@ -82,59 +68,57 @@ impl Updates {
         cx.notify();
     }
 
-    pub fn install(&mut self, cx: &mut Context<Self>) {
-        let Some(release) = self.offered().cloned() else {
-            return;
-        };
-        let (Some(installer), Some(sums)) = (release.installer, release.sums) else {
-            return;
-        };
-        self.state = UpdateState::Fetching;
-        cx.notify();
-
-        let http = self.http.clone();
-        let io = self.io.clone();
-        let version = release.version;
-        self.task = Some(cx.spawn(async move |this, cx| {
-            let fetched =
-                join(io.spawn(async move { fetch(&http, &installer, &sums, &version).await }))
-                    .await;
-            let started = fetched.and_then(|installer| launch(&installer));
-            match started {
-                Ok(()) => {
-                    cx.update(|cx| cx.quit());
-                }
-                Err(error) => {
-                    log::warn!("updates: cannot install the new version: {error:#}");
-                    this.update(cx, |this, cx| {
-                        this.task = None;
-                        this.state = UpdateState::Failed;
-                        cx.notify();
-                    })
-                    .ok();
-                }
-            }
-        }));
+    pub fn check_on_startup(&mut self, cx: &mut Context<Self>) {
+        self.query(false, cx);
     }
 
-    fn look(&mut self, cx: &mut Context<Self>) {
-        if !self.settings.read(cx).check_updates() {
+    pub fn check_now(&mut self, cx: &mut Context<Self>) {
+        self.query(true, cx);
+    }
+
+    fn query(&mut self, manual: bool, cx: &mut Context<Self>) {
+        if !manual && !self.settings.read(cx).check_updates() {
             return;
         }
+        if self.checking {
+            return;
+        }
+        self.checking = true;
+        cx.notify();
+
         let http = self.http.clone();
         let io = self.io.clone();
         self.task = Some(cx.spawn(async move |this, cx| {
             let found = join(io.spawn(async move { latest(&http).await })).await;
             this.update(cx, |this, cx| {
+                this.checking = false;
                 this.task = None;
                 match found {
                     Ok(Some(release)) => {
+                        let version = release.version.clone();
                         this.state = UpdateState::Offered(release);
-                        cx.notify();
+                        if manual {
+                            Toasts::about(
+                                Outcome::Done,
+                                "toast-update-available",
+                                version,
+                                cx,
+                            );
+                        }
                     }
-                    Ok(None) => {}
-                    Err(error) => log::warn!("updates: cannot ask github: {error:#}"),
+                    Ok(None) => {
+                        if manual {
+                            Toasts::show(Outcome::Done, "toast-update-up-to-date", cx);
+                        }
+                    }
+                    Err(error) => {
+                        log::warn!("updates: cannot ask github: {error:#}");
+                        if manual {
+                            Toasts::show(Outcome::Failed, "toast-update-failed", cx);
+                        }
+                    }
                 }
+                cx.notify();
             })
             .ok();
         }));
@@ -145,14 +129,6 @@ impl Updates {
 struct Published {
     tag_name: String,
     html_url: String,
-    #[serde(default)]
-    assets: Vec<Asset>,
-}
-
-#[derive(Deserialize)]
-struct Asset {
-    name: String,
-    browser_download_url: String,
 }
 
 async fn latest(http: &reqwest::Client) -> Result<Option<Release>> {
@@ -169,91 +145,24 @@ async fn latest(http: &reqwest::Client) -> Result<Option<Release>> {
         .await
         .context("cannot read the github release")?;
 
-    let version = published.tag_name.trim_start_matches('v').to_owned();
-    if !newer(&version, RUNNING) {
+    let offered_version = published.tag_name.trim_start_matches('v').trim();
+    let running_version = RUNNING.trim_start_matches('v').trim();
+    if !newer(offered_version, running_version) {
         return Ok(None);
     }
-    let asset = |wanted: &str| {
-        published
-            .assets
-            .iter()
-            .find(|asset| asset.name == wanted)
-            .map(|asset| asset.browser_download_url.clone())
-    };
 
     Ok(Some(Release {
-        version,
+        version: format!("v{}", offered_version),
         page: published.html_url,
-        installer: asset(INSTALLER),
-        sums: asset(SUMS),
     }))
 }
 
-async fn fetch(
-    http: &reqwest::Client,
-    installer: &str,
-    sums: &str,
-    version: &str,
-) -> Result<PathBuf> {
-    let listed = http
-        .get(sums)
-        .header("User-Agent", AGENT)
-        .send()
-        .await
-        .context("cannot reach the checksums")?
-        .error_for_status()
-        .context("the checksums are missing")?
-        .text()
-        .await
-        .context("cannot read the checksums")?;
-    let wanted = listed
-        .lines()
-        .filter_map(|line| line.split_once(char::is_whitespace))
-        .find(|(_, name)| name.trim() == INSTALLER)
-        .map(|(sum, _)| sum.trim().to_ascii_lowercase())
-        .context("the release lists no checksum for the installer")?;
-
-    let bytes = http
-        .get(installer)
-        .header("User-Agent", AGENT)
-        .send()
-        .await
-        .context("cannot reach the installer")?
-        .error_for_status()
-        .context("the installer is missing")?
-        .bytes()
-        .await
-        .context("cannot read the installer")?;
-
-    let sum = format!("{:x}", Sha256::digest(&bytes));
-    if sum != wanted {
-        anyhow::bail!("the installer does not match its checksum");
-    }
-
-    let path = std::env::temp_dir().join(format!("Veluna-Setup-{version}.exe"));
-    std::fs::write(&path, &bytes).context("cannot keep the installer")?;
-    Ok(path)
-}
-
-fn launch(installer: &Path) -> Result<()> {
-    Command::new(installer)
-        .args(["/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/relaunch=1"])
-        .spawn()
-        .context("cannot start the installer")?;
-    Ok(())
-}
-
-fn installed() -> bool {
-    std::env::current_exe()
-        .ok()
-        .and_then(|exe| Some(exe.parent()?.join(UNINSTALLER)))
-        .is_some_and(|uninstaller| uninstaller.exists())
-}
-
 fn newer(offered: &str, running: &str) -> bool {
+    let offered = offered.trim_start_matches('v').trim();
+    let running = running.trim_start_matches('v').trim();
     match (numbered(offered), numbered(running)) {
-        (Some(offered), Some(running)) => offered > running,
-        _ => false,
+        (Some(o), Some(r)) => o != r,
+        _ => offered != running,
     }
 }
 
@@ -261,4 +170,25 @@ fn numbered(version: &str) -> Option<(u64, u64, u64)> {
     let core = version.trim().split(['-', '+']).next()?;
     let mut parts = core.split('.').map(|part| part.parse::<u64>().ok());
     Some((parts.next()??, parts.next()??, parts.next()??))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detects_newer_version() {
+        assert!(newer("0.1.7", "0.1.6"));
+        assert!(newer("0.2.0", "0.1.6"));
+        assert!(newer("1.0.0", "0.1.6"));
+        assert!(!newer("0.1.6", "0.1.6"));
+        assert!(newer("0.1.5", "0.1.6"));
+    }
+
+    #[test]
+    fn parses_version_numbers() {
+        assert_eq!(numbered("0.1.6"), Some((0, 1, 6)));
+        assert_eq!(numbered("1.2.3-beta.1"), Some((1, 2, 3)));
+        assert_eq!(numbered("invalid"), None);
+    }
 }

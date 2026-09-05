@@ -323,7 +323,7 @@ impl Playback {
         let repeat = settings.read(cx).repeat();
         let radio = settings.read(cx).radio();
 
-        Self {
+        let mut this = Self {
             state: PlaybackState::Idle,
             origin: None,
             position: Duration::ZERO,
@@ -355,7 +355,17 @@ impl Playback {
             resume_ready: false,
             awaiting_reconnect: false,
             stored: Duration::ZERO,
+        };
+
+        if let Some(playback) = this.session.read(cx).local_playback() {
+            this.start_local_engine(playback, cx);
         }
+        if let Some(playback) = this.session.read(cx).playback() {
+            this.start_engine(playback, cx);
+            this.adopt(cx);
+        }
+
+        this
     }
 
     pub fn play(&mut self, track: &Track, cx: &mut Context<Self>) {

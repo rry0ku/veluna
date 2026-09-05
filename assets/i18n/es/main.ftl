@@ -508,7 +508,7 @@ settings-tab-about = Acerca de
 settings-version = Versión
 settings-version-detail = La compilación de veluna que estás usando
 settings-license = Licencia
-settings-license-detail = Licencia Pública General de GNU, versión 3 o posterior
+settings-license-detail = Licencia MIT
 settings-license-view = Leer la licencia
 settings-source = Código fuente
 settings-source-detail = El código fuente correspondiente a esta compilación
@@ -518,7 +518,7 @@ settings-team-github = GitHub
 settings-role-lead-maintainer = Responsable principal
 settings-role-maintainer = Responsable
 settings-role-contributor = Colaborador
-settings-notice = Copyright © 2026 Veluna Contributors. Veluna se distribuye sin ninguna garantía. Es software libre y puedes redistribuirlo según los términos de la Licencia Pública General de GNU, versión 3 o posterior. Veluna es un cliente no oficial y no está afiliado a Spotify AB.
+settings-notice = Copyright © 2026 Veluna Contributors. Veluna se distribuye sin ninguna garantía. Es software libre y puedes redistribuirlo según los términos de la Licencia MIT. Veluna es un cliente no oficial y no está afiliado a Spotify AB.
 
 # themes
 theme-system = Sistema
@@ -590,14 +590,22 @@ lyrics-writers = Escrita por { $writers }
 
 update-available = Ya está disponible Veluna { $version }
 update-detail = Estás en la versión { $running }. Mira qué ha cambiado o actualiza ahora.
-update-detail-notes = Estás en la versión { $running }. Mira qué ha cambiado y luego actualiza Veluna igual que lo instalaste.
+update-detail-notes = Estás en la versión { $running }. Descarga la última versión desde GitHub para actualizar.
+update-download = Descargar
 update-notes = Novedades
 update-now = Actualizar
 update-later = Más tarde
 update-working = Descargando la actualización…
 update-failed = No se pudo instalar la actualización. Inténtalo de nuevo desde la página de versiones.
 settings-check-updates = Buscar actualizaciones
-settings-check-updates-detail = Pregunta a GitHub una vez al iniciar si hay una versión más reciente. Veluna instala la actualización por su cuenta solo en Windows; en el resto te muestra qué ha cambiado
+settings-check-updates-detail = Pregunta a GitHub una vez al iniciar si hay una versión más reciente disponible
+settings-check-now = Comprobación manual de actualizaciones
+settings-check-now-detail = Busca la última versión de Veluna en GitHub
+settings-check-now-btn = Comprobar ahora
+settings-checking-updates = Comprobando…
+toast-update-available = Actualización disponible: { $name }
+toast-update-up-to-date = Ya estás al día
+toast-update-failed = No se pudieron comprobar las actualizaciones
 
 # tags
 tags-edit-title = Editar etiquetas

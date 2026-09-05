@@ -16,7 +16,7 @@ use state::{AppSettings, Origin, Playback, PlaybackState, Session, Veluna};
 
 use crate::shared::menus::{ItemMenu, pin_menu};
 
-const NAV: [(Option<NavEntry>, &str, Destination); 8] = [
+const NAV: [(Option<NavEntry>, &str, Destination); 6] = [
     (Some(NavEntry::Home), "icons/house.svg", Destination::Home),
     (
         Some(NavEntry::Search),
@@ -37,16 +37,6 @@ const NAV: [(Option<NavEntry>, &str, Destination); 8] = [
         Some(NavEntry::History),
         "icons/rotate-ccw-clock.svg",
         Destination::History,
-    ),
-    (
-        Some(NavEntry::Stats),
-        "icons/sliders-horizontal.svg",
-        Destination::Stats,
-    ),
-    (
-        Some(NavEntry::Downloads),
-        "icons/arrow-up-down.svg",
-        Destination::Downloads,
     ),
     (
         None,
@@ -70,13 +60,11 @@ const LOCAL_TABS: [(&str, LocalTab); 5] = [
     ("nav-playlists", LocalTab::Playlists),
 ];
 
-const SETTINGS_TABS: [(&str, SettingsTab); 7] = [
+const SETTINGS_TABS: [(&str, SettingsTab); 5] = [
     ("settings-tab-general", SettingsTab::General),
     ("settings-tab-appearance", SettingsTab::Appearance),
     ("settings-tab-playback", SettingsTab::Playback),
-    ("settings-tab-downloads", SettingsTab::Downloads),
     ("settings-tab-integrations", SettingsTab::Integrations),
-    ("settings-tab-privacy", SettingsTab::Privacy),
     ("settings-tab-about", SettingsTab::About),
 ];
 

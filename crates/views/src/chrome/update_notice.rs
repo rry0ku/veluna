@@ -23,23 +23,13 @@ impl Render for UpdateNotice {
     fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = *cx.theme();
         let state = self.updates.read(cx).state().clone();
-        let installable = self.updates.read(cx).installable();
         let (version, page) = match &state {
             UpdateState::Offered(release) => (release.version.clone(), release.page.clone()),
-            _ => (String::new(), String::new()),
+            _ => return div(),
         };
-        let working = matches!(state, UpdateState::Fetching);
-        let failed = matches!(state, UpdateState::Failed);
-        if matches!(state, UpdateState::Quiet) {
-            return div();
-        }
 
-        let updates = self.updates.clone();
         let dismiss = self.updates.clone();
-        let title = match failed {
-            true => t!("update-failed"),
-            false => t!("update-available", version = version.as_str()),
-        };
+        let title = t!("update-available", version = version.as_str());
 
         div()
             .absolute()
@@ -93,34 +83,21 @@ impl Render for UpdateNotice {
                             })),
                     ),
             )
-            .when(!failed, |this| {
-                this.child(
-                    div()
-                        .text_size(theme.text(Text::Small))
-                        .text_color(theme.muted_foreground)
-                        .child(match installable {
-                            true => t!("update-detail", running = env!("CARGO_PKG_VERSION")),
-                            false => {
-                                t!("update-detail-notes", running = env!("CARGO_PKG_VERSION"))
-                            }
-                        }),
-                )
-            })
+            .child(
+                div()
+                    .text_size(theme.text(Text::Small))
+                    .text_color(theme.muted_foreground)
+                    .child(t!(
+                        "update-detail-notes",
+                        running = format!("v{}", env!("CARGO_PKG_VERSION"))
+                    )),
+            )
             .child(
                 div()
                     .flex()
                     .items_center()
                     .justify_end()
                     .gap_2()
-                    .when(!page.is_empty(), |this| {
-                        this.child(
-                            Button::new("update-notes")
-                                .ghost()
-                                .small()
-                                .label(t!("update-notes"))
-                                .on_click(move |_, _, cx| cx.open_url(&page)),
-                        )
-                    })
                     .child(
                         Button::new("update-later")
                             .outline()
@@ -130,19 +107,14 @@ impl Render for UpdateNotice {
                                 this.updates.update(cx, |updates, cx| updates.dismiss(cx));
                             })),
                     )
-                    .when(installable && !failed, |this| {
+                    .when(!page.is_empty(), |this| {
                         this.child(
-                            Button::new("update-now")
+                            Button::new("update-download")
                                 .primary()
                                 .small()
-                                .disabled(working)
-                                .label(match working {
-                                    true => t!("update-working"),
-                                    false => t!("update-now"),
-                                })
-                                .on_click(cx.listener(move |_, _, _, cx| {
-                                    updates.update(cx, |updates, cx| updates.install(cx));
-                                })),
+                                .icon("icons/download.svg")
+                                .label(t!("update-download"))
+                                .on_click(move |_, _, cx| cx.open_url(&page)),
                         )
                     }),
             )

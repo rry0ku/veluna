@@ -18,7 +18,6 @@ mod session;
 mod settings;
 mod sheets;
 mod song;
-mod stats;
 mod tags;
 mod toast;
 mod updates;
@@ -44,7 +43,6 @@ pub use settings::{
     window_placement,
 };
 pub use song::SongDetail;
-pub use stats::{DailyStat, PlayHistoryEntry, Stats, TopArtist, TopTrack};
 pub use tags::{TagState, Tags};
 pub use toast::{Outcome, Target, Toast, Toasts};
 pub use updates::{Release, UpdateState, Updates};
@@ -101,7 +99,6 @@ pub struct Veluna {
     pub settings: Entity<AppSettings>,
     pub updates: Entity<Updates>,
     pub usage: Entity<Usage>,
-    pub stats: Entity<Stats>,
     pub downloads: Entity<Downloads>,
 }
 
@@ -143,7 +140,6 @@ pub fn init(
     let cover = cx.new(|cx| Cover::new(session.clone(), playback.clone(), io.clone(), cx));
     let updates = cx.new(|cx| Updates::new(settings.clone(), io.clone(), cx));
     let usage = cx.new(|cx| Usage::new(session.clone(), io.clone(), cx));
-    let stats = cx.new(|cx| Stats::new(session.clone(), playback.clone(), io.clone(), cx));
     let downloads = cx.new(|cx| Downloads::new(session.clone(), settings.clone(), io, cx));
 
     cx.set_global(Veluna {
@@ -157,7 +153,6 @@ pub fn init(
         settings,
         updates,
         usage,
-        stats,
         downloads,
     });
 }

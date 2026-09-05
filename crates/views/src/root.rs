@@ -18,15 +18,13 @@ use crate::shared::tracks::{LIBRARY_COLUMNS, album_columns};
 use crate::shells::Shell;
 use crate::shells::workspace::Workspace;
 use crate::{
-    Adaptive, ArtistView, DetailView, DownloadsView, FullscreenView, GenreView, HistoryView,
-    HomeView, LibraryView, LoginView, SettingsView, Shelf, SongView, StatsView, UserView,
+    Adaptive, ArtistView, DetailView, FullscreenView, GenreView, HistoryView,
+    HomeView, LibraryView, LoginView, SettingsView, Shelf, SongView, UserView,
 };
 
 struct Screens {
     home: Entity<HomeView>,
     history: Entity<HistoryView>,
-    stats: Entity<StatsView>,
-    downloads: Entity<DownloadsView>,
     library: Entity<LibraryView>,
     local: Entity<LibraryView>,
     artist: Option<Entity<ArtistView>>,
@@ -126,8 +124,6 @@ impl Root {
         let home = cx.new(|cx| HomeView::new(home_state, playback.clone(), cx));
         let history = Veluna::global(cx).history.clone();
         let history = cx.new(|cx| HistoryView::new(history, playback.clone(), window, cx));
-        let stats = cx.new(|cx| StatsView::new(playback.clone(), window, cx));
-        let downloads = cx.new(|cx| DownloadsView::new(playback.clone(), window, cx));
 
         let search_library = library.clone();
 
@@ -209,8 +205,6 @@ impl Root {
             screens: Screens {
                 home,
                 history,
-                stats,
-                downloads,
                 library: library_view,
                 local: local_view,
                 artist: None,
@@ -418,17 +412,6 @@ impl Root {
                 history.update(cx, |history, cx| history.refresh(cx));
                 toolbar = Some(history.read(cx).toolbar());
                 history.into()
-            }
-            Destination::Stats => {
-                let stats = self.screens.stats.clone();
-                stats.update(cx, |stats, cx| stats.refresh(cx));
-                toolbar = Some(stats.read(cx).toolbar());
-                stats.into()
-            }
-            Destination::Downloads => {
-                let downloads = self.screens.downloads.clone();
-                toolbar = Some(downloads.read(cx).toolbar());
-                downloads.into()
             }
             Destination::Local(tab) => {
                 let local = self.screens.local.clone();

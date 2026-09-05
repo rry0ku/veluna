@@ -28,12 +28,23 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
+            build-essential \
             pkg-config \
+            cmake \
             libasound2-dev \
-            libdbus-1-dev \
+            libfontconfig1-dev \
+            libfreetype-dev \
             libsqlite3-dev \
+            libx11-dev \
+            libxcb1-dev \
+            libxcursor-dev \
+            libxi-dev \
             libxkbcommon-dev \
+            libxkbcommon-x11-dev \
             libwayland-dev \
+            wayland-protocols \
+            libvulkan-dev \
+            libdbus-1-dev \
             zstd \
             libarchive-tools
 
@@ -58,11 +69,28 @@ jobs:
           chmod +x ./scripts/build-arch-pkg.sh
           ./scripts/build-arch-pkg.sh "${{ github.ref_name }}"
 
+      - name: Build AppImage
+        run: |
+          chmod +x ./scripts/build-appimage.sh
+          ./scripts/build-appimage.sh "${{ github.ref_name }}"
+
       - name: Create GitHub Release and upload Linux packages
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ github.ref_name }}"
+          if [ "${VERSION}" = "main" ] || [ "${VERSION}" = "master" ] || [ -z "${VERSION}" ]; then
+            VERSION="v0.1.6"
+          fi
+          VERSION_NUM="${VERSION#v}"
+
+          # Ensure exact naming conventions
+          DEB_FILE=$(find target/debian -name "veluna_*.deb" | head -n 1)
+          cp "${DEB_FILE}" "veluna_${VERSION_NUM}_amd64.deb"
+
+          RPM_FILE=$(find target/generate-rpm -name "veluna-*.rpm" | head -n 1)
+          cp "${RPM_FILE}" "veluna-${VERSION_NUM}-1.x86_64.rpm"
+
           gh release create "${VERSION}" \
             --title "Veluna ${VERSION}" \
             --notes "See the assets below to download Veluna for your platform." \
@@ -70,9 +98,10 @@ jobs:
             --prerelease=false \
             || true
           gh release upload "${VERSION}" \
-            target/debian/veluna_*.deb \
-            target/generate-rpm/veluna-*.rpm \
-            veluna-*.pkg.tar.zst \
+            "veluna_${VERSION_NUM}_amd64.deb" \
+            "veluna-${VERSION_NUM}-1.x86_64.rpm" \
+            "veluna-${VERSION_NUM}-1-x86_64.pkg.tar.zst" \
+            "veluna-${VERSION_NUM}-x86_64.AppImage" \
             --clobber
 
   windows-build:
@@ -93,20 +122,27 @@ jobs:
       - name: Build release binary
         run: cargo build --release -p veluna
 
-      - name: Package Windows binary
+      - name: Package Windows executable
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}".TrimStart('v')
-          Compress-Archive `
-            -Path "target/release/veluna.exe" `
-            -DestinationPath "veluna-${version}-windows-x86_64.zip" `
-            -Force
+          $ref = "${{ github.ref_name }}"
+          if ($ref -eq "main" -or $ref -eq "master" -or [string]::IsNullOrWhiteSpace($ref)) {
+            $version = "0.1.6"
+          } else {
+            $version = $ref.TrimStart('v')
+          }
+          Copy-Item "target/release/veluna.exe" -Destination "veluna_${version}_x64-setup.exe"
 
-      - name: Upload Windows package to release
+      - name: Upload Windows executable to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}"
-          $zip = Get-ChildItem "veluna-*-windows-x86_64.zip" | Select-Object -First 1
-          gh release upload $version $zip.Name --clobber
+          $ref = "${{ github.ref_name }}"
+          if ($ref -eq "main" -or $ref -eq "master" -or [string]::IsNullOrWhiteSpace($ref)) {
+            $version = "v0.1.6"
+          } else {
+            $version = $ref
+          }
+          $exe = Get-ChildItem "veluna_*_x64-setup.exe" | Select-Object -First 1
+          gh release upload $version $exe.Name --clobber

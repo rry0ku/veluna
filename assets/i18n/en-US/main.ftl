@@ -20,8 +20,6 @@ number-group = { "," }
 
 # navigation
 nav-history = History
-nav-stats = Stats
-nav-downloads = Downloads
 nav-home = Home
 nav-search = Search
 nav-library = Your Library
@@ -531,7 +529,7 @@ settings-tab-about = About
 settings-version = Version
 settings-version-detail = The build of veluna you are running
 settings-license = License
-settings-license-detail = GNU General Public License version 3 or later
+settings-license-detail = MIT License
 settings-license-view = Read the license
 settings-source = Source code
 settings-source-detail = The corresponding source for this build
@@ -541,7 +539,7 @@ settings-team-github = GitHub
 settings-role-lead-maintainer = Lead Maintainer
 settings-role-maintainer = Maintainer
 settings-role-contributor = Contributor
-settings-notice = Copyright © 2026 Veluna Contributors. Veluna comes with absolutely no warranty. It is free software, and you are welcome to redistribute it under the terms of the GNU General Public License version 3 or later. Veluna is unofficial and is not affiliated with Spotify AB.
+settings-notice = Copyright © 2026 Veluna Contributors. Veluna comes with absolutely no warranty. It is open source software, and you are welcome to redistribute it under the terms of the MIT License. Veluna is unofficial and is not affiliated with Spotify AB.
 
 # themes
 theme-system = System
@@ -613,14 +611,22 @@ lyrics-writers = Written by { $writers }
 
 update-available = Veluna { $version } is out
 update-detail = You are on { $running }. Read what changed, or update now.
-update-detail-notes = You are on { $running }. Read what changed, then update Veluna the way you installed it.
+update-detail-notes = You are on { $running }. Download the latest release from GitHub to update.
 update-notes = What's new
+update-download = Download
 update-now = Update
 update-later = Later
 update-working = Downloading the update…
 update-failed = The update could not be installed. Try again from the releases page.
 settings-check-updates = Check for updates
-settings-check-updates-detail = Ask GitHub once at startup whether a newer version is out. Veluna installs the update itself on Windows only; elsewhere it points you at what changed
+settings-check-updates-detail = Ask GitHub once at startup whether a newer version is available
+settings-check-now = Manual update check
+settings-check-now-detail = Force a search for the latest version of Veluna on GitHub
+settings-check-now-btn = Check now
+settings-checking-updates = Checking…
+toast-update-available = Update available: { $name }
+toast-update-up-to-date = You're up to date
+toast-update-failed = Failed to check for updates
 
 # tags
 tags-edit-title = Edit tags

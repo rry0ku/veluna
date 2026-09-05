@@ -270,7 +270,7 @@ impl Default for Values {
             fullscreen_lyrics_scale: DEFAULT_LYRICS_SCALE,
             romanization_scripts: RomanizationScripts::default(),
             adaptive_menu: false,
-            check_updates: cfg!(target_os = "windows"),
+            check_updates: true,
             close_to_tray: true,
             sidebar_width: DEFAULT_SIDEBAR_WIDTH,
             sidebar_open: true,
@@ -402,7 +402,7 @@ impl AppSettings {
     }
 
     pub fn lyrics_for_local_files(&self) -> bool {
-        self.values.lyrics_for_local_files
+        true
     }
 
     pub fn karaoke_lyrics(&self) -> bool {

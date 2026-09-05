@@ -1,6 +1,5 @@
 pub(crate) mod artist;
 pub(crate) mod detail;
-pub(crate) mod downloads;
 pub(crate) mod genre;
 pub(crate) mod history;
 pub(crate) mod home;
@@ -9,5 +8,4 @@ pub(crate) mod login;
 pub(crate) mod search;
 pub(crate) mod settings;
 pub(crate) mod song;
-pub(crate) mod stats;
 pub(crate) mod user;

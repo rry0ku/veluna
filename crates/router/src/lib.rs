@@ -52,19 +52,15 @@ pub enum NavEntry {
     Library,
     History,
     Local,
-    Stats,
-    Downloads,
 }
 
 impl NavEntry {
-    pub const ALL: [Self; 7] = [
+    pub const ALL: [Self; 5] = [
         Self::Home,
         Self::Search,
         Self::Library,
         Self::History,
         Self::Local,
-        Self::Stats,
-        Self::Downloads,
     ];
 
     pub fn id(self) -> &'static str {
@@ -74,8 +70,6 @@ impl NavEntry {
             Self::Library => "library",
             Self::History => "history",
             Self::Local => "local",
-            Self::Stats => "stats",
-            Self::Downloads => "downloads",
         }
     }
 
@@ -86,8 +80,6 @@ impl NavEntry {
             Self::Library => "nav-library",
             Self::History => "nav-history",
             Self::Local => "nav-local",
-            Self::Stats => "nav-stats",
-            Self::Downloads => "nav-downloads",
         }
     }
 }
@@ -102,12 +94,10 @@ pub enum Screen {
     Playlists,
     Artists,
     Imported,
-    Stats,
-    Downloads,
 }
 
 impl Screen {
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 8] = [
         Self::Home,
         Self::Search,
         Self::Songs,
@@ -116,8 +106,6 @@ impl Screen {
         Self::Playlists,
         Self::Imported,
         Self::History,
-        Self::Stats,
-        Self::Downloads,
     ];
 
     pub fn id(self) -> &'static str {
@@ -130,8 +118,6 @@ impl Screen {
             Self::Playlists => "playlists",
             Self::Artists => "artists",
             Self::Imported => "imported",
-            Self::Stats => "stats",
-            Self::Downloads => "downloads",
         }
     }
 
@@ -145,8 +131,6 @@ impl Screen {
             Self::Playlists => "nav-playlists",
             Self::Artists => "nav-artists",
             Self::Imported => "nav-local",
-            Self::Stats => "nav-stats",
-            Self::Downloads => "nav-downloads",
         }
     }
 
@@ -164,8 +148,6 @@ impl Screen {
             Self::Playlists => Destination::Library(LibraryTab::Playlists),
             Self::Artists => Destination::Library(LibraryTab::Artists),
             Self::Imported => Destination::Local(LocalTab::Songs),
-            Self::Stats => Destination::Stats,
-            Self::Downloads => Destination::Downloads,
         }
     }
 }
@@ -175,9 +157,7 @@ pub enum SettingsTab {
     General,
     Appearance,
     Playback,
-    Downloads,
     Integrations,
-    Privacy,
     About,
 }
 
@@ -185,8 +165,6 @@ pub enum SettingsTab {
 pub enum Destination {
     Home,
     History,
-    Stats,
-    Downloads,
     Library(LibraryTab),
     Local(LocalTab),
     Album(SharedString),

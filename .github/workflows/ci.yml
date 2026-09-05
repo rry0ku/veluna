@@ -28,12 +28,23 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
+            build-essential \
             pkg-config \
+            cmake \
             libasound2-dev \
-            libdbus-1-dev \
+            libfontconfig1-dev \
+            libfreetype-dev \
             libsqlite3-dev \
+            libx11-dev \
+            libxcb1-dev \
+            libxcursor-dev \
+            libxi-dev \
             libxkbcommon-dev \
-            libwayland-dev
+            libxkbcommon-x11-dev \
+            libwayland-dev \
+            wayland-protocols \
+            libvulkan-dev \
+            libdbus-1-dev
 
       - name: Check workspace
         run: cargo check --workspace

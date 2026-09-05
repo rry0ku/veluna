@@ -11,6 +11,7 @@ struct State {
     shown: Vec<f32>,
     armed: bool,
     visible: bool,
+    spectrum: Option<Spectrum>,
 }
 
 #[derive(Clone, Default)]
@@ -26,6 +27,7 @@ impl VisualizerDrive {
     pub fn show(&self, watch: EntityId, spectrum: Spectrum, window: &mut Window) {
         let mut state = self.state.borrow_mut();
         state.visible = true;
+        state.spectrum = Some(spectrum);
         if state.armed {
             return;
         }
@@ -33,20 +35,27 @@ impl VisualizerDrive {
         drop(state);
 
         let drive = self.clone();
-        window.on_next_frame(move |window, cx| drive.step(watch, spectrum, window, cx));
+        window.on_next_frame(move |window, cx| drive.step(watch, window, cx));
     }
 
     pub fn hide(&self) {
-        self.state.borrow_mut().visible = false;
+        let mut state = self.state.borrow_mut();
+        state.visible = false;
+        state.spectrum = None;
     }
 
-    fn step(&self, watch: EntityId, spectrum: Spectrum, window: &mut Window, cx: &mut App) {
+    fn step(&self, watch: EntityId, window: &mut Window, cx: &mut App) {
         {
             let mut state = self.state.borrow_mut();
             if !state.visible {
                 state.armed = false;
                 return;
             }
+
+            let Some(spectrum) = state.spectrum.clone() else {
+                state.armed = false;
+                return;
+            };
 
             let target = spectrum.bands();
             if state.shown.len() != target.len() {
@@ -59,6 +68,6 @@ impl VisualizerDrive {
 
         cx.notify(watch);
         let drive = self.clone();
-        window.on_next_frame(move |window, cx| drive.step(watch, spectrum, window, cx));
+        window.on_next_frame(move |window, cx| drive.step(watch, window, cx));
     }
 }
