@@ -770,19 +770,33 @@ export function App() {
   mprisPrevRef.current = handleSkipBack;
 
   useEffect(() => {
-    const unlisteners: (() => void)[] = [];
-    listen('mpris_play_pause', () => mprisToggleRef.current()).then(fn => unlisteners.push(fn));
-    listen('mpris_next', () => mprisNextRef.current()).then(fn => unlisteners.push(fn));
-    listen('mpris_prev', () => mprisPrevRef.current()).then(fn => unlisteners.push(fn));
-    listen('tray_play_pause', () => mprisToggleRef.current()).then(fn => unlisteners.push(fn));
-    listen('tray_next', () => mprisNextRef.current()).then(fn => unlisteners.push(fn));
-    listen('tray_prev', () => mprisPrevRef.current()).then(fn => unlisteners.push(fn));
+    let active = true;
+    const cleanups: (() => void)[] = [];
+    const register = (event: string, handler: () => void) => {
+      listen(event, handler).then(unlisten => {
+        if (active) {
+          cleanups.push(unlisten);
+        } else {
+          unlisten();
+        }
+      });
+    };
+
+    register('mpris_play_pause', () => mprisToggleRef.current());
+    register('mpris_next', () => mprisNextRef.current());
+    register('mpris_prev', () => mprisPrevRef.current());
+    register('tray_play_pause', () => mprisToggleRef.current());
+    register('tray_next', () => mprisNextRef.current());
+    register('tray_prev', () => mprisPrevRef.current());
 
     if (trayEnabled) {
       invoke('tray_set', { enabled: true }).catch(() => {});
     }
 
-    return () => unlisteners.forEach(fn => fn());
+    return () => {
+      active = false;
+      cleanups.forEach(fn => fn());
+    };
   }, []);
 
   useEffect(() => {

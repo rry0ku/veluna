@@ -1267,22 +1267,15 @@ async fn search_youtube(query: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-async fn open_url_in_browser(url: String) -> Result<(), String> {
+async fn open_url_in_browser(app: tauri::AppHandle, url: String) -> Result<(), String> {
     let sanitized = url.trim().to_string();
     if !sanitized.starts_with("https://") && !sanitized.starts_with("http://") {
         return Err("Only http/https URLs are allowed".to_string());
     }
-    tokio::task::spawn_blocking(move || {
-        #[cfg(target_os = "linux")]
-        { Command::new("xdg-open").arg(&sanitized).no_window().spawn().map_err(|e| e.to_string())?; }
-        #[cfg(target_os = "macos")]
-        { Command::new("open").arg(&sanitized).no_window().spawn().map_err(|e| e.to_string())?; }
-        #[cfg(target_os = "windows")]
-        { Command::new("cmd").args(["/c", "start", "", &sanitized]).no_window().spawn().map_err(|e| e.to_string())?; }
-        Ok::<(), String>(())
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_url(&sanitized, None::<&str>)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -2317,7 +2310,7 @@ async fn set_equalizer(bass: f64, mid: f64, treble: f64) -> Result<(), String> {
 
 struct ActiveDownload {
     child_id: u32,
-    target_dir: std::path::PathBuf,
+    target_file: Arc<Mutex<Option<std::path::PathBuf>>>,
 }
 
 static ACTIVE_DOWNLOADS: std::sync::OnceLock<Arc<Mutex<HashMap<String, ActiveDownload>>>> = std::sync::OnceLock::new();
@@ -2346,7 +2339,6 @@ async fn download_song(
     use std::io::{BufRead, BufReader};
 
     let resolved_path = expand_tilde(&path);
-    let target_dir = std::path::PathBuf::from(&resolved_path);
     let fmt = format.as_deref().unwrap_or("mp3");
     let do_embed = embed_thumbnail.unwrap_or(true);
     let audio_format = match fmt {
@@ -2399,11 +2391,13 @@ async fn download_song(
             .map_err(|e| format!("yt-dlp not found: {}", e))?;
 
         let child_id = child.id();
+        let target_file_arc = Arc::new(Mutex::new(None));
+        let target_file_clone = Arc::clone(&target_file_arc);
         {
             let mut map = active_downloads().lock().unwrap();
             map.insert(url_key.clone(), ActiveDownload {
                 child_id,
-                target_dir: target_dir.clone(),
+                target_file: target_file_arc,
             });
         }
 
@@ -2413,6 +2407,14 @@ async fn download_song(
         if let Some(out) = stdout {
             let reader = BufReader::new(out);
             for line in reader.lines().flatten() {
+                if line.contains("[download] Destination:") {
+                    if let Some(dest) = line.split("[download] Destination:").nth(1) {
+                        let path = std::path::PathBuf::from(dest.trim());
+                        if let Ok(mut tf) = target_file_clone.lock() {
+                            *tf = Some(path);
+                        }
+                    }
+                }
                 if line.contains("[download]") && line.contains('%') {
                     if let Some(pct_idx) = line.find('%') {
                         let prefix = &line[..pct_idx];
@@ -2485,17 +2487,14 @@ async fn cancel_download(app_handle: tauri::AppHandle, url: String) -> Result<()
                 .output();
         }
 
-        // Clean up partial / leftover download files (.part, .ytdl, .temp)
-        if let Ok(entries) = std::fs::read_dir(&dl.target_dir) {
-            for entry in entries.flatten() {
-                let p = entry.path();
-                if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
-                    let ext_lower = ext.to_lowercase();
-                    if ext_lower == "part" || ext_lower == "ytdl" || ext_lower == "temp" {
-                        let _ = std::fs::remove_file(p);
-                    }
-                }
-            }
+        // Clean up partial files for THIS specific download only
+        let target_path_opt = dl.target_file.lock().ok().and_then(|guard| guard.clone());
+        if let Some(target_path) = target_path_opt {
+            let _ = std::fs::remove_file(&target_path);
+            let part_path = std::path::PathBuf::from(format!("{}.part", target_path.display()));
+            let _ = std::fs::remove_file(part_path);
+            let ytdl_path = std::path::PathBuf::from(format!("{}.ytdl", target_path.display()));
+            let _ = std::fs::remove_file(ytdl_path);
         }
 
         let _ = app_handle.emit("download_progress", &DownloadProgressPayload {

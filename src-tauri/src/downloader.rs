@@ -126,19 +126,24 @@ pub async fn download_audio_stream_chunked(
             }
 
             let mut all_ok = true;
-            for task in tasks {
-                if let Ok(res) = task.await {
-                    if res.is_err() {
+            let mut pending_tasks = tasks;
+            while !pending_tasks.is_empty() {
+                let task = pending_tasks.remove(0);
+                match task.await {
+                    Ok(Ok(())) => {},
+                    _ => {
                         all_ok = false;
+                        for remaining in pending_tasks {
+                            remaining.abort();
+                        }
                         break;
                     }
-                } else {
-                    all_ok = false;
-                    break;
                 }
             }
             if all_ok {
                 chunked_success = true;
+            } else {
+                let _ = std::fs::remove_file(&target_path);
             }
         }
     }

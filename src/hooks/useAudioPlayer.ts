@@ -646,6 +646,7 @@ export function useAudioPlayer({
   }, [showToast]);
 
   useEffect(() => {
+    let active = true;
     let unlistenState: (() => void) | undefined;
     let unlistenEnd: (() => void) | undefined;
     let unlistenStarted: (() => void) | undefined;
@@ -726,7 +727,10 @@ export function useAudioPlayer({
           return;
         }
       }
-    ).then(fn => { unlistenState = fn; });
+    ).then(fn => {
+      if (active) unlistenState = fn;
+      else fn();
+    });
 
     listen('mpv_track_started', () => {
       if (isLoadingTrackRef.current) {
@@ -736,7 +740,10 @@ export function useAudioPlayer({
         setLoadingTrackUrlSync(null);
       }
       setIsPlayingSync(true);
-    }).then(fn => { unlistenStarted = fn; });
+    }).then(fn => {
+      if (active) unlistenStarted = fn;
+      else fn();
+    });
 
     listen('mpv_track_error', () => {
       if (isLoadingTrackRef.current) {
@@ -744,13 +751,19 @@ export function useAudioPlayer({
       }
       setLoadingTrackUrlSync(null);
       setIsPlayingSync(false);
-    }).then(fn => { unlistenError = fn; });
+    }).then(fn => {
+      if (active) unlistenError = fn;
+      else fn();
+    });
 
     listen('mpv_track_end', () => {
       if (!endDetectedRef.current) {
         handleTrackEndRef.current();
       }
-    }).then(fn => { unlistenEnd = fn; });
+    }).then(fn => {
+      if (active) unlistenEnd = fn;
+      else fn();
+    });
 
     invoke<{ playing: boolean; paused: boolean; position: number; duration: number; eof_reached: boolean }>('get_playback_state')
       .then(s => {
@@ -766,6 +779,7 @@ export function useAudioPlayer({
       .catch(() => {});
 
     return () => {
+      active = false;
       unlistenState?.();
       unlistenEnd?.();
       unlistenStarted?.();

@@ -3,7 +3,8 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tauri::Manager;
 
-static DB_CONN: std::sync::OnceLock<Mutex<Connection>> = std::sync::OnceLock::new();
+static DB_WRITE_CONN: std::sync::OnceLock<Mutex<Connection>> = std::sync::OnceLock::new();
+static DB_READ_CONN: std::sync::OnceLock<Mutex<Connection>> = std::sync::OnceLock::new();
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct DbTrack {
@@ -82,11 +83,13 @@ fn dirs_fallback() -> Option<PathBuf> {
 
 pub fn init_db(app: &tauri::AppHandle) -> Result<(), String> {
     let db_path = get_db_path(app);
-    let conn = Connection::open(&db_path).map_err(|e| format!("Failed to open SQLite DB: {}", e))?;
+    let write_conn = Connection::open(&db_path).map_err(|e| format!("Failed to open SQLite DB: {}", e))?;
+    let _ = write_conn.busy_timeout(std::time::Duration::from_millis(5000));
 
     // Performance and integrity pragmas
-    conn.execute_batch(
+    write_conn.execute_batch(
         "
+        PRAGMA busy_timeout = 5000;
         PRAGMA journal_mode = WAL;
         PRAGMA synchronous = NORMAL;
         PRAGMA foreign_keys = ON;
@@ -149,7 +152,19 @@ pub fn init_db(app: &tauri::AppHandle) -> Result<(), String> {
         "
     ).map_err(|e| format!("Failed to initialize DB schema: {}", e))?;
 
-    let _ = DB_CONN.set(Mutex::new(conn));
+    let read_conn = Connection::open(&db_path).map_err(|e| format!("Failed to open read SQLite DB: {}", e))?;
+    let _ = read_conn.busy_timeout(std::time::Duration::from_millis(5000));
+    read_conn.execute_batch(
+        "
+        PRAGMA busy_timeout = 5000;
+        PRAGMA journal_mode = WAL;
+        PRAGMA synchronous = NORMAL;
+        PRAGMA foreign_keys = ON;
+        "
+    ).map_err(|e| format!("Failed to configure read DB connection: {}", e))?;
+
+    let _ = DB_WRITE_CONN.set(Mutex::new(write_conn));
+    let _ = DB_READ_CONN.set(Mutex::new(read_conn));
     Ok(())
 }
 
@@ -157,7 +172,7 @@ fn with_db<F, R>(f: F) -> Result<R, String>
 where
     F: FnOnce(&Connection) -> Result<R, rusqlite::Error>,
 {
-    let conn_mutex = DB_CONN.get().ok_or("Database not initialized")?;
+    let conn_mutex = DB_READ_CONN.get().ok_or("Database not initialized")?;
     let conn = conn_mutex.lock().map_err(|e| format!("DB lock error: {}", e))?;
     f(&conn).map_err(|e| format!("Database error: {}", e))
 }
@@ -166,7 +181,7 @@ fn with_db_mut<F, R>(f: F) -> Result<R, String>
 where
     F: FnOnce(&mut Connection) -> Result<R, rusqlite::Error>,
 {
-    let conn_mutex = DB_CONN.get().ok_or("Database not initialized")?;
+    let conn_mutex = DB_WRITE_CONN.get().ok_or("Database not initialized")?;
     let mut conn = conn_mutex.lock().map_err(|e| format!("DB lock error: {}", e))?;
     f(&mut conn).map_err(|e| format!("Database error: {}", e))
 }
