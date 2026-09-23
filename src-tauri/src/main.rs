@@ -3,6 +3,8 @@ mod cache;
 mod metadata;
 mod db;
 mod downloader;
+#[cfg(target_os = "windows")]
+mod windows_smtc;
 
 use std::io::{Write, BufRead, BufReader};
 use std::process::Command;
@@ -69,16 +71,43 @@ fn socket_path() -> &'static str {
     })
 }
 
-#[derive(Clone, Default)]
-struct MprisMetadata {
-    title: String,
-    artist: String,
-    album: String,
-    url: String,
-    cover_url: String,
-    duration_us: i64,
-    playing: bool,
-    track_seq: u64,
+#[derive(Clone)]
+pub struct MprisMetadata {
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+    pub album_artist: String,
+    pub url: String,
+    pub cover_url: String,
+    pub duration_us: i64,
+    pub playing: bool,
+    pub is_stopped: bool,
+    pub track_seq: u64,
+    pub loop_status: String,
+    pub shuffle: bool,
+    pub volume: f64,
+    pub rate: f64,
+}
+
+impl Default for MprisMetadata {
+    fn default() -> Self {
+        Self {
+            title: String::new(),
+            artist: String::new(),
+            album: String::new(),
+            album_artist: String::new(),
+            url: String::new(),
+            cover_url: String::new(),
+            duration_us: 0,
+            playing: false,
+            is_stopped: true,
+            track_seq: 1,
+            loop_status: "None".to_string(),
+            shuffle: false,
+            volume: 1.0,
+            rate: 1.0,
+        }
+    }
 }
 
 static MPRIS_META: std::sync::OnceLock<Mutex<MprisMetadata>> = std::sync::OnceLock::new();
@@ -95,7 +124,12 @@ static MPRIS_TX: std::sync::OnceLock<tokio::sync::watch::Sender<()>> = std::sync
 fn mpris_notify() {
     if let Some(tx) = MPRIS_TX.get() { let _ = tx.send(()); }
 }
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
+fn mpris_notify() {
+    let meta = mpris_meta().lock().unwrap().clone();
+    windows_smtc::update_windows_smtc(&meta);
+}
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 fn mpris_notify() {}
 
 fn resolve_bin(name: &str, search_paths: &[String]) -> String {
@@ -2144,6 +2178,11 @@ async fn seek_relative(seconds: f64) -> Result<(), String> {
 #[tauri::command]
 async fn set_volume(volume: f64) -> Result<(), String> {
     let vol = safe_f64(volume).clamp(0.0, 150.0);
+    {
+        let mut m = mpris_meta().lock().unwrap();
+        m.volume = vol / 100.0;
+    }
+    mpris_notify();
     tokio::task::spawn_blocking(move || {
         let cmd = format!(r#"{{"command": ["set_property", "volume", {}]}}"#, vol);
         send_ipc_fire_and_forget(&cmd)
@@ -2184,17 +2223,17 @@ async fn is_paused() -> Result<bool, String> {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Default)]
-struct PlaybackState {
-    playing: bool,
-    paused: bool,
-    position: f64,
-    duration: f64,
-    eof_reached: bool,
+pub(crate) struct PlaybackState {
+    pub(crate) playing: bool,
+    pub(crate) paused: bool,
+    pub(crate) position: f64,
+    pub(crate) duration: f64,
+    pub(crate) eof_reached: bool,
 }
 
 static CURRENT_PLAYBACK_STATE: std::sync::OnceLock<Arc<Mutex<PlaybackState>>> = std::sync::OnceLock::new();
 
-fn current_playback_state() -> &'static Arc<Mutex<PlaybackState>> {
+pub(crate) fn current_playback_state() -> &'static Arc<Mutex<PlaybackState>> {
     CURRENT_PLAYBACK_STATE.get_or_init(|| Arc::new(Mutex::new(PlaybackState {
         playing: false,
         paused: true,
@@ -2222,8 +2261,14 @@ async fn seek_to_start() -> Result<(), String> {
 
 #[tauri::command]
 async fn set_playback_speed(speed: f64) -> Result<(), String> {
+    let s = speed.clamp(0.5, 2.0);
+    {
+        let mut m = mpris_meta().lock().unwrap();
+        m.rate = s;
+    }
+    mpris_notify();
     tokio::task::spawn_blocking(move || {
-        let cmd = format!(r#"{{"command": ["set_property", "speed", {}]}}"#, speed);
+        let cmd = format!(r#"{{"command": ["set_property", "speed", {}]}}"#, s);
         send_ipc_fire_and_forget(&cmd)
     })
     .await
@@ -3226,7 +3271,7 @@ fn send_ipc_batch(cmds: &[&str]) -> Vec<Result<String, String>> {
     }
 }
 
-fn send_ipc_fire_and_forget(cmd: &str) -> Result<(), String> {
+pub(crate) fn send_ipc_fire_and_forget(cmd: &str) -> Result<(), String> {
     let sock = socket_path();
     #[cfg(unix)]
     {
@@ -3854,6 +3899,7 @@ async fn set_mpris_metadata(
     title: String,
     artist: String,
     album: Option<String>,
+    album_artist: Option<String>,
     url: Option<String>,
     cover_url: String,
     duration_secs: f64,
@@ -3863,8 +3909,13 @@ async fn set_mpris_metadata(
         let mut final_title = title;
         let mut final_artist = artist;
         let mut final_album = album.unwrap_or_default();
+        let mut final_album_artist = album_artist.unwrap_or_default();
         let mut final_duration_us = (duration_secs * 1_000_000.0) as i64;
         let mut final_url = url.clone().unwrap_or_default();
+
+        if final_album_artist.is_empty() {
+            final_album_artist = final_artist.clone();
+        }
 
         if let Some(ref u) = url {
             if u.starts_with("local://") || u.starts_with('/') {
@@ -3878,10 +3929,13 @@ async fn set_mpris_metadata(
                             final_title = meta.title;
                         }
                         if final_artist.is_empty() {
-                            final_artist = meta.artist;
+                            final_artist = meta.artist.clone();
                         }
                         if final_album.is_empty() {
                             final_album = meta.album;
+                        }
+                        if final_album_artist.is_empty() {
+                            final_album_artist = meta.artist;
                         }
                         if final_duration_us <= 0 && meta.duration_secs > 0.0 {
                             final_duration_us = (meta.duration_secs * 1_000_000.0) as i64;
@@ -3914,10 +3968,12 @@ async fn set_mpris_metadata(
             meta.title = final_title;
             meta.artist = final_artist;
             meta.album = final_album;
+            meta.album_artist = final_album_artist;
             meta.url = final_url;
             meta.cover_url = resolved_cover;
             meta.duration_us = final_duration_us;
             meta.playing = playing;
+            meta.is_stopped = meta.title.is_empty();
             meta.track_seq = seq;
         }
         mpris_notify();
@@ -3929,7 +3985,39 @@ async fn set_mpris_metadata(
 
 #[tauri::command]
 async fn update_mpris_playback(playing: bool) -> Result<(), String> {
-    mpris_meta().lock().unwrap().playing = playing;
+    {
+        let mut meta = mpris_meta().lock().unwrap();
+        meta.playing = playing;
+        if playing {
+            meta.is_stopped = false;
+        }
+    }
+    mpris_notify();
+    Ok(())
+}
+
+#[tauri::command]
+async fn sync_mpris_controls(
+    loop_status: Option<String>,
+    shuffle: Option<bool>,
+    volume: Option<f64>,
+    rate: Option<f64>,
+) -> Result<(), String> {
+    {
+        let mut meta = mpris_meta().lock().unwrap();
+        if let Some(ls) = loop_status {
+            meta.loop_status = ls;
+        }
+        if let Some(sh) = shuffle {
+            meta.shuffle = sh;
+        }
+        if let Some(v) = volume {
+            meta.volume = v.max(0.0);
+        }
+        if let Some(r) = rate {
+            meta.rate = r.clamp(0.5, 2.0);
+        }
+    }
     mpris_notify();
     Ok(())
 }
@@ -3959,14 +4047,16 @@ async fn run_mpris_server(
     use zbus::{ConnectionBuilder, dbus_interface, InterfaceRef};
     use zbus::zvariant::{Value as ZValue, OwnedValue, ObjectPath};
 
-    struct MediaPlayer2;
+    struct MediaPlayer2 {
+        app: tauri::AppHandle,
+    }
 
     #[dbus_interface(name = "org.mpris.MediaPlayer2")]
     impl MediaPlayer2 {
         #[dbus_interface(property)]
         fn can_quit(&self) -> bool { true }
         #[dbus_interface(property)]
-        fn can_raise(&self) -> bool { false }
+        fn can_raise(&self) -> bool { true }
         #[dbus_interface(property)]
         fn has_track_list(&self) -> bool { false }
         #[dbus_interface(property)]
@@ -3974,43 +4064,103 @@ async fn run_mpris_server(
         #[dbus_interface(property)]
         fn desktop_entry(&self) -> &str { "veluna" }
         #[dbus_interface(property)]
-        fn supported_uri_schemes(&self) -> Vec<String> { vec![] }
+        fn supported_uri_schemes(&self) -> Vec<String> {
+            vec!["file".into(), "http".into(), "https".into()]
+        }
         #[dbus_interface(property)]
-        fn supported_mime_types(&self) -> Vec<String> { vec![] }
-        fn quit(&self) {}
-        fn raise(&self) {}
+        fn supported_mime_types(&self) -> Vec<String> {
+            vec![
+                "audio/mpeg".into(),
+                "audio/mp4".into(),
+                "audio/aac".into(),
+                "audio/ogg".into(),
+                "audio/wav".into(),
+                "audio/webm".into(),
+                "audio/x-m4a".into(),
+            ]
+        }
+        fn quit(&self) {
+            std::process::exit(0);
+        }
+        fn raise(&self) {
+            use tauri::Manager;
+            if let Some(w) = self.app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.unminimize();
+                let _ = w.set_focus();
+            }
+        }
     }
 
-    let app_next = app_handle.clone();
-    let app_prev = app_handle.clone();
-    let app_pp   = app_handle.clone();
-    let app_stop = app_handle.clone();
-
     struct Player {
-        app_next: tauri::AppHandle,
-        app_prev: tauri::AppHandle,
-        app_pp:   tauri::AppHandle,
-        app_stop: tauri::AppHandle,
+        app: tauri::AppHandle,
     }
 
     #[dbus_interface(name = "org.mpris.MediaPlayer2.Player")]
     impl Player {
         #[dbus_interface(property)]
         fn playback_status(&self) -> String {
-            if mpris_meta().lock().unwrap().playing { "Playing".into() } else { "Paused".into() }
+            let m = mpris_meta().lock().unwrap();
+            if m.is_stopped || m.title.is_empty() {
+                "Stopped".into()
+            } else if m.playing {
+                "Playing".into()
+            } else {
+                "Paused".into()
+            }
         }
         #[dbus_interface(property)]
-        fn loop_status(&self) -> String { "None".into() }
+        fn loop_status(&self) -> String {
+            mpris_meta().lock().unwrap().loop_status.clone()
+        }
         #[dbus_interface(property)]
-        fn rate(&self) -> f64 { 1.0 }
+        fn set_loop_status(&self, status: String) {
+            let valid = matches!(status.as_str(), "None" | "Track" | "Playlist");
+            if !valid {
+                return;
+            }
+            {
+                let mut m = mpris_meta().lock().unwrap();
+                m.loop_status = status.clone();
+            }
+            let _ = self.app.emit("mpris_set_loop_status", status);
+            mpris_notify();
+        }
         #[dbus_interface(property)]
-        fn shuffle(&self) -> bool { false }
+        fn rate(&self) -> f64 {
+            mpris_meta().lock().unwrap().rate
+        }
+        #[dbus_interface(property)]
+        fn set_rate(&self, rate: f64) {
+            let clamped = rate.clamp(0.5, 2.0);
+            {
+                let mut m = mpris_meta().lock().unwrap();
+                m.rate = clamped;
+            }
+            let cmd = format!(r#"{{"command": ["set_property", "speed", {}]}}"#, clamped);
+            let _ = send_ipc_fire_and_forget(&cmd);
+            let _ = self.app.emit("mpris_set_rate", clamped);
+            mpris_notify();
+        }
+        #[dbus_interface(property)]
+        fn shuffle(&self) -> bool {
+            mpris_meta().lock().unwrap().shuffle
+        }
+        #[dbus_interface(property)]
+        fn set_shuffle(&self, shuffle: bool) {
+            {
+                let mut m = mpris_meta().lock().unwrap();
+                m.shuffle = shuffle;
+            }
+            let _ = self.app.emit("mpris_set_shuffle", shuffle);
+            mpris_notify();
+        }
 
         #[dbus_interface(property)]
         fn metadata(&self) -> HashMap<String, OwnedValue> {
-            let (title, artist, album, url, cover_url, duration_us, track_seq) = {
+            let (title, artist, album, album_artist, url, cover_url, duration_us, track_seq) = {
                 let m = mpris_meta().lock().unwrap();
-                (m.title.clone(), m.artist.clone(), m.album.clone(), m.url.clone(), m.cover_url.clone(), m.duration_us, m.track_seq)
+                (m.title.clone(), m.artist.clone(), m.album.clone(), m.album_artist.clone(), m.url.clone(), m.cover_url.clone(), m.duration_us, m.track_seq)
             };
             let mut map: HashMap<String, OwnedValue> = HashMap::new();
             let track_path = if title.is_empty() {
@@ -4030,6 +4180,15 @@ async fn run_mpris_server(
                 map.insert("xesam:album".into(),
                     OwnedValue::try_from(ZValue::new(album.as_str())).unwrap());
             }
+            let resolved_album_artist = if !album_artist.is_empty() {
+                album_artist
+            } else {
+                artist.clone()
+            };
+            if !resolved_album_artist.is_empty() {
+                map.insert("xesam:albumArtist".into(),
+                    OwnedValue::try_from(ZValue::new(vec![resolved_album_artist.as_str()])).unwrap());
+            }
             if !url.is_empty() {
                 map.insert("xesam:url".into(),
                     OwnedValue::try_from(ZValue::new(url.as_str())).unwrap());
@@ -4046,7 +4205,21 @@ async fn run_mpris_server(
         }
 
         #[dbus_interface(property)]
-        fn volume(&self) -> f64 { 1.0 }
+        fn volume(&self) -> f64 {
+            mpris_meta().lock().unwrap().volume
+        }
+        #[dbus_interface(property)]
+        fn set_volume(&self, volume: f64) {
+            let v = volume.max(0.0);
+            {
+                let mut m = mpris_meta().lock().unwrap();
+                m.volume = v;
+            }
+            let cmd = format!(r#"{{"command": ["set_property", "volume", {}]}}"#, (v * 100.0).clamp(0.0, 150.0));
+            let _ = send_ipc_fire_and_forget(&cmd);
+            let _ = self.app.emit("mpris_set_volume", v * 100.0);
+            mpris_notify();
+        }
         #[dbus_interface(property)]
         fn position(&self) -> i64 {
             let p = current_playback_state().lock().unwrap().position;
@@ -4073,12 +4246,12 @@ async fn run_mpris_server(
         #[dbus_interface(property)]
         fn can_control(&self) -> bool { true }
 
-        fn next(&self)       { let _ = self.app_next.emit("mpris_next", ()); }
-        fn previous(&self)   { let _ = self.app_prev.emit("mpris_prev", ()); }
-        fn play_pause(&self) { let _ = self.app_pp.emit("mpris_play_pause", ()); }
-        fn play(&self)       { let _ = self.app_pp.emit("mpris_play_pause", ()); }
-        fn pause(&self)      { let _ = self.app_pp.emit("mpris_play_pause", ()); }
-        fn stop(&self)       { let _ = self.app_stop.emit("mpris_play_pause", ()); }
+        fn next(&self)       { let _ = self.app.emit("mpris_next", ()); }
+        fn previous(&self)   { let _ = self.app.emit("mpris_prev", ()); }
+        fn play_pause(&self) { let _ = self.app.emit("mpris_play_pause", ()); }
+        fn play(&self)       { let _ = self.app.emit("mpris_play", ()); }
+        fn pause(&self)      { let _ = self.app.emit("mpris_pause", ()); }
+        fn stop(&self)       { let _ = self.app.emit("mpris_stop", ()); }
 
         #[dbus_interface(signal)]
         async fn seeked(signal_ctxt: &zbus::SignalContext<'_>, position: i64) -> zbus::Result<()>;
@@ -4096,7 +4269,7 @@ async fn run_mpris_server(
                 state.position = new_pos;
                 (new_pos * 1_000_000.0) as i64
             };
-            let _ = self.app_pp.emit("mpris_seeked", new_pos_us as f64 / 1_000_000.0);
+            let _ = self.app.emit("mpris_seeked", new_pos_us as f64 / 1_000_000.0);
             let _ = Self::seeked(&ctxt, new_pos_us).await;
             Ok(())
         }
@@ -4127,17 +4300,19 @@ async fn run_mpris_server(
                 let mut state = current_playback_state().lock().unwrap();
                 state.position = pos_secs;
             }
-            let _ = self.app_pp.emit("mpris_seeked", pos_secs);
+            let _ = self.app.emit("mpris_seeked", pos_secs);
             let _ = Self::seeked(&ctxt, position_us).await;
             Ok(())
         }
-        fn open_uri(&self, _uri: String) {}
+        fn open_uri(&self, uri: String) {
+            let _ = self.app.emit("mpris_open_uri", uri);
+        }
     }
 
     let conn = ConnectionBuilder::session()?
         .name("org.mpris.MediaPlayer2.veluna")?
-        .serve_at("/org/mpris/MediaPlayer2", MediaPlayer2)?
-        .serve_at("/org/mpris/MediaPlayer2", Player { app_next, app_prev, app_pp, app_stop })?
+        .serve_at("/org/mpris/MediaPlayer2", MediaPlayer2 { app: app_handle.clone() })?
+        .serve_at("/org/mpris/MediaPlayer2", Player { app: app_handle.clone() })?
         .build()
         .await?;
 
@@ -4152,6 +4327,10 @@ async fn run_mpris_server(
         let ctxt  = player_iface.signal_context();
         let _ = iface.playback_status_changed(ctxt).await;
         let _ = iface.metadata_changed(ctxt).await;
+        let _ = iface.loop_status_changed(ctxt).await;
+        let _ = iface.shuffle_changed(ctxt).await;
+        let _ = iface.volume_changed(ctxt).await;
+        let _ = iface.rate_changed(ctxt).await;
     }
 }
 
@@ -4573,6 +4752,16 @@ fn main() {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_icon(tauri::include_image!("icons/128x128.png"));
                 let _ = window.set_zoom(1.10);
+
+                #[cfg(target_os = "windows")]
+                {
+                    if let Ok(hwnd) = window.hwnd() {
+                        let raw_hwnd: *mut std::ffi::c_void = unsafe { std::mem::transmute(hwnd.0) };
+                        if let Err(e) = windows_smtc::init_windows_smtc(handle.clone(), raw_hwnd) {
+                            eprintln!("[SMTC] Failed to initialize Windows SMTC: {}", e);
+                        }
+                    }
+                }
             }
 
             let shortcuts = [
@@ -4601,6 +4790,7 @@ fn main() {
             check_for_update,
             set_mpris_metadata,
             update_mpris_playback,
+            sync_mpris_controls,
             get_local_track_cover,
             write_local_track_tags,
             db_save_playlist,

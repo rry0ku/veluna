@@ -23,6 +23,7 @@ import {
   UserPreferences,
   FollowedArtist,
   ArtistPageData,
+  RepeatMode,
 } from './types';
 import {
   loadLS,
@@ -280,6 +281,7 @@ export function App() {
     setCurrentTrack,
     currentLocalPath,
     isPlaying,
+    setIsPlaying,
     isLoadingTrack,
     loadingTrackUrl,
     audioInfo,
@@ -800,9 +802,26 @@ export function App() {
   const mprisToggleRef = useRef<() => void>(() => {});
   const mprisNextRef = useRef<() => void>(() => {});
   const mprisPrevRef = useRef<() => void>(() => {});
+  const isPlayingRef = useRef(isPlaying);
+  const setIsPlayingRef = useRef(setIsPlaying);
+  const handlePlayTrackRef = useRef(handlePlayTrack);
+  const handlePlayLocalTrackRef = useRef(handlePlayLocalTrack);
+  const setVolumeRef = useRef(setVolume);
+  const setShuffleRef = useRef(setShuffle);
+  const setRepeatModeRef = useRef(setRepeatMode);
+  const setPlaybackSpeedStateRef = useRef(setPlaybackSpeedState);
+
   mprisToggleRef.current = togglePlayPause;
   mprisNextRef.current = handleSkipForward;
   mprisPrevRef.current = handleSkipBack;
+  isPlayingRef.current = isPlaying;
+  setIsPlayingRef.current = setIsPlaying;
+  handlePlayTrackRef.current = handlePlayTrack;
+  handlePlayLocalTrackRef.current = handlePlayLocalTrack;
+  setVolumeRef.current = setVolume;
+  setShuffleRef.current = setShuffle;
+  setRepeatModeRef.current = setRepeatMode;
+  setPlaybackSpeedStateRef.current = setPlaybackSpeedState;
 
   useEffect(() => {
     let active = true;
@@ -820,6 +839,96 @@ export function App() {
     register('mpris_play_pause', () => mprisToggleRef.current());
     register('mpris_next', () => mprisNextRef.current());
     register('mpris_prev', () => mprisPrevRef.current());
+    register('mpris_play', () => {
+      if (!isPlayingRef.current) {
+        invoke('resume_audio').catch(() => {});
+        setIsPlayingRef.current(true);
+      }
+    });
+    register('mpris_pause', () => {
+      if (isPlayingRef.current) {
+        invoke('pause_audio').catch(() => {});
+        setIsPlayingRef.current(false);
+      }
+    });
+    register('mpris_stop', () => {
+      invoke('pause_audio').catch(() => {});
+      invoke('seek_audio', { time: 0 }).catch(() => {});
+      setIsPlayingRef.current(false);
+    });
+
+    listen<string>('mpris_set_loop_status', e => {
+      const status = e.payload;
+      const mode: RepeatMode = status === 'Track' ? 'one' : status === 'Playlist' ? 'all' : 'off';
+      setRepeatModeRef.current(mode);
+    }).then(unlisten => {
+      if (active) cleanups.push(unlisten);
+      else unlisten();
+    });
+
+    listen<boolean>('mpris_set_shuffle', e => {
+      setShuffleRef.current(!!e.payload);
+    }).then(unlisten => {
+      if (active) cleanups.push(unlisten);
+      else unlisten();
+    });
+
+    listen<number>('mpris_set_volume', e => {
+      const vol = typeof e.payload === 'number' ? Math.round(e.payload) : 100;
+      setVolumeRef.current(vol);
+    }).then(unlisten => {
+      if (active) cleanups.push(unlisten);
+      else unlisten();
+    });
+
+    listen<number>('mpris_set_rate', e => {
+      if (typeof e.payload === 'number' && Number.isFinite(e.payload)) {
+        setPlaybackSpeedStateRef.current(e.payload);
+      }
+    }).then(unlisten => {
+      if (active) cleanups.push(unlisten);
+      else unlisten();
+    });
+
+    listen<string>('mpris_open_uri', e => {
+      const uri = e.payload;
+      if (!uri) return;
+      if (uri.startsWith('file://')) {
+        const path = decodeURIComponent(uri.replace(/^file:\/\//, ''));
+        const filename = path.split('/').pop() || 'Track';
+        const ext = filename.includes('.') ? filename.split('.').pop() || 'mp3' : 'mp3';
+        handlePlayLocalTrackRef.current({
+          path,
+          title: filename.replace(/\.[^/.]+$/, ''),
+          extension: ext,
+          size_bytes: 0,
+          artist: 'Offline Audio',
+        });
+      } else if (uri.startsWith('/')) {
+        const filename = uri.split('/').pop() || 'Track';
+        const ext = filename.includes('.') ? filename.split('.').pop() || 'mp3' : 'mp3';
+        handlePlayLocalTrackRef.current({
+          path: uri,
+          title: filename.replace(/\.[^/.]+$/, ''),
+          extension: ext,
+          size_bytes: 0,
+          artist: 'Offline Audio',
+        });
+      } else if (uri.startsWith('http://') || uri.startsWith('https://')) {
+        handlePlayTrackRef.current({
+          id: Date.now(),
+          title: uri.split('/').pop() || 'Streaming Audio',
+          artist: 'Unknown Artist',
+          url: uri,
+          duration: '0:00',
+          cover: '',
+        });
+      }
+    }).then(unlisten => {
+      if (active) cleanups.push(unlisten);
+      else unlisten();
+    });
+
     register('tray_play_pause', () => mprisToggleRef.current());
     register('tray_next', () => mprisNextRef.current());
     register('tray_prev', () => mprisPrevRef.current());
@@ -833,6 +942,16 @@ export function App() {
       cleanups.forEach(fn => fn());
     };
   }, []);
+
+  useEffect(() => {
+    const loopStatus = repeatMode === 'one' ? 'Track' : repeatMode === 'all' ? 'Playlist' : 'None';
+    invoke('sync_mpris_controls', {
+      loopStatus,
+      shuffle,
+      volume: volume / 100,
+      rate: playbackSpeed,
+    }).catch(() => {});
+  }, [repeatMode, shuffle, volume, playbackSpeed]);
 
   useEffect(() => {
     if (trayEnabled) {
@@ -864,6 +983,7 @@ export function App() {
         title: '',
         artist: '',
         album: '',
+        albumArtist: '',
         url: '',
         coverUrl: '',
         durationSecs: 0,
@@ -883,6 +1003,7 @@ export function App() {
       title: currentTrack.title ?? '',
       artist: currentTrack.artist ?? '',
       album: currentTrack.album ?? '',
+      albumArtist: currentTrack.artist ?? '',
       url: currentTrack.url ?? '',
       coverUrl: getTrackCover(currentTrack) || currentTrack.cover || '',
       durationSecs: finalDuration,
