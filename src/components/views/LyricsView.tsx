@@ -113,7 +113,7 @@ export const LyricsView: React.FC<LyricsViewProps> = ({
         background: "radial-gradient(circle at 70% 50%, rgba(255,255,255,0.02) 0%, rgba(0,0,0,0.45) 70%)"
       }}/>
 
-      {/* Left panel — centered & responsive */}
+      {/* Left panel: centered and responsive */}
       <div className="custom-scrollbar" style={{position:"relative",zIndex:10,width:"clamp(260px, 30vw, 360px)",flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"24px 20px",gap:"12px",maxHeight:"100vh",overflowY:"auto",boxSizing:"border-box"}}>
 
         {/* Close button */}
@@ -200,9 +200,20 @@ export const LyricsView: React.FC<LyricsViewProps> = ({
         <div style={{width:"100%",display:"flex",flexDirection:"column",gap:"5px"}}>
           <div className="slider-track" style={{position:"relative",width:"100%",height:"4px",borderRadius:"2px",cursor:"pointer",background:"rgba(255,255,255,0.18)"}}
             onMouseDown={e => {
-              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-              const t = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * (trackDurationSeconds || 0);
-              invoke('seek_audio', { time: t }).catch(() => {});
+              const track = e.currentTarget as HTMLElement;
+              const update = (clientX: number) => {
+                const rect = track.getBoundingClientRect();
+                const t = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * (trackDurationSeconds || 0);
+                invoke('seek_audio', { time: t }).catch(() => {});
+              };
+              update(e.clientX);
+              const onMove = (ev: MouseEvent) => update(ev.clientX);
+              const onUp = () => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+              };
+              document.addEventListener('mousemove', onMove);
+              document.addEventListener('mouseup', onUp);
             }}>
             <div style={{position:"absolute",top:0,left:0,height:"100%",borderRadius:"2px",pointerEvents:"none",width:`${pct}%`,background:"#ffffff",transition:"width 0.5s linear"}}>
               <div className="slider-thumb" style={{position:"absolute",right:"-5px",top:"50%",transform:"translateY(-50%)",width:"11px",height:"11px",background:"#fff",borderRadius:"50%",opacity:0,pointerEvents:"none",transition:"opacity .12s"}}/>
@@ -324,7 +335,7 @@ export const LyricsView: React.FC<LyricsViewProps> = ({
         {lyricsLoading ? (
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"16px",height:"100%"}}>
             <Loader2 size={26} style={{color:"#ffffff",animation:"spin 1s linear infinite"}}/>
-            <p style={{fontSize:"13.5px",color:"rgba(255,255,255,0.5)",fontWeight:500}}>Fetching lyrics…</p>
+            <p style={{fontSize:"13.5px",color:"rgba(255,255,255,0.5)",fontWeight:500}}>Fetching lyrics...</p>
           </div>
         ) : lines.length > 0 ? (
           <div style={{position:"relative",height:"100%"}}>

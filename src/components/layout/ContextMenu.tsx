@@ -530,7 +530,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: '9.5px', color: 'var(--v-fg3)', letterSpacing: '.1em', textTransform: 'uppercase', fontWeight: 700 }}>{label}</div>
-                      <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--v-fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '1px' }}>{value || '—'}</div>
+                      <div style={{ fontSize: '12.5px', fontWeight: 600, color: 'var(--v-fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginTop: '1px' }}>{value || '-'}</div>
                     </div>
                     <Copy size={11} style={{ color: 'var(--v-fg3)', flexShrink: 0 }} />
                   </div>

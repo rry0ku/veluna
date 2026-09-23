@@ -261,7 +261,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
       await invoke('set_cache_enabled', { enabled });
       if (!enabled) {
         const freed = await invoke<number>('clear_app_cache');
-        showToast(`Caching disabled — ${formatBytes(freed)} cache purged`);
+        showToast(`Caching disabled: ${formatBytes(freed)} cache purged`);
       } else {
         showToast('Caching & stream prefetching enabled');
       }
@@ -501,7 +501,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                 <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid #141312"}}>
                   <div>
                     <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Loudness Normalization</p>
-                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{loudnormEnabled ? 'Active — consistent volume across tracks (EBU R128)' : 'Disabled — raw volume, faster track start'}</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{loudnormEnabled ? 'Active: consistent volume across tracks (EBU R128)' : 'Disabled: raw volume, faster track start'}</p>
                   </div>
                   <SettingsSwitch checked={loudnormEnabled} onChange={() => {
                     const next = !loudnormEnabled;
@@ -514,7 +514,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                 <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid #141312"}}>
                   <div>
                     <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Skip Silence</p>
-                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{skipSilence ? 'Active — auto-skips silent gaps' : 'Disabled — plays entire track including silence'}</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{skipSilence ? 'Active: auto-skips silent gaps' : 'Disabled: plays entire track including silence'}</p>
                   </div>
                   <SettingsSwitch checked={skipSilence} onChange={() => {
                     const next = !skipSilence;
@@ -527,7 +527,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                 <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                   <div>
                     <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Autoplay Recommendations</p>
-                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{autoplayEnabled ? 'Active — queues similar recommendations when music ends' : 'Disabled — playback stops when queue finishes'}</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{autoplayEnabled ? 'Active: queues similar recommendations when music ends' : 'Disabled: playback stops when queue finishes'}</p>
                   </div>
                   <SettingsSwitch checked={autoplayEnabled} onChange={() => setAutoplayEnabled(!autoplayEnabled)} />
                 </div>
@@ -585,9 +585,9 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                 {/* Band Sliders */}
                 <div style={{padding:"8px 18px 18px",display:"flex",flexDirection:"column",gap:"10px"}}>
                   {([
-                    { label: 'Bass', key: 'bass' as const, freq: '60–250 Hz' },
-                    { label: 'Mid', key: 'mid' as const, freq: '500 Hz–2 kHz' },
-                    { label: 'Treble', key: 'treble' as const, freq: '4–16 kHz' },
+                    { label: 'Bass', key: 'bass' as const, freq: '60-250 Hz' },
+                    { label: 'Mid', key: 'mid' as const, freq: '500 Hz-2 kHz' },
+                    { label: 'Treble', key: 'treble' as const, freq: '4-16 kHz' },
                   ] as { label: string; key: 'bass' | 'mid' | 'treble'; freq: string }[]).map(({ label, key, freq }) => {
                     const val = eq[key];
                     const isActive = val !== 0;
@@ -970,7 +970,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                 <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                   <div>
                     <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Enable System Tray Icon</p>
-                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{trayEnabled ? 'Active — window minimizes to system tray on close' : 'Disabled — close exits the app entirely'}</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{trayEnabled ? 'Active: window minimizes to system tray on close' : 'Disabled: close exits the app entirely'}</p>
                   </div>
                   <SettingsSwitch checked={trayEnabled} onChange={async () => {
                     const next = !trayEnabled;
@@ -1118,8 +1118,8 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                     <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9",margin:0}}>Low-Spec / Performance Mode</p>
                     <p style={{fontSize:"12px",color:"#6f6966",margin:"4px 0 0 0",lineHeight:1.4}}>
                       {performanceMode
-                        ? 'Active — GPU blur effects, heavy hover transitions, and continuous animations are disabled for maximum smoothness on older hardware.'
-                        : 'Disabled — full visual effects, fluid transitions, and standard animations are enabled.'}
+                        ? 'Active: GPU blur effects, heavy hover transitions, and continuous animations are disabled for maximum smoothness on older hardware.'
+                        : 'Disabled: full visual effects, fluid transitions, and standard animations are enabled.'}
                     </p>
                   </div>
                   <SettingsSwitch checked={performanceMode} onChange={() => {
@@ -1170,7 +1170,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                   <div>
                     <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Audio Format</p>
                     <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>
-                      {downloadFormat === 'opus' ? 'Best compression, native YouTube codec' : downloadFormat === 'm4a' ? 'AAC in M4A, great Apple/car stereo compat' : downloadFormat === 'flac' ? 'Lossless — largest files' : 'MP3 — widest compatibility'}
+                      {downloadFormat === 'opus' ? 'Best compression, native YouTube codec' : downloadFormat === 'm4a' ? 'AAC in M4A, great Apple/car stereo compat' : downloadFormat === 'flac' ? 'Lossless: largest files' : 'MP3: widest compatibility'}
                     </p>
                   </div>
                   <ThemedSelect
@@ -1229,7 +1229,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:"1px solid #141312"}}>
                   <div>
                     <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Embed Artwork Thumbnail</p>
-                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{embedThumbnail ? 'Active — album/track cover art is embedded into audio file tags' : 'Disabled — downloaded audio files will have no embedded cover'}</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{embedThumbnail ? 'Active: album/track cover art is embedded into audio file tags' : 'Disabled: downloaded audio files will have no embedded cover'}</p>
                   </div>
                   <SettingsSwitch checked={embedThumbnail} onChange={() => setEmbedThumbnail(!embedThumbnail)} />
                 </div>
@@ -1237,7 +1237,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                 <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                   <div>
                     <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Smart Duplicate Detection</p>
-                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{duplicateDetect ? 'Active — tracks already in your download folder are skipped' : 'Disabled — duplicates will download and overwrite if triggered'}</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{duplicateDetect ? 'Active: tracks already in your download folder are skipped' : 'Disabled: duplicates will download and overwrite if triggered'}</p>
                   </div>
                   <SettingsSwitch checked={duplicateDetect} onChange={() => setDuplicateDetect(!duplicateDetect)} />
                 </div>
@@ -1263,7 +1263,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                 <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:discordRpcEnabled?"1px solid var(--v-bdr)":"none"}}>
                   <div>
                     <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Discord Rich Presence</p>
-                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{discordRpcEnabled ? 'Active — shows listening activity on your Discord profile' : 'Disabled — listening activity is hidden'}</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{discordRpcEnabled ? 'Active: shows listening activity on your Discord profile' : 'Disabled: listening activity is hidden'}</p>
                   </div>
                   <SettingsSwitch checked={discordRpcEnabled} onChange={() => setDiscordRpcEnabled(!discordRpcEnabled)} />
                 </div>
@@ -1376,9 +1376,9 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                   <div>
                     <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Primary Source</p>
                     <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>
-                      {lyricsSource === 'musixmatch' ? 'Musixmatch — word-level richsync when available'
-                        : lyricsSource === 'netease' ? 'NetEase — great for Asian artists & translations'
-                        : 'lrclib — open, fast, fully synced and community-driven'}
+                      {lyricsSource === 'musixmatch' ? 'Musixmatch: word-level richsync when available'
+                        : lyricsSource === 'netease' ? 'NetEase: great for Asian artists & translations'
+                        : 'lrclib: open, fast, fully synced and community-driven'}
                     </p>
                   </div>
                   <ThemedSelect value={lyricsSource} onChange={setLyricsSource} options={[
@@ -1411,7 +1411,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                   <div>
                     <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Enable Last.fm Scrobbling</p>
                     <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>
-                      {lastfmEnabled ? 'Logs Now Playing updates and scrobbles to your Last.fm profile' : 'Disabled — scrobbles are not sent'}
+                      {lastfmEnabled ? 'Logs Now Playing updates and scrobbles to your Last.fm profile' : 'Disabled: scrobbles are not sent'}
                     </p>
                   </div>
                   <SettingsSwitch checked={lastfmEnabled} onChange={() => setLastfmEnabled(!lastfmEnabled)} />
@@ -1777,8 +1777,8 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                     <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Enable Caching & Stream Prefetch</p>
                     <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>
                       {cacheEnabled
-                        ? 'Active — pre-resolves queued songs in background, buffers 30s audio, and caches search queries'
-                        : 'Disabled — no cache or prefetch files will be saved, existing cache is purged'}
+                        ? 'Active: pre-resolves queued songs in background, buffers 30s audio, and caches search queries'
+                        : 'Disabled: no cache or prefetch files will be saved, existing cache is purged'}
                     </p>
                   </div>
                   <SettingsSwitch checked={cacheEnabled} onChange={() => handleToggleCache(!cacheEnabled)} />

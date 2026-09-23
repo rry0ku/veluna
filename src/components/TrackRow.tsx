@@ -130,7 +130,7 @@ export const TrackRow = React.memo(({
           <>
             <div className="v-track__title">{displayTitle}</div>
             {displayArtist && (
-              <div className="v-track__artist" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>
+              <div className="v-track__artist">
                 {(() => {
                   const parts = parseArtistParts(displayArtist);
                   return parts.map((part, idx) => {
@@ -195,7 +195,7 @@ export const TrackRow = React.memo(({
             <MoreVertical size={13} />
           </button>}
     </div>
-    <span className="v-track__dur">{track.duration && track.duration !== '0:00' ? track.duration : '—'}</span>
+    <span className="v-track__dur">{track.duration && track.duration !== '0:00' ? track.duration : '-'}</span>
   </div>
 ), (prev, next) => {
   return (

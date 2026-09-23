@@ -719,7 +719,8 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                     Clear
                   </button>
                 </div>
-                {searchHistory.map((h, i) => (
+                <div style={{ maxHeight: '280px', overflowY: 'auto' }} className="custom-scrollbar">
+                  {searchHistory.map((h, i) => (
                   <div
                     key={i}
                     style={{
@@ -801,6 +802,7 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                     </button>
                   </div>
                 ))}
+                </div>
               </div>
             )}
           </div>

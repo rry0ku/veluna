@@ -560,7 +560,7 @@ export const DownloadsPanel = React.memo(function DownloadsPanel({
                       <button className="v-track__btn" title="Delete" onClick={e=>{e.stopPropagation();onDeleteLocalTrack(track);scan();}}
                         onMouseEnter={e=>(e.currentTarget.style.color="#b05555")} onMouseLeave={e=>(e.currentTarget.style.color="#5c5755")}><Trash2 size={12}/></button>
                     </div>
-                    <span style={{fontSize:"11px",color:"var(--v-fg3)",fontVariantNumeric:"tabular-nums",width:"40px",textAlign:"right",flexShrink:0}}>{track.duration||"—"}</span>
+                    <span style={{fontSize:"11px",color:"var(--v-fg3)",fontVariantNumeric:"tabular-nums",width:"40px",textAlign:"right",flexShrink:0}}>{track.duration||"-"}</span>
                   </div>
                 );
               }}

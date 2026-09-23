@@ -139,6 +139,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = React.memo(({
 }) => {
   const [showRemainingTime, setShowRemainingTime] = useState(false);
   const [hoverPct, setHoverPct] = useState<number | null>(null);
+  const [isHoveringVolume, setIsHoveringVolume] = useState(false);
 
   const calculateProgressPercent = customCalculateProgress || (() => {
     const total = trackDurationSeconds || parseDurationToSeconds(currentTrack?.duration || '0:00');
@@ -221,7 +222,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = React.memo(({
                 flexDirection: "column",
                 gap: "1px",
                 minWidth: 0,
-                maxWidth: "190px"
+                flex: 1
               }}>
                 {(() => {
                   const meta = parseTrackMeta(currentTrack.title, currentTrack.artist);
@@ -257,7 +258,6 @@ export const PlayerBar: React.FC<PlayerBarProps> = React.memo(({
                             overflow: "hidden",
                             textOverflow: "ellipsis",
                             whiteSpace: "nowrap",
-                            maxWidth: "190px",
                             lineHeight: "1.2"
                           }}
                         >
@@ -567,6 +567,8 @@ export const PlayerBar: React.FC<PlayerBarProps> = React.memo(({
         {(() => {
           const totalDuration = (trackDurationRef?.current) || trackDurationSeconds || (currentTrack ? parseDurationToSeconds(currentTrack.duration) : 0);
           const remainingSeconds = Math.max(0, totalDuration - progressSeconds);
+          const tooltipPct = hoverPct !== null ? hoverPct : (isDraggingProgress ? calculateProgressPercent() : null);
+          const tooltipTime = tooltipPct !== null ? formatTime(totalDuration * (tooltipPct / 100)) : '0:00';
           return (
             <div style={{width:"100%",display:"flex",alignItems:"center",gap:"10px"}}>
               <span className="v-progress-time" style={{textAlign:"right",minWidth:"34px"}}>
@@ -580,6 +582,11 @@ export const PlayerBar: React.FC<PlayerBarProps> = React.memo(({
                   if (isDraggingProgressRef) isDraggingProgressRef.current = true;
                   setIsDraggingProgress(true);
                   updateProgressFromEvent(e.clientX);
+                  if (progressRef.current) {
+                    const rect = progressRef.current.getBoundingClientRect();
+                    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+                    setHoverPct(pct * 100);
+                  }
                 }}
                 onMouseEnter={e => {
                   if (!progressRef.current || !currentTrack) return;
@@ -592,18 +599,20 @@ export const PlayerBar: React.FC<PlayerBarProps> = React.memo(({
                   const rect = progressRef.current.getBoundingClientRect();
                   const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
                   setHoverPct(pct * 100);
-                  const el = progressRef.current.querySelector<HTMLElement>('.v-progress-tooltip');
-                  if (el) {
-                    el.textContent = formatTime(totalDuration * pct);
-                    el.style.left = `${pct * 100}%`;
-                  }
                 }}
                 onMouseLeave={() => setHoverPct(null)}
               >
                 <div className="v-progress-track">
                   {currentTrack && (
-                    <div className="v-progress-tooltip">
-                      {formatTime(progressSeconds)}
+                    <div
+                      className="v-progress-tooltip"
+                      style={{
+                        left: `${tooltipPct ?? 0}%`,
+                        opacity: (hoverPct !== null || isDraggingProgress) ? 1 : undefined,
+                        transform: (hoverPct !== null || isDraggingProgress) ? 'translateX(-50%) translateY(0)' : undefined
+                      }}
+                    >
+                      {tooltipTime}
                     </div>
                   )}
                   {hoverPct !== null && (
@@ -686,13 +695,30 @@ export const PlayerBar: React.FC<PlayerBarProps> = React.memo(({
             className="slider-track"
             style={{position:"relative",width:"72px",height:"4px",background:"#232020",borderRadius:"2px",cursor:"pointer"}}
             onMouseDown={e=>{setIsDraggingVolume(true);updateVolumeFromEvent(e.clientX);}}
-            onMouseEnter={e=>{const tip=e.currentTarget.nextElementSibling as HTMLElement;if(tip)tip.style.opacity='1';}}
-            onMouseLeave={e=>{const tip=e.currentTarget.nextElementSibling as HTMLElement;if(tip)tip.style.opacity='0';}}>
+            onMouseEnter={()=>setIsHoveringVolume(true)}
+            onMouseLeave={()=>setIsHoveringVolume(false)}>
             <div style={{position:"absolute",top:0,left:0,height:"100%",borderRadius:"2px",pointerEvents:"none",width:`${volume}%`,background:volume>0?"var(--v-accent)":"#232020",transition:isDraggingVolume?"none":"width 0.15s ease-out"}}>
               <div className="slider-thumb" style={{position:"absolute",right:"-5px",top:"50%",transform:"translateY(-50%)",width:"11px",height:"11px",background:"#fff",borderRadius:"50%",opacity:0,pointerEvents:"none",transition:"opacity .12s"}}/>
             </div>
           </div>
-          <div style={{position:"absolute",bottom:"14px",left:"50%",transform:"translateX(-50%)",background:"var(--v-bdr2)",border:"1px solid var(--v-bdr2)",borderRadius:"5px",padding:"2px 6px",fontSize:"10px",fontWeight:700,color:"#9e9894",pointerEvents:"none",whiteSpace:"nowrap",opacity:0,transition:"opacity .15s",zIndex:10}}>
+          <div style={{
+            position:"absolute",
+            bottom:"14px",
+            left:"50%",
+            transform:"translateX(-50%)",
+            background:"var(--v-bdr2)",
+            border:"1px solid var(--v-bdr2)",
+            borderRadius:"5px",
+            padding:"2px 6px",
+            fontSize:"10px",
+            fontWeight:700,
+            color:"#9e9894",
+            pointerEvents:"none",
+            whiteSpace:"nowrap",
+            opacity: (isHoveringVolume || isDraggingVolume) ? 1 : 0,
+            transition:"opacity .15s",
+            zIndex:10
+          }}>
             {Math.round(volume)}%
           </div>
         </div>

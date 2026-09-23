@@ -1381,7 +1381,7 @@ export function App() {
           description: `Imported from ${file.name}`,
           tracks: importedTracks,
         }]);
-        showToast(`Imported "${name}" — ${importedTracks.length} track${importedTracks.length !== 1 ? 's' : ''}`);
+        showToast(`Imported "${name}" (${importedTracks.length} track${importedTracks.length !== 1 ? 's' : ''})`);
       } catch (err) {
         showToast(`Import failed: ${err}`);
       }
@@ -2699,7 +2699,7 @@ export function App() {
           onSavePlaylist={(name, desc, importedTracks) => {
             const id = `yt_${Date.now()}`;
             setPlaylists(prev => [...prev, { id, name, description: desc || 'Imported from YouTube', tracks: importedTracks }]);
-            showToast(`"${name}" saved — ${importedTracks.length} tracks`);
+            showToast(`"${name}" saved (${importedTracks.length} tracks)`);
             setBgYtImport(null);
           }}
           showToast={showToast}

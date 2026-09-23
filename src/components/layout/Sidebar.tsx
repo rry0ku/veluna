@@ -83,7 +83,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
       {performanceMode && (
         <div
           onClick={() => { navigateTo('settings'); setSettingsTab?.('appearance'); }}
-          title="Low-Spec Mode active — Click to view in Settings"
+          title="Low-Spec Mode active: Click to view in Settings"
           style={{
             display: "flex",
             alignItems: "center",

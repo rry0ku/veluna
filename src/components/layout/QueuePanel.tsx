@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { ListOrdered, ListPlus, Music, Play, X, FileMusic } from 'lucide-react';
 import { Track, Playlist, CtxMenu } from '../../types';
 import { getTrackGradient, cleanArtist } from '../../utils';
@@ -76,6 +76,17 @@ export const QueuePanel: React.FC<QueuePanelProps> = React.memo(({
     showToast(`Saved queue as "${name}" (${onlineTracks.length} tracks)`);
   };
 
+  const [isRendered, setIsRendered] = useState(isQueueOpen);
+
+  useEffect(() => {
+    if (isQueueOpen) {
+      setIsRendered(true);
+    } else {
+      const timer = setTimeout(() => setIsRendered(false), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isQueueOpen]);
+
   return (
     <div style={{
       flexShrink: 0,
@@ -87,8 +98,15 @@ export const QueuePanel: React.FC<QueuePanelProps> = React.memo(({
       width: isQueueOpen ? '300px' : '0',
       transition: 'width 0.28s cubic-bezier(0.2,0,0,1)'
     }}>
-      {isQueueOpen && (
-        <>
+      {isRendered && (
+        <div style={{
+          width: '300px',
+          minWidth: '300px',
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
+        }}>
           <div style={{
             display: 'flex',
             alignItems: 'center',
@@ -406,7 +424,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = React.memo(({
               </>
             )}
           </div>
-        </>
+        </div>
       )}
     </div>
   );
