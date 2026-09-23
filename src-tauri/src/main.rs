@@ -276,7 +276,7 @@ lazy_static::lazy_static! {
     static ref CURRENT_EQ: Arc<Mutex<(f64, f64, f64)>> = Arc::new(Mutex::new((0.0, 0.0, 0.0)));
 }
 
-// Persistent mpv process handle — spawned once at startup, reused across all tracks.
+// Persistent mpv process handle: spawned once at startup, reused across all tracks.
 // Using Option<Child> so we can detect crashes and respawn.
 static MPV_PROCESS: std::sync::OnceLock<Mutex<Option<std::process::Child>>> = std::sync::OnceLock::new();
 fn mpv_process() -> &'static Mutex<Option<std::process::Child>> {
@@ -311,7 +311,20 @@ fn sanitize_stream_url(url: &str) -> Result<String, String> {
 }
 
 fn sanitize_file_path(path: &str) -> Result<std::path::PathBuf, String> {
-    let expanded = expand_tilde(path.trim_start_matches("local://").trim());
+    #[allow(unused_mut)]
+    let mut expanded = expand_tilde(path.trim_start_matches("local://").trim());
+    #[cfg(target_os = "windows")]
+    {
+        if expanded.starts_with('/') || expanded.starts_with('\\') {
+            let rest = &expanded[1..];
+            if rest.len() >= 2
+                && rest.chars().next().map(|c| c.is_ascii_alphabetic()).unwrap_or(false)
+                && rest.chars().nth(1) == Some(':')
+            {
+                expanded = rest.to_string();
+            }
+        }
+    }
     let p = std::path::Path::new(&expanded);
     if !p.is_absolute() {
         return Err(format!("Path must be absolute: {}", &expanded[..expanded.len().min(200)]));
@@ -1253,55 +1266,37 @@ async fn search_youtube(query: String) -> Result<String, String> {
         }
     }
 
-    tokio::task::spawn_blocking(move || {
-        let search_arg = if is_url {
-            q_trim
-        } else {
-            format!("ytsearch25:{}", q_trim)
-        };
-        let mut cmd = Command::new(bin_ytdlp());
-        cmd.args([
-            &search_arg,
-            "--flat-playlist",
-            "--print", "%(title)s====%(uploader)s====%(duration_string)s====%(id)s",
-            "--no-warnings",
-            "--no-check-certificates",
-            "--geo-bypass",
-            "--socket-timeout", "15",
-        ]);
-        apply_proxy_to_cmd(&mut cmd);
-        let mut child = cmd
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .no_window()
-            .spawn()
-            .map_err(|e| format!("yt-dlp not found: {}", e))?;
+    let search_arg = if is_url {
+        q_trim
+    } else {
+        format!("ytsearch25:{}", q_trim)
+    };
+    let mut cmd = tokio::process::Command::new(bin_ytdlp());
+    cmd.args([
+        &search_arg,
+        "--flat-playlist",
+        "--print", "%(title)s====%(uploader)s====%(duration_string)s====%(id)s",
+        "--no-warnings",
+        "--no-check-certificates",
+        "--geo-bypass",
+        "--socket-timeout", "15",
+    ]);
+    if let Some(proxy_str) = get_proxy_url() {
+        cmd.args(["--proxy", &proxy_str]);
+    }
+    cmd.no_window();
 
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(35);
-        loop {
-            match child.try_wait() {
-                Ok(Some(_)) => break,
-                Ok(None) => {
-                    if std::time::Instant::now() > deadline {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        return Err("Search timed out — check your connection".to_string());
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(25));
-                }
-                Err(e) => return Err(e.to_string()),
-            }
-        }
-        let out = child.wait_with_output().map_err(|e| e.to_string())?;
-        let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-        if stdout.trim().is_empty() {
-            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-            return Err(if stderr.trim().is_empty() { "No results found".to_string() } else { stderr });
-        }
-        Ok(stdout)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    let out = match tokio::time::timeout(std::time::Duration::from_secs(35), cmd.output()).await {
+        Ok(res) => res.map_err(|e| format!("yt-dlp failed: {}", e))?,
+        Err(_) => return Err("Search timed out - check your connection".to_string()),
+    };
+
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    if stdout.trim().is_empty() {
+        let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+        return Err(if stderr.trim().is_empty() { "No results found".to_string() } else { stderr });
+    }
+    Ok(stdout)
 }
 
 #[tauri::command]
@@ -1318,54 +1313,36 @@ async fn open_url_in_browser(app: tauri::AppHandle, url: String) -> Result<(), S
 
 #[tauri::command]
 async fn import_youtube_playlist(url: String) -> Result<String, String> {
-    tokio::task::spawn_blocking(move || {
-        let u_trim = url.trim();
-        let mut cmd = Command::new(bin_ytdlp());
-        cmd.args([
-            "--flat-playlist",
-            "--yes-playlist",
-            "--no-warnings",
-            "--ignore-errors",
-            "--geo-bypass",
-            "--socket-timeout", "15",
-            "--no-config",
-            "--print", "%(id)s====%(title)s====%(duration_string|0:00)s====%(artist,uploader,channel,creator,uploader_id|Unknown)s====%(playlist,playlist_title|YouTube Playlist)s",
-            "--",
-            u_trim,
-        ]);
-        apply_proxy_to_cmd(&mut cmd);
-        let mut child = cmd
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .no_window()
-            .spawn()
-            .map_err(|e| format!("yt-dlp not found: {}", e))?;
+    let u_trim = url.trim();
+    let mut cmd = tokio::process::Command::new(bin_ytdlp());
+    cmd.args([
+        "--flat-playlist",
+        "--yes-playlist",
+        "--no-warnings",
+        "--ignore-errors",
+        "--geo-bypass",
+        "--socket-timeout", "15",
+        "--no-config",
+        "--print", "%(id)s====%(title)s====%(duration_string|0:00)s====%(artist,uploader,channel,creator,uploader_id|Unknown)s====%(playlist,playlist_title|YouTube Playlist)s",
+        "--",
+        u_trim,
+    ]);
+    if let Some(proxy_str) = get_proxy_url() {
+        cmd.args(["--proxy", &proxy_str]);
+    }
+    cmd.no_window();
 
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(45);
-        loop {
-            match child.try_wait() {
-                Ok(Some(_)) => break,
-                Ok(None) => {
-                    if std::time::Instant::now() > deadline {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                        return Err("Playlist import timed out — check the URL and your connection".to_string());
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(50));
-                }
-                Err(e) => return Err(e.to_string()),
-            }
-        }
-        let out = child.wait_with_output().map_err(|e| e.to_string())?;
-        let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-        if stdout.trim().is_empty() {
-            let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-            return Err(if stderr.trim().is_empty() { "No tracks found. Is this a public playlist?".to_string() } else { stderr });
-        }
-        Ok(stdout)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    let out = match tokio::time::timeout(std::time::Duration::from_secs(45), cmd.output()).await {
+        Ok(res) => res.map_err(|e| format!("yt-dlp failed: {}", e))?,
+        Err(_) => return Err("Playlist import timed out - check the URL and your connection".to_string()),
+    };
+
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    if stdout.trim().is_empty() {
+        let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+        return Err(if stderr.trim().is_empty() { "No tracks found. Is this a public playlist?".to_string() } else { stderr });
+    }
+    Ok(stdout)
 }
 
 #[tauri::command]
@@ -2035,6 +2012,13 @@ async fn play_audio(url: String) -> Result<(), String> {
     if url.starts_with("local://") {
         return play_local_file(url.trim_start_matches("local://").to_string()).await;
     }
+    if url.starts_with("file://") {
+        return play_local_file(url.trim_start_matches("file://").to_string()).await;
+    }
+    let u_clean = expand_tilde(&url);
+    if std::path::Path::new(&u_clean).is_file() {
+        return play_local_file(u_clean).await;
+    }
     let safe_url = sanitize_stream_url(&url)?;
 
     let my_id = PLAY_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
@@ -2451,6 +2435,22 @@ async fn download_song(
         }
 
         let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+        let stderr_buf = Arc::new(Mutex::new(String::new()));
+        let stderr_buf_clone = Arc::clone(&stderr_buf);
+        if let Some(err_stream) = stderr {
+            std::thread::spawn(move || {
+                let reader = BufReader::new(err_stream);
+                for line in reader.lines().flatten() {
+                    let mut b = stderr_buf_clone.lock().unwrap();
+                    if b.len() < 2048 {
+                        if !b.is_empty() { b.push('\n'); }
+                        b.push_str(&line);
+                    }
+                }
+            });
+        }
+
         let mut last_percent = 0.0;
 
         if let Some(out) = stdout {
@@ -2502,13 +2502,17 @@ async fn download_song(
             });
             Ok("Downloaded successfully".to_string())
         } else {
+            let err_detail = {
+                let b = stderr_buf.lock().unwrap();
+                if b.trim().is_empty() { "Download failed".to_string() } else { b.trim().to_string() }
+            };
             let _ = app_handle.emit("download_progress", &DownloadProgressPayload {
                 url: url_for_events.clone(),
                 percent: 0.0,
                 status: "error".to_string(),
-                error: Some("Download failed".to_string()),
+                error: Some(err_detail.clone()),
             });
-            Err("Download failed".to_string())
+            Err(err_detail)
         }
     })
     .await
@@ -2605,7 +2609,12 @@ async fn batch_download(
                     _        => "0",
                 };
                 let sep = std::path::MAIN_SEPARATOR;
-                let tpl = format!("{}{}%(title)s.%(ext)s", p, sep);
+                let tpl = if p.ends_with('/') || p.ends_with('\\') {
+                    format!("{}%(title)s.%(ext)s", p)
+                } else {
+                    format!("{}{}%(title)s.%(ext)s", p, sep)
+                };
+                let _ = std::fs::create_dir_all(std::path::Path::new(p.as_ref()));
                 let mut cmd = Command::new(bin_ytdlp());
                 cmd.args(["-f", format, "--extract-audio", "--audio-format", "mp3",
                            "--audio-quality", audio_quality, "--embed-thumbnail", "--add-metadata",
@@ -2846,7 +2855,7 @@ async fn get_audio_metadata(path: String) -> Result<AudioMetadata, String> {
             .args(["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", &path])
             .no_window()
             .output()
-            .map_err(|_| "ffprobe not found — install ffmpeg".to_string())?;
+            .map_err(|_| "ffprobe not found - install ffmpeg".to_string())?;
         let json: Value = serde_json::from_str(
             &String::from_utf8_lossy(&output.stdout)
         ).unwrap_or(Value::Null);
@@ -3038,29 +3047,39 @@ async fn get_waveform_thumbnail(path: String) -> Result<Vec<f32>, String> {
     .map_err(|e| e.to_string())?
 }
 
+fn collect_disk_usage(dir: &std::path::Path, extensions: &[&str], used_bytes: &mut u64, track_count: &mut usize) {
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_file() {
+                if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
+                    if extensions.contains(&ext.to_lowercase().as_str()) {
+                        *used_bytes += entry.metadata().map(|m| m.len()).unwrap_or(0);
+                        *track_count += 1;
+                    }
+                }
+            } else if p.is_dir() {
+                collect_disk_usage(&p, extensions, used_bytes, track_count);
+            }
+        }
+    }
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 struct DiskInfo { used_bytes: u64, track_count: usize }
 
 #[tauri::command]
 async fn get_disk_usage(path: String) -> Result<DiskInfo, String> {
     tokio::task::spawn_blocking(move || {
-        let resolved   = expand_tilde(&path);
+        let resolved = expand_tilde(&path);
         let extensions = ["mp3", "flac", "wav", "ogg", "m4a", "aac", "opus", "wma"];
-        let dir = std::fs::read_dir(&resolved)
-            .map_err(|e| format!("Cannot read directory: {}", e))?;
-        let mut used_bytes  = 0u64;
-        let mut track_count = 0usize;
-        for entry in dir.flatten() {
-            let p = entry.path();
-            if p.is_file() {
-                if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
-                    if extensions.contains(&ext.to_lowercase().as_str()) {
-                        used_bytes += entry.metadata().map(|m| m.len()).unwrap_or(0);
-                        track_count += 1;
-                    }
-                }
-            }
+        let target_path = std::path::Path::new(&resolved);
+        if !target_path.exists() {
+            return Err("Directory does not exist".to_string());
         }
+        let mut used_bytes = 0u64;
+        let mut track_count = 0usize;
+        collect_disk_usage(target_path, &extensions, &mut used_bytes, &mut track_count);
         Ok(DiskInfo { used_bytes, track_count })
     })
     .await
@@ -3074,6 +3093,10 @@ struct TrackExport { title: String, artist: String, url: String, duration_secs: 
 async fn export_playlist_m3u(tracks: Vec<TrackExport>, path: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
         let resolved = expand_tilde(&path);
+        let p = std::path::Path::new(&resolved);
+        if let Some(parent) = p.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
         let mut content = String::from("#EXTM3U\n");
         for t in &tracks {
             content.push_str(&format!("#EXTINF:{},{} - {}\n{}\n",
@@ -3089,11 +3112,29 @@ async fn export_playlist_m3u(tracks: Vec<TrackExport>, path: String) -> Result<(
 async fn import_playlist_m3u(path: String) -> Result<Vec<String>, String> {
     tokio::task::spawn_blocking(move || {
         let resolved = expand_tilde(&path);
+        let p = std::path::Path::new(&resolved);
+        let parent = p.parent().unwrap_or_else(|| std::path::Path::new("."));
         let content = std::fs::read_to_string(&resolved)
             .map_err(|e| format!("Read failed: {}", e))?;
         let urls: Vec<String> = content.lines()
             .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
-            .map(|l| l.trim().to_string())
+            .map(|l| {
+                let trimmed = l.trim();
+                if trimmed.starts_with("http://")
+                    || trimmed.starts_with("https://")
+                    || trimmed.starts_with("local://")
+                    || trimmed.starts_with("file://")
+                {
+                    trimmed.to_string()
+                } else {
+                    let candidate = std::path::Path::new(trimmed);
+                    if candidate.is_absolute() {
+                        trimmed.to_string()
+                    } else {
+                        parent.join(candidate).to_string_lossy().to_string()
+                    }
+                }
+            })
             .collect();
         Ok(urls)
     })
@@ -3529,9 +3570,17 @@ fn parse_lrc_string(lrc_text: &str, duration: f64) -> Option<String> {
                 let text = rest[end+1..].trim();
                 
                 let secs: f64 = if let Some(colon) = ts.find(':') {
-                    let mins: f64 = ts[..colon].parse().unwrap_or(0.0);
-                    let s: f64 = ts[colon+1..].parse().unwrap_or(0.0);
-                    mins * 60.0 + s
+                    let min_part = &ts[..colon];
+                    let sec_part = &ts[colon+1..];
+                    if !min_part.is_empty() && min_part.chars().all(|c| c.is_ascii_digit()) {
+                        if let (Ok(mins), Ok(s)) = (min_part.parse::<f64>(), sec_part.parse::<f64>()) {
+                            mins * 60.0 + s
+                        } else {
+                            continue;
+                        }
+                    } else {
+                        continue;
+                    }
                 } else { continue; };
                 if !text.is_empty() {
                     lines.push(serde_json::json!({"time": secs, "text": text}));
@@ -3543,12 +3592,16 @@ fn parse_lrc_string(lrc_text: &str, duration: f64) -> Option<String> {
         return Some(serde_json::to_string(&lines).unwrap_or_default());
     }
 
-    let plain_lines: Vec<&str> = lrc_text.lines().filter(|l| !l.trim().is_empty()).collect();
+    let plain_lines: Vec<&str> = lrc_text
+        .lines()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty() && !(l.starts_with('[') && l.ends_with(']')))
+        .collect();
     if !plain_lines.is_empty() {
         let total = duration.max(1.0);
         let step = total / plain_lines.len().max(1) as f64;
         let arr: Vec<serde_json::Value> = plain_lines.iter().enumerate()
-            .map(|(i, l)| serde_json::json!({"time": i as f64 * step, "text": l.trim()}))
+            .map(|(i, l)| serde_json::json!({"time": i as f64 * step, "text": *l}))
             .collect();
         return Some(serde_json::to_string(&arr).unwrap_or_default());
     }
@@ -3648,74 +3701,55 @@ async fn fetch_lyrics(title: String, artist: String, duration: f64, _album: Opti
 
 #[tauri::command]
 async fn search_yt_music(query: String, search_type: String) -> Result<String, String> {
-    tokio::task::spawn_blocking(move || {
-        
-        let full_query = match search_type.as_str() {
-            "artist" => format!("{} artist", query),
-            "album"  => format!("{} full album", query),
-            _        => query.clone(),
+    let full_query = match search_type.as_str() {
+        "artist" => format!("{} artist", query),
+        "album"  => format!("{} full album", query),
+        _        => query.clone(),
+    };
+    let search_arg = format!("ytsearch15:{}", full_query);
+    let mut cmd = tokio::process::Command::new(bin_ytdlp());
+    cmd.args([
+        &search_arg,
+        "--flat-playlist",
+        "--print", "%(title)s====%(uploader)s====%(id)s====%(thumbnails.0.url)s====%(view_count)s",
+        "--no-warnings",
+        "--no-check-certificates",
+        "--socket-timeout", "8",
+    ]);
+    if let Some(proxy_str) = get_proxy_url() {
+        cmd.args(["--proxy", &proxy_str]);
+    }
+    cmd.no_window();
+
+    let out = match tokio::time::timeout(std::time::Duration::from_secs(12), cmd.output()).await {
+        Ok(res) => res.map_err(|e| format!("yt-dlp failed: {}", e))?,
+        Err(_) => return Err("Search timed out".to_string()),
+    };
+
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    if stdout.trim().is_empty() { return Err("No results".to_string()); }
+
+    let items: Vec<serde_json::Value> = stdout.trim().lines().take(10).filter_map(|line| {
+        let parts: Vec<&str> = line.splitn(5, "====").collect();
+        if parts.len() < 3 { return None; }
+        let title     = parts[0].trim();
+        let uploader  = parts[1].trim();
+        let id        = parts[2].trim();
+        let thumb     = if parts.len() > 3 { parts[3].trim() } else {
+            &format!("https://i.ytimg.com/vi/{}/mqdefault.jpg", id)
         };
-        let search_arg = format!("ytsearch15:{}", full_query);
-        let mut cmd = Command::new(bin_ytdlp());
-        cmd.args([
-            &search_arg,
-            "--flat-playlist",
-            "--print", "%(title)s====%(uploader)s====%(id)s====%(thumbnails.0.url)s====%(view_count)s",
-            "--no-warnings",
-            "--no-check-certificates",
-            "--socket-timeout", "8",
-        ]);
-        apply_proxy_to_cmd(&mut cmd);
-        let mut child = cmd
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .no_window()
-            .spawn()
-            .map_err(|e| format!("yt-dlp not found: {}", e))?;
+        let thumb = if thumb.starts_with("http") { thumb.to_string() }
+                    else { format!("https://i.ytimg.com/vi/{}/mqdefault.jpg", id) };
+        Some(serde_json::json!({
+            "title": title,
+            "uploader": uploader,
+            "id": id,
+            "thumbnail": thumb,
+            "url": format!("https://youtube.com/watch?v={}", id),
+        }))
+    }).collect();
 
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(12);
-        loop {
-            match child.try_wait() {
-                Ok(Some(_)) => break,
-                Ok(None) => {
-                    if std::time::Instant::now() > deadline {
-                        let _ = child.kill(); let _ = child.wait();
-                        return Err("Search timed out".to_string());
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(25));
-                }
-                Err(e) => return Err(e.to_string()),
-            }
-        }
-        let out = child.wait_with_output().map_err(|e| e.to_string())?;
-        let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-        if stdout.trim().is_empty() { return Err("No results".to_string()); }
-
-        let items: Vec<serde_json::Value> = stdout.trim().lines().take(10).filter_map(|line| {
-            let parts: Vec<&str> = line.splitn(5, "====").collect();
-            if parts.len() < 3 { return None; }
-            let title     = parts[0].trim();
-            let uploader  = parts[1].trim();
-            let id        = parts[2].trim();
-            let thumb     = if parts.len() > 3 { parts[3].trim() } else {
-                
-                &format!("https://i.ytimg.com/vi/{}/mqdefault.jpg", id)
-            };
-            let thumb = if thumb.starts_with("http") { thumb.to_string() }
-                        else { format!("https://i.ytimg.com/vi/{}/mqdefault.jpg", id) };
-            Some(serde_json::json!({
-                "title": title,
-                "uploader": uploader,
-                "id": id,
-                "thumbnail": thumb,
-                "url": format!("https://youtube.com/watch?v={}", id),
-            }))
-        }).collect();
-
-        Ok(serde_json::to_string(&items).unwrap_or_default())
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    Ok(serde_json::to_string(&items).unwrap_or_default())
 }
 
 #[tauri::command]
@@ -4885,6 +4919,8 @@ fn main() {
                     }
                     #[cfg(unix)]
                     { let _ = std::fs::remove_file(socket_path()); }
+                    #[cfg(target_os = "windows")]
+                    windows_smtc::shutdown_windows_smtc();
                 }
                 _ => {}
             }
@@ -4915,6 +4951,49 @@ mod tests {
         let csv = "Track Name,Artist Name,Album\n\"Rock, Paper, Scissors\",The Band,\"Greatest, Hits\"\n";
         let res = import_csv_playlist(csv.to_string()).await.unwrap();
         assert!(res.contains("Rock, Paper, Scissors====The Band"));
+    }
+
+    #[test]
+    fn test_parse_lrc_with_metadata_tags() {
+        let lrc = r#"
+[ar:Radiohead]
+[al:Pablo Honey]
+[ti:Creep]
+[00:10.50]When you were here before
+[00:15.20]Couldn't look you in the eye
+"#;
+        let res = parse_lrc_string(lrc, 120.0).expect("should parse lrc");
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&res).unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0]["text"], "When you were here before");
+        assert_eq!(parsed[0]["time"], 10.5);
+        assert_eq!(parsed[1]["text"], "Couldn't look you in the eye");
+        assert_eq!(parsed[1]["time"], 15.2);
+    }
+
+    #[test]
+    fn test_parse_lrc_plain_text_ignoring_tags() {
+        let lrc = r#"
+[ar:Radiohead]
+[ti:Creep]
+When you were here before
+Couldn't look you in the eye
+"#;
+        let res = parse_lrc_string(lrc, 10.0).expect("should parse plain text");
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&res).unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0]["text"], "When you were here before");
+        assert_eq!(parsed[1]["text"], "Couldn't look you in the eye");
+    }
+
+    #[test]
+    fn test_sanitize_file_path_valid() {
+        #[cfg(unix)]
+        {
+            let res = sanitize_file_path("/tmp/test.mp3");
+            assert!(res.is_ok());
+            assert_eq!(res.unwrap(), std::path::PathBuf::from("/tmp/test.mp3"));
+        }
     }
 }
 

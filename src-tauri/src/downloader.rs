@@ -168,26 +168,58 @@ pub async fn download_audio_stream_chunked(
                 err_msg
             })?;
 
-        let mut file = File::create(&target_path).map_err(|e| format!("Failed to create file: {}", e))?;
+        let mut file = match File::create(&target_path) {
+            Ok(f) => f,
+            Err(e) => {
+                let err_msg = format!("Failed to create file: {}", e);
+                let _ = app.emit(
+                    "download_progress",
+                    &DownloadProgressPayload {
+                        url: track_url.clone(),
+                        percent: 0.0,
+                        status: "Error".to_string(),
+                        error: Some(err_msg.clone()),
+                    },
+                );
+                return Err(err_msg);
+            }
+        };
         let mut dl_bytes = 0u64;
 
-        while let Some(chunk) = res.chunk().await.map_err(|e| e.to_string())? {
-            file.write_all(&chunk).map_err(|e| e.to_string())?;
-            dl_bytes += chunk.len() as u64;
-            let pct = if let Some(tot) = total_size {
-                5.0 + ((dl_bytes as f64 / tot as f64) * 85.0).clamp(0.0, 85.0)
-            } else {
-                50.0
-            };
+        let stream_result: Result<(), String> = async {
+            while let Some(chunk) = res.chunk().await.map_err(|e| format!("Stream read error: {}", e))? {
+                file.write_all(&chunk).map_err(|e| format!("File write error: {}", e))?;
+                dl_bytes += chunk.len() as u64;
+                let pct = if let Some(tot) = total_size {
+                    5.0 + ((dl_bytes as f64 / tot as f64) * 85.0).clamp(0.0, 85.0)
+                } else {
+                    50.0
+                };
+                let _ = app.emit(
+                    "download_progress",
+                    &DownloadProgressPayload {
+                        url: track_url.clone(),
+                        percent: pct,
+                        status: format!("Downloading ({:.0}%)", pct),
+                        error: None,
+                    },
+                );
+            }
+            Ok(())
+        }.await;
+
+        if let Err(e) = stream_result {
+            let _ = std::fs::remove_file(&target_path);
             let _ = app.emit(
                 "download_progress",
                 &DownloadProgressPayload {
                     url: track_url.clone(),
-                    percent: pct,
-                    status: format!("Downloading ({:.0}%)", pct),
-                    error: None,
+                    percent: 0.0,
+                    status: "Error".to_string(),
+                    error: Some(e.clone()),
                 },
             );
+            return Err(e);
         }
     }
 

@@ -244,9 +244,11 @@ pub fn embed_cover_and_lyrics(
     if let Some(img) = image_bytes {
         if !img.is_empty() {
             tag.remove_picture_type(PictureType::CoverFront);
+            let mime_str = detect_image_mime(img);
+            let mime = MimeType::from_str(mime_str);
             let picture = Picture::new_unchecked(
                 PictureType::CoverFront,
-                Some(MimeType::Jpeg),
+                Some(mime),
                 None,
                 img.to_vec(),
             );

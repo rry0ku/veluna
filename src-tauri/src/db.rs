@@ -230,18 +230,17 @@ pub fn save_playlist(p: DbPlaylist) -> Result<(), String> {
 pub fn get_all_playlists() -> Result<Vec<DbPlaylist>, String> {
     with_db(|conn| {
         let mut stmt = conn.prepare("SELECT id, name, description, custom_cover FROM playlists ORDER BY updated_at DESC")?;
-        let playlist_rows = stmt.query_map([], |row| {
+        let playlist_rows: Vec<(String, String, String, Option<String>)> = stmt.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
                 row.get::<_, Option<String>>(3)?,
             ))
-        })?;
+        })?.collect::<Result<Vec<_>, _>>()?;
 
         let mut playlists = Vec::new();
-        for item in playlist_rows {
-            let (id, name, description, custom_cover) = item?;
+        for (id, name, description, custom_cover) in playlist_rows {
             let mut track_stmt = conn.prepare(
                 "SELECT track_id, title, artist, duration, url, cover, media_type
                  FROM playlist_tracks WHERE playlist_id = ?1 ORDER BY position ASC"
@@ -271,7 +270,7 @@ pub fn get_all_playlists() -> Result<Vec<DbPlaylist>, String> {
 }
 
 pub fn delete_playlist(id: &str) -> Result<(), String> {
-    with_db(|conn| {
+    with_db_mut(|conn| {
         conn.execute("DELETE FROM playlists WHERE id = ?1", params![id])?;
         Ok(())
     })
@@ -371,7 +370,7 @@ pub fn get_cached_lyrics(title: &str, artist: &str) -> Result<Option<String>, St
 
 pub fn cache_lyrics(title: &str, artist: &str, lrc_json: &str) -> Result<(), String> {
     let key = make_lyrics_key(title, artist);
-    with_db(|conn| {
+    with_db_mut(|conn| {
         conn.execute(
             "INSERT INTO lyrics_cache (cache_key, title, artist, lrc_json, cached_at)
              VALUES (?1, ?2, ?3, ?4, strftime('%s', 'now'))
@@ -418,12 +417,14 @@ pub fn search_library_fts(query: &str) -> Result<Vec<DbSearchResult>, String> {
 }
 
 pub fn index_local_track_fts(title: &str, artist: &str, album: &str, path: &str) -> Result<(), String> {
-    with_db(|conn| {
-        conn.execute("DELETE FROM library_fts WHERE path = ?1", params![path])?;
-        conn.execute(
+    with_db_mut(|conn| {
+        let tx = conn.transaction()?;
+        tx.execute("DELETE FROM library_fts WHERE path = ?1", params![path])?;
+        tx.execute(
             "INSERT INTO library_fts (title, artist, album, path) VALUES (?1, ?2, ?3, ?4)",
             params![title, artist, album, path],
         )?;
+        tx.commit()?;
         Ok(())
     })
 }

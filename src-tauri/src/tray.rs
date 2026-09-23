@@ -103,7 +103,7 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
         Ok(Ok(_))  => Ok(()),
         Ok(Err(e)) => Err(format!("Tray build failed: {e}")),
         Err(_)     => Err(
-            "Tray init panicked — on Linux install: libayatana-appindicator3-1".into()
+            "Tray init panicked - on Linux install: libayatana-appindicator3-1".into()
         ),
     }
 }
