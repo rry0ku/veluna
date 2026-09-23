@@ -173,7 +173,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = React.memo(({
       )}
       {isPlaying&&!isLoadingTrack&&<div style={{position:"absolute",top:0,left:0,right:0,height:"1px",background:"rgba(226,221,217,0.06)"}}/>}
 
-      <div style={{display:"flex",alignItems:"center",gap:"12px",minWidth:0,maxWidth:"35%",flexShrink:0}}>
+      <div className="v-player-left" style={{display:"flex",alignItems:"center",gap:"12px",minWidth:0,maxWidth:"35%",flexShrink:0}}>
         {currentTrack ? (
           <>
             <div style={{
@@ -389,7 +389,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = React.memo(({
         )}
       </div>
 
-      <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"10px",padding:"0 16px",minWidth:0}}>
+      <div className="v-player-center" style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"10px",padding:"0 16px",minWidth:0}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"center",width:"100%"}}>
           <div style={{display:"flex",alignItems:"center",gap:"14px",flexShrink:0}}>
             <SpeedSelector speed={playbackSpeed} onChange={setPlaybackSpeed}/>
@@ -654,7 +654,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = React.memo(({
         })()}
       </div>
 
-      <div style={{width:"240px",maxWidth:"30%",minWidth:"140px",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:"12px",flexShrink:1}}>
+      <div className="v-player-right" style={{width:"240px",maxWidth:"30%",minWidth:"140px",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:"12px",flexShrink:1}}>
         {crossfadeSeconds>0&&(
           <span style={{fontSize:"9.5px",color:"#5c5755",fontWeight:700,fontVariantNumeric:"tabular-nums",flexShrink:0}} title={`Crossfade: ${crossfadeSeconds}s`}>
             ×{crossfadeSeconds}s

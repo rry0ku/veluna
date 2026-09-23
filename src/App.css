@@ -18,6 +18,7 @@
   --v-bdr3: rgba(255, 255, 255, 0.12);
   --v-accent: #e2ddd9;
   --v-accent-rgb: 226, 221, 217;
+  --v-sidebar-width: 180px;
 }
 
 [data-theme="obsidian"] {
@@ -814,6 +815,13 @@ kbd {
 .v-section-head__action { font-size: 11.5px; color: var(--v-fg2); cursor: pointer; background: none; border: none; padding: 0; transition: color .15s; }
 .v-section-head__action:hover { color: #fff; }
 
+.v-sidebar {
+  width: var(--v-sidebar-width, 180px);
+  padding: 16px 10px 96px 10px;
+  box-sizing: border-box;
+  transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), padding 0.2s ease;
+}
+
 .v-nav-btn {
   display: flex;
   align-items: center;
@@ -1468,6 +1476,95 @@ kbd {
   max-width: 1000px;
   margin: 24px auto 0;
   width: 100%;
+}
+
+@media (max-width: 900px) {
+  :root {
+    --v-sidebar-width: 64px;
+  }
+
+  .v-sidebar {
+    width: 64px !important;
+    padding: 16px 6px 96px 6px !important;
+  }
+
+  .v-nav-btn {
+    justify-content: center;
+    padding: 10px 0;
+    gap: 0;
+  }
+
+  .v-nav-btn .v-nav-label {
+    display: none !important;
+  }
+
+  .v-nav-btn .v-nav-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .v-nav-btn .queue-badge-pulse {
+    position: absolute;
+    top: 5px;
+    right: 8px;
+    margin-left: 0 !important;
+    min-width: 15px;
+    height: 15px;
+    font-size: 9px;
+    padding: 0 3px;
+    line-height: 15px;
+  }
+
+  .v-sidebar-eco {
+    padding: 6px 0 !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    justify-content: center !important;
+  }
+
+  .v-sidebar-eco-label {
+    display: none !important;
+  }
+
+  .v-sidebar-playlists-header {
+    justify-content: center !important;
+    padding: 2px 0 10px !important;
+  }
+
+  .v-sidebar-playlists-label {
+    display: none !important;
+  }
+
+  .v-sidebar-playlists-actions {
+    display: none !important;
+  }
+
+  .v-sidebar-pl-info {
+    display: none !important;
+  }
+
+  .v-pl-item {
+    justify-content: center !important;
+    padding: 6px 0 !important;
+    gap: 0 !important;
+  }
+
+  .v-pl-item__art {
+    margin: 0 auto !important;
+  }
+
+  .v-player-dock {
+    padding: 0 14px !important;
+  }
+
+  .v-player-center {
+    padding: 0 8px !important;
+  }
+
+  .v-player-right {
+    gap: 8px !important;
+  }
 }
 
 .v-perf-mode *,

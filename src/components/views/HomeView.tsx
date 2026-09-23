@@ -16,7 +16,8 @@ import {
   SlidersHorizontal,
   Mic2,
   HardDrive,
-  BarChart2
+  BarChart2,
+  WifiOff
 } from 'lucide-react';
 import { Track, Playlist, LocalTrack, CtxMenu, SettingsTab, FollowedArtist } from '../../types';
 import { GENRES, matchGenreTrack } from '../../constants';
@@ -57,6 +58,8 @@ interface HomeViewProps {
   setActiveNav: (nav: any) => void;
   setSettingsTab?: (tab: SettingsTab) => void;
   isHydrated?: boolean;
+  isOnline?: boolean;
+  onNavigateOffline?: () => void;
   localTracks?: LocalTrack[];
   playHistory: Track[];
   playlists?: Playlist[];
@@ -451,6 +454,8 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
   setActiveNav,
   setSettingsTab,
   isHydrated = true,
+  isOnline = true,
+  onNavigateOffline,
   localTracks = [],
   playHistory,
   playlists = [],
@@ -474,7 +479,7 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
   removeSearchHistoryItem: _removeSearchHistoryItem,
   getTrackCover: customGetTrackCover,
   setOpenPlaylistId,
-  showToast: _showToast,
+  showToast,
   addToQueue,
   recommendedTracks = [],
   onRefreshRecommendations,
@@ -530,6 +535,7 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
       id: -(i + 1),
       title: lt.title,
       artist: lt.artist || '',
+      album: lt.album || '',
       url: `local://${lt.path}`,
       cover: lt.cover || '',
       duration: lt.duration || '',
@@ -644,14 +650,67 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
     }
   };
 
+  const handleSearchSubmit = () => {
+    if (!isOnline) {
+      showToast?.('Cannot search while offline. Check your internet connection.');
+      return;
+    }
+    if (!isSearching && searchQuery.trim()) {
+      setShowHistory(false);
+      searchMusic();
+    }
+  };
+
   return (
     <>
-      <div style={{padding:"16px 24px 10px",position:"relative",zIndex:30,flexShrink:0,display:"flex",justifyContent:"center"}}>
+      <div style={{padding:"16px 24px 10px",position:"relative",zIndex:30,flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center"}}>
+        {!isOnline && (
+          <div style={{
+            width: "100%",
+            maxWidth: "760px",
+            marginBottom: "12px",
+            padding: "10px 16px",
+            borderRadius: "12px",
+            background: "rgba(224, 85, 85, 0.08)",
+            border: "1px solid rgba(224, 85, 85, 0.22)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "12px",
+            color: "#ff8a8a",
+            fontSize: "12.5px",
+            boxSizing: "border-box"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <WifiOff size={15} style={{ color: "#ff6b6b", flexShrink: 0 }} />
+              <span>You are offline. Streaming and search are unavailable, but your saved downloads are ready to play.</span>
+            </div>
+            <button
+              onClick={() => onNavigateOffline ? onNavigateOffline() : setActiveNav('downloads')}
+              style={{
+                background: "rgba(255, 255, 255, 0.08)",
+                border: "1px solid rgba(255, 255, 255, 0.14)",
+                color: "#ffffff",
+                borderRadius: "20px",
+                padding: "4px 12px",
+                fontSize: "11px",
+                fontWeight: 600,
+                cursor: "pointer",
+                flexShrink: 0,
+                transition: "background 0.12s"
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = "rgba(255, 255, 255, 0.16)"}
+              onMouseLeave={e => e.currentTarget.style.background = "rgba(255, 255, 255, 0.08)"}
+            >
+              Go to Offline
+            </button>
+          </div>
+        )}
         <div className="v-home-search-container" onClick={e=>e.stopPropagation()}>
           <div style={{position:"relative",flex:1}}>
             <button
               type="button"
-              onClick={() => { if (!isSearching && searchQuery.trim()) { setShowHistory(false); searchMusic(); } }}
+              onClick={handleSearchSubmit}
               disabled={isSearching || !searchQuery.trim()}
               style={{
                 position: "absolute",
@@ -677,14 +736,13 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                 : <Search size={16} /> }
             </button>
             <input ref={searchRef} type="text"
-              placeholder="Search YouTube..."
+              placeholder={isOnline ? "Search YouTube..." : "Offline: connect to internet to search..."}
               value={searchQuery} readOnly={isSearching}
               onChange={e => setSearchQuery(e.target.value)}
               onFocus={() => !isSearching && setShowHistory(searchHistory.length > 0)}
               onKeyDown={e => {
                 if (e.key === 'Enter') {
-                  setShowHistory(false);
-                  searchMusic();
+                  handleSearchSubmit();
                 }
                 if (e.key === 'Escape') {
                   setShowHistory(false);
@@ -2474,14 +2532,14 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                           const selected = activeTracks.filter(t => selectedUrls.has(t.url));
                           if (selected.length > 0 && addToQueue) {
                             addToQueue(selected);
-                            _showToast?.(`Added ${selected.length} track${selected.length > 1 ? 's' : ''} to queue`);
+                            showToast?.(`Added ${selected.length} track${selected.length > 1 ? 's' : ''} to queue`);
                           }
                           clearSelection();
                         }}
                         onAddToPlaylist={(playlistId) => {
                           const selected = activeTracks.filter(t => selectedUrls.has(t.url) && !t.url.startsWith('local://'));
                           if (selected.length === 0) {
-                            _showToast?.('Offline tracks cannot be added to playlists');
+                            showToast?.('Offline tracks cannot be added to playlists');
                             clearSelection();
                             return;
                           }
@@ -2492,14 +2550,14 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                               const newTracks = selected.filter(t => !existingUrls.has(t.url));
                               return { ...p, tracks: [...p.tracks, ...newTracks] };
                             }));
-                            _showToast?.(`Added ${selected.length} tracks to playlist`);
+                            showToast?.(`Added ${selected.length} tracks to playlist`);
                           }
                           clearSelection();
                         }}
                         onCreatePlaylistWithSelected={(name) => {
                           const selected = activeTracks.filter(t => selectedUrls.has(t.url) && !t.url.startsWith('local://'));
                           if (selected.length === 0) {
-                            _showToast?.('Offline tracks cannot be added to playlists');
+                            showToast?.('Offline tracks cannot be added to playlists');
                             clearSelection();
                             return;
                           }
@@ -2511,14 +2569,14 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                               tracks: selected,
                             };
                             _setPlaylists(prev => [...prev, newPl]);
-                            _showToast?.(`Created playlist "${name}" with ${selected.length} tracks`);
+                            showToast?.(`Created playlist "${name}" with ${selected.length} tracks`);
                           }
                           clearSelection();
                         }}
                         onDownloadSelected={() => {
                           const selected = activeTracks.filter(t => selectedUrls.has(t.url));
                           selected.forEach(t => handleDownload(t));
-                          _showToast?.(`Queued ${selected.length} downloads`);
+                          showToast?.(`Queued ${selected.length} downloads`);
                           clearSelection();
                         }}
                       />

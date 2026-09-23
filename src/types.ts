@@ -15,6 +15,7 @@ export type LocalTrack = {
   size_bytes: number;
   extension: string;
   artist?: string;
+  album?: string;
   duration?: string;
   has_cover?: boolean;
   cover?: string;

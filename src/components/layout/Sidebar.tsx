@@ -79,9 +79,10 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   }, [isPlaylistMenuOpen]);
 
   return (
-    <div style={{width:"180px", flexShrink:0, display:"flex", flexDirection:"column", background:"var(--v-bg0)", borderRight:"none", padding:"16px 10px 96px 10px", zIndex:50, overflow:"visible", position:"relative"}}>
+    <div className="v-sidebar" style={{flexShrink:0, display:"flex", flexDirection:"column", background:"var(--v-bg0)", borderRight:"none", zIndex:50, overflow:"visible", position:"relative"}}>
       {performanceMode && (
         <div
+          className="v-sidebar-eco"
           onClick={() => { navigateTo('settings'); setSettingsTab?.('appearance'); }}
           title="Low-Spec Mode active: Click to view in Settings"
           style={{
@@ -105,66 +106,66 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
           }}
         >
           <Zap size={12} style={{ fill: "currentColor" }} />
-          <span>Eco Mode</span>
+          <span className="v-sidebar-eco-label">Eco Mode</span>
         </div>
       )}
 
       {/* Nav items */}
       <nav style={{display:"flex",flexDirection:"column",gap:"2px",flexShrink:0,padding:"0 2px"}}>
-        <button onClick={() => navigateTo('home')}
+        <button onClick={() => navigateTo('home')} title="Home"
           className={`v-nav-btn${activeNav==='home'?' v-nav-btn--active':''}`}>
           <span className="v-nav-icon"><Home size={18} style={activeNav==='home'?{color:'#c8c4c0'}:{color:'#4a4644'}} /></span>
-          <span>Home</span>
+          <span className="v-nav-label">Home</span>
         </button>
 
-        <button onClick={() => navigateTo('artists')}
+        <button onClick={() => navigateTo('artists')} title="Artists"
           className={`v-nav-btn${activeNav==='artists'||activeNav==='artist'?' v-nav-btn--active':''}`}>
           <span className="v-nav-icon"><Mic2 size={18} style={(activeNav==='artists'||activeNav==='artist')?{color:'#c8c4c0'}:{color:'#4a4644'}} /></span>
-          <span>Artists</span>
+          <span className="v-nav-label">Artists</span>
         </button>
 
-        <button onClick={() => navigateTo('downloads')}
+        <button onClick={() => navigateTo('downloads')} title="Offline"
           className={`v-nav-btn${activeNav==='downloads'?' v-nav-btn--active':''}`}>
           <span className="v-nav-icon"><HardDrive size={18} style={activeNav==='downloads'?{color:'#c8c4c0'}:{color:'#4a4644'}} /></span>
-          <span>Offline</span>
+          <span className="v-nav-label">Offline</span>
         </button>
-        <button onClick={() => navigateTo('stats')}
+        <button onClick={() => navigateTo('stats')} title="Stats"
           className={`v-nav-btn${activeNav==='stats'?' v-nav-btn--active':''}`}>
           <span className="v-nav-icon"><BarChart2 size={18} style={activeNav==='stats'?{color:'#c8c4c0'}:{color:'#4a4644'}} /></span>
-          <span>Stats</span>
+          <span className="v-nav-label">Stats</span>
         </button>
 
-        <button onClick={() => navigateTo('history')}
+        <button onClick={() => navigateTo('history')} title="History"
           className={`v-nav-btn${activeNav==='history'?' v-nav-btn--active':''}`}>
           <span className="v-nav-icon"><History size={18} style={activeNav==='history'?{color:'#c8c4c0'}:{color:'#4a4644'}} /></span>
-          <span>History</span>
+          <span className="v-nav-label">History</span>
         </button>
 
-        <button onClick={() => { navigateTo('settings'); setSettingsTab?.('playback'); }}
+        <button onClick={() => { navigateTo('settings'); setSettingsTab?.('playback'); }} title="Settings"
           className={`v-nav-btn${activeNav==='settings'?' v-nav-btn--active':''}`}>
           <span className="v-nav-icon"><Settings size={18} style={activeNav==='settings'?{color:'#c8c4c0'}:{color:'#4a4644'}} /></span>
-          <span>Settings</span>
+          <span className="v-nav-label">Settings</span>
         </button>
 
-        <button onClick={() => setIsQueueOpen(o => !o)}
+        <button onClick={() => setIsQueueOpen(o => !o)} title="Play Queue"
           className={`v-nav-btn${isQueueOpen?' v-nav-btn--active':''}`}>
           <span className="v-nav-icon"><ListOrdered size={18} style={isQueueOpen?{color:'#c8c4c0'}:{color:'#4a4644'}} /></span>
-          <span style={{flex:1}}>Queue</span>
+          <span className="v-nav-label" style={{flex:1}}>Queue</span>
           {queueLength > 0 && <span key={queuePulseKey} className="queue-badge-pulse v-badge" style={{marginLeft:"auto"}}>{queueLength}</span>}
         </button>
       </nav>
 
         {/* Playlists section */}
         <div style={{marginTop:"6px",display:"flex",flexDirection:"column",flex:"1 1 0%",minHeight:0}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"2px 4px 10px",flexShrink:0}}>
-            <button onClick={() => { navigateTo('playlists'); setOpenPlaylistId(null); }}
+          <div className="v-sidebar-playlists-header" style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"2px 4px 10px",flexShrink:0}}>
+            <button onClick={() => { navigateTo('playlists'); setOpenPlaylistId(null); }} title="Playlists"
               style={{display:'flex',alignItems:'center',gap:'8px',padding:'4px 6px',borderRadius:'6px',border:'none',background:'transparent',cursor:'pointer',textAlign:'left',color:(activeNav==='playlists'||activeNav==='library')?'var(--v-fg)':'var(--v-fg3)',fontSize:'10px',fontWeight:700,letterSpacing:'0.12em',textTransform:'uppercase',transition:'color .15s ease'}}
               onMouseEnter={e=>{if(activeNav!=='playlists'&&activeNav!=='library')e.currentTarget.style.color='var(--v-fg2)';}}
               onMouseLeave={e=>{if(activeNav!=='playlists'&&activeNav!=='library')e.currentTarget.style.color='var(--v-fg3)';}}>
               <ListMusic size={15} style={{color:(activeNav==='playlists'||activeNav==='library')?'var(--v-accent)':'var(--v-fg3)'}}/>
-              <span style={{fontWeight:700,letterSpacing:'0.08em'}}>Playlists</span>
+              <span className="v-sidebar-playlists-label" style={{fontWeight:700,letterSpacing:'0.08em'}}>Playlists</span>
             </button>
-            <div ref={playlistMenuRef} style={{display:'flex',alignItems:'center',gap:'2px',position:'relative'}}>
+            <div className="v-sidebar-playlists-actions" ref={playlistMenuRef} style={{display:'flex',alignItems:'center',gap:'2px',position:'relative'}}>
               <button onClick={e => { e.stopPropagation(); setSidebarPlaylistsExpanded(o => !o); }}
                 style={{padding:"5px",border:"none",background:"transparent",cursor:"pointer",color:"var(--v-fg3)",borderRadius:"6px",display:"flex",alignItems:"center",justifyContent:"center",transition:'color .15s ease,background .15s ease'}}
                 title={sidebarPlaylistsExpanded ? "Collapse playlists" : "Expand playlists"}
@@ -229,13 +230,14 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
                     <button key={pl.id}
                       onClick={() => { setOpenPlaylistId(pl.id); navigateTo('playlists'); }}
                       onContextMenu={e => openCtx(e, { type: 'sidebar-playlist', playlist: pl })}
+                      title={pl.name}
                       className={`v-pl-item${isOpen?' v-pl-item--active':''}`}>
                       <div className="v-pl-item__art" style={isLiked ? { background: 'linear-gradient(135deg, rgba(224, 85, 85, 0.25) 0%, rgba(140, 30, 80, 0.15) 100%)', borderColor: 'rgba(224, 85, 85, 0.2)' } : undefined}>
                         {cover ? <img src={cover} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>
                           : isLiked ? <Heart size={14} style={{color:'#e05555',fill:'rgba(224,85,85,0.3)'}}/>
                           : <ListMusic size={14} style={{color:isOpen?'var(--v-accent)':'#8a807c'}} />}
                       </div>
-                      <div style={{display:'flex',flexDirection:'column',gap:'1px',flex:1,minWidth:0}}>
+                      <div className="v-sidebar-pl-info" style={{display:'flex',flexDirection:'column',gap:'1px',flex:1,minWidth:0}}>
                         <span style={{fontSize:'12.5px',fontWeight:isOpen?700:500,color:isOpen?'#ffffff':isLiked?'#e2ddd9':'#a8a29e',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',transition:'color .15s ease'}}>{pl.name}</span>
                         <span style={{fontSize:'10px',color:isOpen?'rgba(255,255,255,0.6)':'#5c5755'}}>{pl.tracks.length} {pl.tracks.length === 1 ? 'song' : 'songs'}</span>
                       </div>

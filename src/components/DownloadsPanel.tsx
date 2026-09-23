@@ -108,6 +108,7 @@ export const DownloadsPanel = React.memo(function DownloadsPanel({
     id: 0,
     title: t.title,
     artist: t.artist || '',
+    album: t.album || '',
     url: `local://${t.path}`,
     cover: t.cover || '',
     duration: t.duration || '0:00',

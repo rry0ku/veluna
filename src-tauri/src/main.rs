@@ -73,12 +73,16 @@ fn socket_path() -> &'static str {
 struct MprisMetadata {
     title: String,
     artist: String,
+    album: String,
+    url: String,
     cover_url: String,
     duration_us: i64,
     playing: bool,
+    track_seq: u64,
 }
 
 static MPRIS_META: std::sync::OnceLock<Mutex<MprisMetadata>> = std::sync::OnceLock::new();
+static MPRIS_TRACK_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 fn mpris_meta() -> &'static Mutex<MprisMetadata> {
     MPRIS_META.get_or_init(|| Mutex::new(MprisMetadata::default()))
@@ -3387,8 +3391,18 @@ fn start_mpv_event_listener(app_handle: tauri::AppHandle) {
                                             }
                                             "duration" => {
                                                 if let Some(dur) = v["data"].as_f64() {
-                                                    state.duration = safe_f64(dur);
+                                                    let d = safe_f64(dur);
+                                                    state.duration = d;
                                                     changed = true;
+                                                    if d > 0.0 {
+                                                        let mut meta = mpris_meta().lock().unwrap();
+                                                        let dur_us = (d * 1_000_000.0) as i64;
+                                                        if meta.duration_us != dur_us {
+                                                            meta.duration_us = dur_us;
+                                                            drop(meta);
+                                                            mpris_notify();
+                                                        }
+                                                    }
                                                 }
                                             }
                                             "eof-reached" => {
@@ -3692,24 +3706,225 @@ async fn check_for_update() -> Result<Option<String>, String> {
     }
 }
 
+fn get_mpris_cover_cache_dir() -> std::path::PathBuf {
+    if let Ok(xdg) = std::env::var("XDG_CACHE_HOME") {
+        if !xdg.is_empty() {
+            return std::path::PathBuf::from(xdg).join("veluna").join("mpris_covers");
+        }
+    }
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .unwrap_or_else(|_| ".".to_string());
+    std::path::PathBuf::from(home).join(".cache").join("veluna").join("mpris_covers")
+}
+
+fn resolve_mpris_cover(cover_input: &str, track_url: Option<&str>) -> String {
+    use base64::Engine;
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+
+    let trimmed = cover_input.trim();
+
+    // 1. If it's already an http(s) URL or file:// URI, it's valid for MPRIS clients
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") || trimmed.starts_with("file://") {
+        return trimmed.to_string();
+    }
+
+    let cache_dir = get_mpris_cover_cache_dir();
+
+    // 2. If it's a data URI (e.g. data:image/jpeg;base64,... or data:image/png;base64,...)
+    if trimmed.starts_with("data:image/") {
+        if let Some(comma_pos) = trimmed.find(',') {
+            let meta_part = &trimmed[..comma_pos];
+            let b64 = &trimmed[comma_pos + 1..];
+            let ext = if meta_part.contains("png") {
+                "png"
+            } else if meta_part.contains("webp") {
+                "webp"
+            } else {
+                "jpg"
+            };
+            if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(b64.trim()) {
+                if !bytes.is_empty() {
+                    let _ = std::fs::create_dir_all(&cache_dir);
+                    let mut hasher = DefaultHasher::new();
+                    bytes.hash(&mut hasher);
+                    let hash = hasher.finish();
+                    let file_path = cache_dir.join(format!("cover_{:x}.{}", hash, ext));
+                    if !file_path.exists() {
+                        let _ = std::fs::write(&file_path, &bytes);
+                    }
+                    if let Ok(canon) = file_path.canonicalize() {
+                        return format!("file://{}", canon.to_string_lossy());
+                    } else {
+                        return format!("file://{}", file_path.to_string_lossy());
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. If cover_input was empty or invalid, check if track_url is a local file
+    if let Some(u) = track_url {
+        if u.starts_with("local://") || u.starts_with('/') {
+            let raw_path = u.trim_start_matches("local://");
+            let resolved = expand_tilde(raw_path);
+            let p = std::path::Path::new(&resolved);
+            if p.exists() {
+                // Check if directory has a cover (cover.jpg, folder.jpg, song stem image)
+                if let Some(cover_file) = metadata::find_directory_cover(p) {
+                    if let Ok(canon) = cover_file.canonicalize() {
+                        return format!("file://{}", canon.to_string_lossy());
+                    } else {
+                        return format!("file://{}", cover_file.to_string_lossy());
+                    }
+                }
+
+                // Check embedded tag picture via lofty/metadata
+                if let Some(uri) = metadata::extract_cover_art_data_uri(p) {
+                    if let Some(comma_pos) = uri.find(',') {
+                        let meta_part = &uri[..comma_pos];
+                        let b64 = &uri[comma_pos + 1..];
+                        let ext = if meta_part.contains("png") { "png" } else { "jpg" };
+                        if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(b64.trim()) {
+                            if !bytes.is_empty() {
+                                let _ = std::fs::create_dir_all(&cache_dir);
+                                let mut hasher = DefaultHasher::new();
+                                bytes.hash(&mut hasher);
+                                let hash = hasher.finish();
+                                let file_path = cache_dir.join(format!("cover_{:x}.{}", hash, ext));
+                                if !file_path.exists() {
+                                    let _ = std::fs::write(&file_path, &bytes);
+                                }
+                                if let Ok(canon) = file_path.canonicalize() {
+                                    return format!("file://{}", canon.to_string_lossy());
+                                } else {
+                                    return format!("file://{}", file_path.to_string_lossy());
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Fallback: check attached picture stream via ffmpeg
+                let output = Command::new(bin_ffmpeg())
+                    .args(["-i", &resolved, "-map", "0:v:0", "-frames:v", "1", "-f", "image2pipe", "-"])
+                    .no_window()
+                    .output();
+                if let Ok(out) = output {
+                    if out.status.success() && !out.stdout.is_empty() {
+                        let bytes = out.stdout;
+                        let ext = if bytes.starts_with(&[0x89, 0x50, 0x4e, 0x47]) { "png" } else { "jpg" };
+                        let _ = std::fs::create_dir_all(&cache_dir);
+                        let mut hasher = DefaultHasher::new();
+                        bytes.hash(&mut hasher);
+                        let hash = hasher.finish();
+                        let file_path = cache_dir.join(format!("cover_{:x}.{}", hash, ext));
+                        if !file_path.exists() {
+                            let _ = std::fs::write(&file_path, &bytes);
+                        }
+                        if let Ok(canon) = file_path.canonicalize() {
+                            return format!("file://{}", canon.to_string_lossy());
+                        } else {
+                            return format!("file://{}", file_path.to_string_lossy());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. If cover_input is a raw filesystem path without file:// scheme
+    if !trimmed.is_empty() {
+        let p = std::path::Path::new(trimmed);
+        if p.is_file() {
+            if let Ok(canon) = p.canonicalize() {
+                return format!("file://{}", canon.to_string_lossy());
+            } else {
+                return format!("file://{}", p.to_string_lossy());
+            }
+        }
+    }
+
+    trimmed.to_string()
+}
+
 #[tauri::command]
 async fn set_mpris_metadata(
     title: String,
     artist: String,
+    album: Option<String>,
+    url: Option<String>,
     cover_url: String,
     duration_secs: f64,
     playing: bool,
 ) -> Result<(), String> {
-    {
-        let mut meta = mpris_meta().lock().unwrap();
-        meta.title = title;
-        meta.artist = artist;
-        meta.cover_url = cover_url;
-        meta.duration_us = (duration_secs * 1_000_000.0) as i64;
-        meta.playing = playing;
-    }
-    mpris_notify();
-    Ok(())
+    tokio::task::spawn_blocking(move || {
+        let mut final_title = title;
+        let mut final_artist = artist;
+        let mut final_album = album.unwrap_or_default();
+        let mut final_duration_us = (duration_secs * 1_000_000.0) as i64;
+        let mut final_url = url.clone().unwrap_or_default();
+
+        if let Some(ref u) = url {
+            if u.starts_with("local://") || u.starts_with('/') {
+                let clean_p = expand_tilde(u.trim_start_matches("local://"));
+                let p = std::path::Path::new(&clean_p);
+                if p.exists() {
+                    let canon = p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
+                    final_url = format!("file://{}", canon.to_string_lossy());
+                    if let Some(meta) = metadata::probe_track_metadata(p) {
+                        if final_title.is_empty() || final_title == "Unknown Track" {
+                            final_title = meta.title;
+                        }
+                        if final_artist.is_empty() {
+                            final_artist = meta.artist;
+                        }
+                        if final_album.is_empty() {
+                            final_album = meta.album;
+                        }
+                        if final_duration_us <= 0 && meta.duration_secs > 0.0 {
+                            final_duration_us = (meta.duration_secs * 1_000_000.0) as i64;
+                        }
+                    }
+                }
+            }
+        }
+
+        if final_duration_us <= 0 {
+            let cur_dur = current_playback_state().lock().unwrap().duration;
+            if cur_dur > 0.0 {
+                final_duration_us = (cur_dur * 1_000_000.0) as i64;
+            }
+        }
+
+        let resolved_cover = resolve_mpris_cover(&cover_url, url.as_deref());
+
+        {
+            let mut meta = mpris_meta().lock().unwrap();
+            let is_same_track = meta.title == final_title && meta.artist == final_artist && !final_title.is_empty();
+            let seq = if is_same_track {
+                meta.track_seq
+            } else {
+                MPRIS_TRACK_COUNTER.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            };
+            if final_duration_us <= 0 && is_same_track && meta.duration_us > 0 {
+                final_duration_us = meta.duration_us;
+            }
+            meta.title = final_title;
+            meta.artist = final_artist;
+            meta.album = final_album;
+            meta.url = final_url;
+            meta.cover_url = resolved_cover;
+            meta.duration_us = final_duration_us;
+            meta.playing = playing;
+            meta.track_seq = seq;
+        }
+        mpris_notify();
+        Ok(())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -3793,17 +4008,32 @@ async fn run_mpris_server(
 
         #[dbus_interface(property)]
         fn metadata(&self) -> HashMap<String, OwnedValue> {
-            let (title, artist, cover_url, duration_us) = {
+            let (title, artist, album, url, cover_url, duration_us, track_seq) = {
                 let m = mpris_meta().lock().unwrap();
-                (m.title.clone(), m.artist.clone(), m.cover_url.clone(), m.duration_us)
+                (m.title.clone(), m.artist.clone(), m.album.clone(), m.url.clone(), m.cover_url.clone(), m.duration_us, m.track_seq)
             };
             let mut map: HashMap<String, OwnedValue> = HashMap::new();
-            map.insert("mpris:trackid".into(),
-                OwnedValue::try_from(ZValue::new(ObjectPath::try_from("/org/veluna/track/1").unwrap())).unwrap());
+            let track_path = if title.is_empty() {
+                "/org/mpris/MediaPlayer2/TrackList/NoTrack".to_string()
+            } else {
+                format!("/org/veluna/track/t{}", track_seq)
+            };
+            if let Ok(op) = ObjectPath::try_from(track_path.as_str()) {
+                map.insert("mpris:trackid".into(),
+                    OwnedValue::try_from(ZValue::new(op)).unwrap());
+            }
             map.insert("xesam:title".into(),
                 OwnedValue::try_from(ZValue::new(title.as_str())).unwrap());
             map.insert("xesam:artist".into(),
                 OwnedValue::try_from(ZValue::new(vec![artist.as_str()])).unwrap());
+            if !album.is_empty() {
+                map.insert("xesam:album".into(),
+                    OwnedValue::try_from(ZValue::new(album.as_str())).unwrap());
+            }
+            if !url.is_empty() {
+                map.insert("xesam:url".into(),
+                    OwnedValue::try_from(ZValue::new(url.as_str())).unwrap());
+            }
             if !cover_url.is_empty() {
                 map.insert("mpris:artUrl".into(),
                     OwnedValue::try_from(ZValue::new(cover_url.as_str())).unwrap());
@@ -3819,11 +4049,12 @@ async fn run_mpris_server(
         fn volume(&self) -> f64 { 1.0 }
         #[dbus_interface(property)]
         fn position(&self) -> i64 {
-            send_ipc_command_with_retry(r#"{"command": ["get_property", "time-pos"]}"#, 1)
-                .ok()
-                .and_then(|r| parse_f64_from_response(&r).ok())
-                .map(|s| (s * 1_000_000.0) as i64)
-                .unwrap_or(0)
+            let p = current_playback_state().lock().unwrap().position;
+            if p.is_finite() && p >= 0.0 {
+                (p * 1_000_000.0) as i64
+            } else {
+                0
+            }
         }
         #[dbus_interface(property)]
         fn minimum_rate(&self) -> f64 { 0.5 }
@@ -3849,13 +4080,56 @@ async fn run_mpris_server(
         fn pause(&self)      { let _ = self.app_pp.emit("mpris_play_pause", ()); }
         fn stop(&self)       { let _ = self.app_stop.emit("mpris_play_pause", ()); }
 
-        fn seek(&self, offset_us: i64) {
-            let cmd = format!(r#"{{"command": ["seek", {}, "relative"]}}"#, offset_us as f64 / 1_000_000.0);
-            let _ = send_ipc_command_with_retry(&cmd, 1);
+        #[dbus_interface(signal)]
+        async fn seeked(signal_ctxt: &zbus::SignalContext<'_>, position: i64) -> zbus::Result<()>;
+
+        async fn seek(&self, #[zbus(signal_context)] ctxt: zbus::SignalContext<'_>, offset_us: i64) -> zbus::fdo::Result<()> {
+            let offset_secs = offset_us as f64 / 1_000_000.0;
+            let cmd = format!(r#"{{"command": ["seek", {}, "relative"]}}"#, offset_secs);
+            let _ = send_ipc_fire_and_forget(&cmd);
+            let new_pos_us = {
+                let mut state = current_playback_state().lock().unwrap();
+                let dur = state.duration;
+                let mut new_pos = state.position + offset_secs;
+                if new_pos < 0.0 { new_pos = 0.0; }
+                if dur > 0.0 && new_pos > dur { new_pos = dur; }
+                state.position = new_pos;
+                (new_pos * 1_000_000.0) as i64
+            };
+            let _ = self.app_pp.emit("mpris_seeked", new_pos_us as f64 / 1_000_000.0);
+            let _ = Self::seeked(&ctxt, new_pos_us).await;
+            Ok(())
         }
-        fn set_position(&self, _track_id: ObjectPath<'_>, position_us: i64) {
-            let cmd = format!(r#"{{"command": ["seek", {}, "absolute"]}}"#, position_us as f64 / 1_000_000.0);
-            let _ = send_ipc_command_with_retry(&cmd, 1);
+        async fn set_position(&self, #[zbus(signal_context)] ctxt: zbus::SignalContext<'_>, track_id: ObjectPath<'_>, position_us: i64) -> zbus::fdo::Result<()> {
+            let (cur_track_seq, max_dur_us) = {
+                let m = mpris_meta().lock().unwrap();
+                (m.track_seq, m.duration_us)
+            };
+            let expected_path = format!("/org/veluna/track/t{}", cur_track_seq);
+            let path_str = track_id.as_str();
+            if !path_str.is_empty()
+                && path_str != "/"
+                && path_str != "/org/mpris/MediaPlayer2/TrackList/NoTrack"
+                && path_str != expected_path
+            {
+                return Ok(());
+            }
+            if position_us < 0 {
+                return Ok(());
+            }
+            if max_dur_us > 0 && position_us > max_dur_us {
+                return Ok(());
+            }
+            let pos_secs = (position_us as f64) / 1_000_000.0;
+            let cmd = format!(r#"{{"command": ["seek", {}, "absolute"]}}"#, pos_secs);
+            let _ = send_ipc_fire_and_forget(&cmd);
+            {
+                let mut state = current_playback_state().lock().unwrap();
+                state.position = pos_secs;
+            }
+            let _ = self.app_pp.emit("mpris_seeked", pos_secs);
+            let _ = Self::seeked(&ctxt, position_us).await;
+            Ok(())
         }
         fn open_uri(&self, _uri: String) {}
     }

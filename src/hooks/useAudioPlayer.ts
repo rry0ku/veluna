@@ -203,6 +203,15 @@ export function useAudioPlayer({
 
     if (onTrackPlayed) onTrackPlayed(track);
 
+    if (track.url?.startsWith('local://') && !track.cover) {
+      const localPath = track.url.replace('local://', '');
+      invoke<string | null>('get_audio_cover', { path: localPath }).then(c => {
+        if (c && currentTrackRef.current?.url === track.url) {
+          setCurrentTrack(prev => prev && prev.url === track.url ? { ...prev, cover: c } : prev);
+        }
+      }).catch(() => {});
+    }
+
     if (!fromQueue) {
       setPlayHistory(prev => [track, ...prev.filter(t => t.url !== track.url)].slice(0, 50));
       if (playlistContextRef.current) {
@@ -303,6 +312,7 @@ export function useAudioPlayer({
       id: -1,
       title: local.title,
       artist: local.artist || local.extension.toUpperCase(),
+      album: local.album || '',
       duration: local.duration || '0:00',
       url: `local://${local.path}`,
       cover,
@@ -651,6 +661,19 @@ export function useAudioPlayer({
     let unlistenEnd: (() => void) | undefined;
     let unlistenStarted: (() => void) | undefined;
     let unlistenError: (() => void) | undefined;
+    let unlistenMprisSeeked: (() => void) | undefined;
+
+    listen<number>('mpris_seeked', event => {
+      const pos = event.payload;
+      if (typeof pos === 'number' && Number.isFinite(pos)) {
+        progressSecondsRef.current = pos;
+        lastProgressUpdateRef.current = performance.now();
+        setProgressSeconds(pos);
+      }
+    }).then(fn => {
+      if (active) unlistenMprisSeeked = fn;
+      else fn();
+    });
 
     listen<{ playing: boolean; paused: boolean; position: number; duration: number; eof_reached: boolean }>(
       'mpv_playback_state',
@@ -658,9 +681,10 @@ export function useAudioPlayer({
         const s = event.payload;
         if (isDraggingProgressRef.current) return;
 
+        const prevPos = progressSecondsRef.current;
         progressSecondsRef.current = s.position;
         const now = performance.now();
-        if (now - lastProgressUpdateRef.current >= 200 || Math.abs(s.position - (progressSecondsRef.current || 0)) >= 1) {
+        if (now - lastProgressUpdateRef.current >= 200 || Math.abs(s.position - prevPos) >= 1) {
           lastProgressUpdateRef.current = now;
           setProgressSeconds(s.position);
         }
@@ -784,6 +808,7 @@ export function useAudioPlayer({
       unlistenEnd?.();
       unlistenStarted?.();
       unlistenError?.();
+      unlistenMprisSeeked?.();
     };
   }, []);
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Suspense, lazy } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWebviewWindow } from '@tauri-apps/api/webviewWindow';
@@ -56,14 +56,23 @@ import { ContextMenu } from './components/layout/ContextMenu';
 
 import { HomeView } from './components/views/HomeView';
 import { PlaylistsView } from './components/views/PlaylistsView';
-import { StatsView } from './components/views/StatsView';
-import { HistoryView } from './components/views/HistoryView';
-import { LyricsView } from './components/views/LyricsView';
-import { ArtistsView } from './components/views/ArtistsView';
-import { ArtistView } from './components/views/ArtistView';
 import { DownloadsPanel } from './components/DownloadsPanel';
-import { SettingsPanel } from './components/SettingsPanel';
-import { OnboardingModal } from './components/OnboardingModal';
+
+const StatsView = lazy(() => import('./components/views/StatsView').then(m => ({ default: m.StatsView })));
+const HistoryView = lazy(() => import('./components/views/HistoryView').then(m => ({ default: m.HistoryView })));
+const LyricsView = lazy(() => import('./components/views/LyricsView').then(m => ({ default: m.LyricsView })));
+const ArtistsView = lazy(() => import('./components/views/ArtistsView').then(m => ({ default: m.ArtistsView })));
+const ArtistView = lazy(() => import('./components/views/ArtistView').then(m => ({ default: m.ArtistView })));
+const SettingsPanel = lazy(() => import('./components/SettingsPanel').then(m => ({ default: m.SettingsPanel })));
+const OnboardingModal = lazy(() => import('./components/OnboardingModal').then(m => ({ default: m.OnboardingModal })));
+
+function ViewLoader() {
+  return (
+    <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: '300px' }}>
+      <div style={{ width: '24px', height: '24px', borderRadius: '50%', border: '2px solid rgba(255,255,255,0.08)', borderTopColor: 'var(--v-accent)', animation: 'spin 0.8s linear infinite' }} />
+    </div>
+  );
+}
 
 import {
   ImportResultModal,
@@ -134,6 +143,24 @@ export function App() {
 
   const [cacheEnabled, setCacheEnabledState] = useState<boolean>(() => loadLS('vg_cacheEnabled', true));
   const [uiScale, setUiScaleState] = useState<number>(() => loadLS('vg_uiScale', 0));
+  const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator !== 'undefined' ? navigator.onLine : true);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      showToast('Connection restored: online mode active');
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      showToast('Network disconnected: offline mode active');
+    };
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [showToast]);
 
   const {
     searchQuery,
@@ -273,7 +300,7 @@ export function App() {
     setShowSleepPopover,
     setSleepTimerMinutes,
     cancelSleepTimer,
-    handlePlayTrack,
+    handlePlayTrack: baseHandlePlayTrack,
     handlePlayLocalTrack,
     handlePlayInContext,
     togglePlayPause,
@@ -314,6 +341,14 @@ export function App() {
     onListeningStep: recordListeningStep,
     showToast,
   });
+
+  const handlePlayTrack = useCallback((track: Track, fromQueue?: boolean) => {
+    if (!isOnline && !track.url.startsWith('local://')) {
+      showToast('Cannot stream while offline. Switch to Offline library to play saved tracks.');
+      return Promise.resolve();
+    }
+    return baseHandlePlayTrack(track, fromQueue);
+  }, [isOnline, baseHandlePlayTrack, showToast]);
 
   const {
     showLyrics,
@@ -824,21 +859,36 @@ export function App() {
   }, [currentTrack?.url, cacheEnabled]);
 
   useEffect(() => {
-    if (!currentTrack) return;
+    if (!currentTrack) {
+      invoke('set_mpris_metadata', {
+        title: '',
+        artist: '',
+        album: '',
+        url: '',
+        coverUrl: '',
+        durationSecs: 0,
+        playing: false,
+      }).catch(() => {});
+      return;
+    }
     const parseDuration = (d: string): number => {
       const parts = d.split(':').map(Number);
       if (parts.length === 2) return (parts[0] ?? 0) * 60 + (parts[1] ?? 0);
       if (parts.length === 3) return (parts[0] ?? 0) * 3600 + (parts[1] ?? 0) * 60 + (parts[2] ?? 0);
       return 0;
     };
+    const parsed = parseDuration(currentTrack.duration ?? '0:00');
+    const finalDuration = trackDurationSeconds > 0 ? trackDurationSeconds : parsed;
     invoke('set_mpris_metadata', {
       title: currentTrack.title ?? '',
       artist: currentTrack.artist ?? '',
-      coverUrl: currentTrack.cover ?? '',
-      durationSecs: parseDuration(currentTrack.duration ?? '0:00'),
+      album: currentTrack.album ?? '',
+      url: currentTrack.url ?? '',
+      coverUrl: getTrackCover(currentTrack) || currentTrack.cover || '',
+      durationSecs: finalDuration,
       playing: isPlaying,
     }).catch(() => {});
-  }, [currentTrack, isPlaying]);
+  }, [currentTrack, isPlaying, getTrackCover, trackDurationSeconds]);
 
   const lastRpcProgressRef = useRef<number>(0);
   const lastRpcStateRef = useRef<string>('');
@@ -1800,6 +1850,7 @@ export function App() {
           setIsDownloadsFlyoutOpen={setIsDownloadsFlyoutOpen}
           downloadPulseKey={downloadPulseKey}
           onOpenShortcuts={() => setShowShortcuts(s => !s)}
+          isOnline={isOnline}
         />
 
         <DownloadsFlyout
@@ -1816,8 +1867,11 @@ export function App() {
         />
 
         {/* View Routing */}
+        <Suspense fallback={<ViewLoader />}>
         {activeNav === 'home' && (
           <HomeView
+            isOnline={isOnline}
+            onNavigateOffline={() => setActiveNav('downloads')}
             searchRef={searchRef}
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
@@ -2127,6 +2181,7 @@ export function App() {
             showToast={showToast}
           />
         )}
+        </Suspense>
       </div>
 
       {/* 3. Slide-out Queue Panel */}
@@ -2248,30 +2303,32 @@ export function App() {
       />
 
       {/* 6. Fullscreen Lyrics View */}
-      <LyricsView
-        showLyrics={showLyrics}
-        setShowLyrics={setShowLyrics}
-        currentTrack={currentTrack}
-        getTrackCover={getTrackCover}
-        progressSeconds={progressSeconds}
-        trackDurationSeconds={trackDurationSeconds}
-        shuffle={shuffle}
-        toggleShuffle={toggleShuffle}
-        handleSkipBack={handleSkipBack}
-        togglePlayPause={togglePlayPause}
-        isLoadingTrack={isLoadingTrack}
-        isPlaying={isPlaying}
-        handleSkipForward={handleSkipForward}
-        repeatMode={repeatMode}
-        cycleRepeat={cycleRepeat}
-        volume={volume}
-        setVolume={setVolume}
-        toggleMute={toggleMute}
-        lyricsLoading={lyricsLoading}
-        lyricsData={lyricsData}
-        lyricsScrollContainerRef={lyricsScrollContainerRef}
-        onArtistClick={openArtistPage}
-      />
+      <Suspense fallback={null}>
+        <LyricsView
+          showLyrics={showLyrics}
+          setShowLyrics={setShowLyrics}
+          currentTrack={currentTrack}
+          getTrackCover={getTrackCover}
+          progressSeconds={progressSeconds}
+          trackDurationSeconds={trackDurationSeconds}
+          shuffle={shuffle}
+          toggleShuffle={toggleShuffle}
+          handleSkipBack={handleSkipBack}
+          togglePlayPause={togglePlayPause}
+          isLoadingTrack={isLoadingTrack}
+          isPlaying={isPlaying}
+          handleSkipForward={handleSkipForward}
+          repeatMode={repeatMode}
+          cycleRepeat={cycleRepeat}
+          volume={volume}
+          setVolume={setVolume}
+          toggleMute={toggleMute}
+          lyricsLoading={lyricsLoading}
+          lyricsData={lyricsData}
+          lyricsScrollContainerRef={lyricsScrollContainerRef}
+          onArtistClick={openArtistPage}
+        />
+      </Suspense>
 
       {/* 7. Dialogs and Overlays */}
       {/* Create Playlist Modal */}
@@ -3227,12 +3284,14 @@ export function App() {
       )}
 
       {/* Onboarding & Taste Personalization Modal */}
-      <OnboardingModal
-        isOpen={showOnboardingModal}
-        initialPreferences={userPreferences}
-        onComplete={handleCompleteOnboarding}
-        onClose={handleCloseOnboarding}
-      />
+      <Suspense fallback={null}>
+        <OnboardingModal
+          isOpen={showOnboardingModal}
+          initialPreferences={userPreferences}
+          onComplete={handleCompleteOnboarding}
+          onClose={handleCloseOnboarding}
+        />
+      </Suspense>
 
       {/* Toast Notification */}
       {toast && (

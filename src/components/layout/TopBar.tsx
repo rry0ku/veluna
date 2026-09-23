@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, Download } from 'lucide-react';
+import { ChevronLeft, Download, WifiOff } from 'lucide-react';
 import { Track, ActiveDownload } from '../../types';
 
 interface TopBarProps {
@@ -21,6 +21,7 @@ interface TopBarProps {
   setIsDownloadsFlyoutOpen?: React.Dispatch<React.SetStateAction<boolean>>;
   downloadPulseKey?: number;
   onOpenShortcuts?: () => void;
+  isOnline?: boolean;
 }
 
 export const TopBar: React.FC<TopBarProps> = React.memo(({
@@ -42,6 +43,7 @@ export const TopBar: React.FC<TopBarProps> = React.memo(({
   setIsDownloadsFlyoutOpen,
   downloadPulseKey = 0,
   onOpenShortcuts,
+  isOnline = true,
 }) => {
   const _navigateTo = _setActiveNav || customNavigateTo || (() => {});
   const navigateBack = customNavigateBack || (() => {
@@ -97,6 +99,27 @@ export const TopBar: React.FC<TopBarProps> = React.memo(({
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          {!isOnline && (
+            <div
+              title="Network disconnected: offline mode active"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "5px",
+                background: "rgba(224, 85, 85, 0.12)",
+                border: "1px solid rgba(224, 85, 85, 0.28)",
+                color: "#ff7575",
+                fontSize: "11px",
+                fontWeight: 600,
+                padding: "4px 10px",
+                borderRadius: "20px",
+                letterSpacing: "0.02em"
+              }}
+            >
+              <WifiOff size={13} />
+              <span>Offline</span>
+            </div>
+          )}
           {/* Active Downloads Icon Button */}
           {(() => {
             const activeCount = activeDownloads.filter(d => d.status === 'downloading').length;
