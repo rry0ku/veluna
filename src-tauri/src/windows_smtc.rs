@@ -122,7 +122,7 @@ fn handle_smtc_event(app: &tauri::AppHandle, event: MediaControlEvent) {
             }
         }
         MediaControlEvent::Quit => {
-            std::process::exit(0);
+            app.exit(0);
         }
     }
 }
@@ -184,7 +184,7 @@ pub fn update_windows_smtc(meta: &crate::MprisMetadata) {
         let _ = controls.set_metadata(fallback_meta);
     }
 
-    let cur_pos = crate::current_playback_state().lock().unwrap().position;
+    let cur_pos = crate::current_playback_state().lock().unwrap_or_else(|p| p.into_inner()).position;
     let progress = Some(MediaPosition(Duration::from_secs_f64(cur_pos.max(0.0))));
 
     let playback = if meta.is_stopped {

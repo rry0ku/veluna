@@ -291,6 +291,13 @@ fn prefetch_semaphore() -> &'static tokio::sync::Semaphore {
     PREFETCH_SEMAPHORE.get_or_init(|| tokio::sync::Semaphore::new(4))
 }
 
+fn truncate_str(s: &str, max_chars: usize) -> &str {
+    match s.char_indices().nth(max_chars) {
+        Some((idx, _)) => &s[..idx],
+        None => s,
+    }
+}
+
 fn expand_tilde(path: &str) -> String {
     if path == "~" || path.starts_with("~/") || path.starts_with("~\\") {
         let home = std::env::var("HOME")
@@ -306,13 +313,17 @@ fn sanitize_stream_url(url: &str) -> Result<String, String> {
     if u.starts_with("https://") || u.starts_with("http://") {
         Ok(u.to_string())
     } else {
-        Err(format!("Rejected URL with unsafe scheme: {}", &u[..u.len().min(80)]))
+        Err(format!("Rejected URL with unsafe scheme: {}", truncate_str(u, 80)))
     }
 }
 
 fn sanitize_file_path(path: &str) -> Result<std::path::PathBuf, String> {
     #[allow(unused_mut)]
-    let mut expanded = expand_tilde(path.trim_start_matches("local://").trim());
+    let mut expanded = expand_tilde(
+        path.trim_start_matches("local://")
+            .trim_start_matches("file://")
+            .trim()
+    );
     #[cfg(target_os = "windows")]
     {
         if expanded.starts_with('/') || expanded.starts_with('\\') {
@@ -327,7 +338,7 @@ fn sanitize_file_path(path: &str) -> Result<std::path::PathBuf, String> {
     }
     let p = std::path::Path::new(&expanded);
     if !p.is_absolute() {
-        return Err(format!("Path must be absolute: {}", &expanded[..expanded.len().min(200)]));
+        return Err(format!("Path must be absolute: {}", truncate_str(&expanded, 200)));
     }
     match p.canonicalize() {
         Ok(canon) => Ok(canon),
@@ -1625,12 +1636,15 @@ fn mpv_af_flag() -> Option<String> {
 }
 
 fn ensure_mpv_running() -> bool {
-    let mut guard = mpv_process().lock().unwrap();
+    let mut guard = mpv_process().lock().unwrap_or_else(|p| p.into_inner());
 
     let alive = guard.as_mut().map(|c| c.try_wait().ok() == Some(None)).unwrap_or(false);
     if alive && wait_for_socket(200) { return true; }
 
-    *guard = None;
+    if let Some(mut old_child) = guard.take() {
+        let _ = old_child.kill();
+        let _ = old_child.wait();
+    }
     #[cfg(unix)]
     { let _ = std::fs::remove_file(socket_path()); }
 
@@ -1950,7 +1964,7 @@ async fn extract_stream_url_async(youtube_url: String, my_id: Option<u64>) -> Op
                                         .find(|l| l.starts_with("http") && !l.contains(".m3u8") && !l.contains("manifest.googlevideo.com"))
                                         .map(|s| s.trim().to_string())
                                     {
-                                        log_debug(&format!("Worker {} found stream URL: {}", label, &url[..url.len().min(60)]));
+                                        log_debug(&format!("Worker {} found stream URL: {}", label, truncate_str(&url, 60)));
                                         resolved_url = Some(url);
                                         break;
                                     }
@@ -2069,7 +2083,7 @@ async fn play_audio(url: String) -> Result<(), String> {
         return Err("Track is unavailable or cannot be streamed on YouTube".to_string());
     };
 
-    log_debug(&format!("Streaming URL to MPV: {}", &stream_url[..stream_url.len().min(80)]));
+    log_debug(&format!("Streaming URL to MPV: {}", truncate_str(&stream_url, 80)));
 
     tokio::task::spawn_blocking(move || {
         if PLAY_COUNTER.load(std::sync::atomic::Ordering::SeqCst) != my_id {
@@ -2344,6 +2358,7 @@ async fn set_equalizer(bass: f64, mid: f64, treble: f64) -> Result<(), String> {
 struct ActiveDownload {
     child_id: u32,
     target_file: Arc<Mutex<Option<std::path::PathBuf>>>,
+    cancelled: Arc<std::sync::atomic::AtomicBool>,
 }
 
 static ACTIVE_DOWNLOADS: std::sync::OnceLock<Arc<Mutex<HashMap<String, ActiveDownload>>>> = std::sync::OnceLock::new();
@@ -2426,11 +2441,14 @@ async fn download_song(
         let child_id = child.id();
         let target_file_arc = Arc::new(Mutex::new(None));
         let target_file_clone = Arc::clone(&target_file_arc);
+        let cancelled_arc = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let cancelled_clone = Arc::clone(&cancelled_arc);
         {
-            let mut map = active_downloads().lock().unwrap();
+            let mut map = active_downloads().lock().unwrap_or_else(|p| p.into_inner());
             map.insert(url_key.clone(), ActiveDownload {
                 child_id,
                 target_file: target_file_arc,
+                cancelled: cancelled_arc,
             });
         }
 
@@ -2442,7 +2460,7 @@ async fn download_song(
             std::thread::spawn(move || {
                 let reader = BufReader::new(err_stream);
                 for line in reader.lines().flatten() {
-                    let mut b = stderr_buf_clone.lock().unwrap();
+                    let mut b = stderr_buf_clone.lock().unwrap_or_else(|p| p.into_inner());
                     if b.len() < 2048 {
                         if !b.is_empty() { b.push('\n'); }
                         b.push_str(&line);
@@ -2489,8 +2507,12 @@ async fn download_song(
         let status = child.wait().map_err(|e| e.to_string())?;
 
         {
-            let mut map = active_downloads().lock().unwrap();
+            let mut map = active_downloads().lock().unwrap_or_else(|p| p.into_inner());
             map.remove(&url_key);
+        }
+
+        if cancelled_clone.load(std::sync::atomic::Ordering::SeqCst) {
+            return Ok("Download cancelled".to_string());
         }
 
         if status.success() {
@@ -2503,7 +2525,7 @@ async fn download_song(
             Ok("Downloaded successfully".to_string())
         } else {
             let err_detail = {
-                let b = stderr_buf.lock().unwrap();
+                let b = stderr_buf.lock().unwrap_or_else(|p| p.into_inner());
                 if b.trim().is_empty() { "Download failed".to_string() } else { b.trim().to_string() }
             };
             let _ = app_handle.emit("download_progress", &DownloadProgressPayload {
@@ -2522,11 +2544,12 @@ async fn download_song(
 #[tauri::command]
 async fn cancel_download(app_handle: tauri::AppHandle, url: String) -> Result<(), String> {
     let dl_opt = {
-        let mut map = active_downloads().lock().unwrap();
+        let mut map = active_downloads().lock().unwrap_or_else(|p| p.into_inner());
         map.remove(&url)
     };
 
     if let Some(dl) = dl_opt {
+        dl.cancelled.store(true, std::sync::atomic::Ordering::SeqCst);
         #[cfg(unix)]
         {
             let _ = std::process::Command::new("kill")
@@ -2739,16 +2762,16 @@ async fn delete_local_file(path: String) -> Result<(), String> {
 #[tauri::command]
 async fn rename_local_file(old_path: String, new_title: String) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
-        let old    = std::path::Path::new(&old_path);
-        let parent = old.parent().ok_or("No parent directory")?;
-        let ext    = old.extension().and_then(|e| e.to_str()).unwrap_or("mp3");
+        let safe_old = sanitize_file_path(&old_path)?;
+        let parent   = safe_old.parent().ok_or("No parent directory")?;
+        let ext      = safe_old.extension().and_then(|e| e.to_str()).unwrap_or("mp3");
         let safe_title: String = new_title.chars()
             .map(|c| if "/\\:*?\"<>|".contains(c) { '_' } else { c })
             .collect();
         let mut new_path = parent.join(format!("{}.{}", safe_title, ext));
         let mut counter = 1;
         while new_path.exists() {
-            if let (Ok(new_canon), Ok(old_canon)) = (new_path.canonicalize(), old.canonicalize()) {
+            if let (Ok(new_canon), Ok(old_canon)) = (new_path.canonicalize(), safe_old.canonicalize()) {
                 if new_canon == old_canon {
                     break;
                 }
@@ -2756,8 +2779,12 @@ async fn rename_local_file(old_path: String, new_title: String) -> Result<String
             new_path = parent.join(format!("{} ({}).{}", safe_title, counter, ext));
             counter += 1;
         }
-        std::fs::rename(&old_path, &new_path).map_err(|e| format!("Rename failed: {}", e))?;
-        Ok(new_path.to_string_lossy().to_string())
+        std::fs::rename(&safe_old, &new_path).map_err(|e| format!("Rename failed: {}", e))?;
+        let new_path_str = new_path.to_string_lossy().to_string();
+        let old_path_str = safe_old.to_string_lossy().to_string();
+        let _ = db::update_local_track_path(&old_path_str, &new_path_str);
+        let _ = db::update_local_track_path(&old_path, &new_path_str);
+        Ok(new_path_str)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -2841,7 +2868,7 @@ struct AudioMetadata { title: String, artist: String, album: String, duration: S
 #[tauri::command]
 async fn get_audio_metadata(path: String) -> Result<AudioMetadata, String> {
     tokio::task::spawn_blocking(move || {
-        let p = std::path::PathBuf::from(expand_tilde(&path));
+        let p = sanitize_file_path(&path).unwrap_or_else(|_| std::path::PathBuf::from(expand_tilde(&path)));
         if let Some(meta) = metadata::probe_track_metadata(&p) {
             return Ok(AudioMetadata {
                 title: meta.title,
@@ -2851,8 +2878,9 @@ async fn get_audio_metadata(path: String) -> Result<AudioMetadata, String> {
                 has_cover: meta.has_cover,
             });
         }
+        let p_str = p.to_string_lossy();
         let output = Command::new(bin_ffprobe())
-            .args(["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", &path])
+            .args(["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", p_str.as_ref()])
             .no_window()
             .output()
             .map_err(|_| "ffprobe not found - install ffmpeg".to_string())?;
@@ -2949,27 +2977,29 @@ async fn get_audio_cover(path: String) -> Result<Option<String>, String> {
 #[tauri::command]
 async fn write_audio_metadata(path: String, title: String, artist: String, album: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
-        let p = std::path::PathBuf::from(expand_tilde(&path));
+        let p = sanitize_file_path(&path)?;
         if metadata::write_track_tags(&p, Some(&title), Some(&artist), Some(&album)).is_ok() {
             let _ = db::index_local_track_fts(&title, &artist, &album, &path);
             return Ok(());
         }
 
-        let ext = std::path::Path::new(&path)
+        let ext = p
             .extension()
             .and_then(|e| e.to_str())
             .unwrap_or("mp3");
-        let temp_path = format!("{}.tmp.edit.{}", path, ext);
+        let temp_path = p.with_extension(format!("tmp.edit.{}", ext));
+        let path_str = p.to_string_lossy().to_string();
+        let temp_str = temp_path.to_string_lossy().to_string();
         
         let status = Command::new(bin_ffmpeg())
             .args([
                 "-y",
-                "-i", &path,
+                "-i", &path_str,
                 "-metadata", &format!("title={}", title),
                 "-metadata", &format!("artist={}", artist),
                 "-metadata", &format!("album={}", album),
                 "-codec", "copy",
-                &temp_path
+                &temp_str
             ])
             .no_window()
             .status()
@@ -2980,8 +3010,13 @@ async fn write_audio_metadata(path: String, title: String, artist: String, album
             return Err("ffmpeg failed to write metadata".to_string());
         }
         
-        std::fs::rename(&temp_path, &path)
-            .map_err(|e| format!("Failed to replace audio file: {}", e))?;
+        #[cfg(target_os = "windows")]
+        let _ = std::fs::remove_file(&p);
+
+        if let Err(e) = std::fs::rename(&temp_path, &p) {
+            let _ = std::fs::remove_file(&temp_path);
+            return Err(format!("Failed to replace audio file: {}", e));
+        }
         let _ = db::index_local_track_fts(&title, &artist, &album, &path);
             
         Ok(())
@@ -3025,8 +3060,10 @@ fn base64_encode(bytes: &[u8]) -> String {
 #[tauri::command]
 async fn get_waveform_thumbnail(path: String) -> Result<Vec<f32>, String> {
     tokio::task::spawn_blocking(move || {
+        let p = sanitize_file_path(&path).unwrap_or_else(|_| std::path::PathBuf::from(expand_tilde(&path)));
+        let p_str = p.to_string_lossy();
         let output = Command::new(bin_ffmpeg())
-            .args(["-i", &path, "-ac", "1", "-ar", "500", "-f", "f32le", "-"])
+            .args(["-i", p_str.as_ref(), "-ac", "1", "-ar", "500", "-f", "f32le", "-"])
             .no_window()
             .output()
             .map_err(|_| "ffmpeg not found".to_string())?;
@@ -3145,16 +3182,49 @@ async fn import_playlist_m3u(path: String) -> Result<Vec<String>, String> {
 #[tauri::command]
 async fn normalize_file(path: String, output_path: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
-        let resolved_in  = expand_tilde(&path);
-        let resolved_out = expand_tilde(&output_path);
+        let in_path = sanitize_file_path(&path)?;
+        let out_path = sanitize_file_path(&output_path)?;
+
+        if let Some(parent) = out_path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+
+        let is_same_file = in_path == out_path;
+        let actual_target = if is_same_file {
+            let ext = in_path.extension().and_then(|e| e.to_str()).unwrap_or("mp3");
+            out_path.with_extension(format!("tmp.norm.{}", ext))
+        } else {
+            out_path.clone()
+        };
+
+        let in_str = in_path.to_string_lossy().to_string();
+        let target_str = actual_target.to_string_lossy().to_string();
+
         let out = Command::new(bin_ffmpeg())
-            .args(["-i", &resolved_in, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
-                   "-ar", "44100", "-y", &resolved_out])
+            .args(["-i", &in_str, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
+                   "-ar", "44100", "-y", &target_str])
             .no_window()
             .output()
             .map_err(|_| "ffmpeg not found".to_string())?;
-        if out.status.success() { Ok(()) }
-        else { Err(String::from_utf8_lossy(&out.stderr).to_string()) }
+
+        if !out.status.success() {
+            if is_same_file {
+                let _ = std::fs::remove_file(&actual_target);
+            }
+            return Err(String::from_utf8_lossy(&out.stderr).to_string());
+        }
+
+        if is_same_file {
+            #[cfg(target_os = "windows")]
+            let _ = std::fs::remove_file(&out_path);
+
+            if let Err(e) = std::fs::rename(&actual_target, &out_path) {
+                let _ = std::fs::remove_file(&actual_target);
+                return Err(format!("Failed to finalize normalized file: {}", e));
+            }
+        }
+
+        Ok(())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -3513,10 +3583,12 @@ fn start_mpv_event_listener(app_handle: tauri::AppHandle) {
                                         let reason = v["reason"].as_str().unwrap_or("");
                                         if reason == "error" {
                                             {
-                                                let mut state = current_playback_state().lock().unwrap();
+                                                let mut state = current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
                                                 state.playing = false;
                                             }
                                             let _ = app_handle.emit("mpv_track_error", ());
+                                            let s_clone = current_playback_state().lock().unwrap_or_else(|p| p.into_inner()).clone();
+                                            let _ = app_handle.emit("mpv_playback_state", &s_clone);
                                         } else if reason == "eof" {
                                             {
                                                 let mut state = current_playback_state().lock().unwrap();
@@ -4441,7 +4513,7 @@ async fn test_network_connection(proxy_url: Option<String>, custom_instance: Opt
         } else if has_inst {
             Ok(format!("Custom Mirror reachable (HTTP {})", status_code))
         } else {
-            Ok(format!("Direct internet connection OK (HTTP {} — no proxy configured)", status_code))
+            Ok(format!("Direct internet connection OK (HTTP {} - no proxy configured)", status_code))
         }
     } else {
         Err(format!("Server returned HTTP {}", res.status().as_u16()))
@@ -4497,7 +4569,7 @@ fn watch_download_folder(app: tauri::AppHandle, path: String) -> Result<(), Stri
         }
     }).map_err(|e| e.to_string())?;
 
-    watcher.watch(&p, RecursiveMode::NonRecursive).map_err(|e| e.to_string())?;
+    watcher.watch(&p, RecursiveMode::Recursive).map_err(|e| e.to_string())?;
     *watcher_lock = Some(watcher);
     Ok(())
 }
@@ -4993,7 +5065,22 @@ Couldn't look you in the eye
             let res = sanitize_file_path("/tmp/test.mp3");
             assert!(res.is_ok());
             assert_eq!(res.unwrap(), std::path::PathBuf::from("/tmp/test.mp3"));
+
+            let res_file = sanitize_file_path("file:///tmp/test.mp3");
+            assert!(res_file.is_ok());
+            assert_eq!(res_file.unwrap(), std::path::PathBuf::from("/tmp/test.mp3"));
         }
+    }
+
+    #[test]
+    fn test_truncate_str_utf8() {
+        let multi_byte = "こんにちは世界！Hello";
+        let truncated = truncate_str(multi_byte, 5);
+        assert_eq!(truncated, "こんにちは");
+
+        let ascii = "abcdefghij";
+        assert_eq!(truncate_str(ascii, 3), "abc");
+        assert_eq!(truncate_str(ascii, 20), "abcdefghij");
     }
 }
 

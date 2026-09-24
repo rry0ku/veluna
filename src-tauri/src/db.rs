@@ -173,7 +173,7 @@ where
     F: FnOnce(&Connection) -> Result<R, rusqlite::Error>,
 {
     let conn_mutex = DB_READ_CONN.get().ok_or("Database not initialized")?;
-    let conn = conn_mutex.lock().map_err(|e| format!("DB lock error: {}", e))?;
+    let conn = conn_mutex.lock().unwrap_or_else(|p| p.into_inner());
     f(&conn).map_err(|e| format!("Database error: {}", e))
 }
 
@@ -182,7 +182,7 @@ where
     F: FnOnce(&mut Connection) -> Result<R, rusqlite::Error>,
 {
     let conn_mutex = DB_WRITE_CONN.get().ok_or("Database not initialized")?;
-    let mut conn = conn_mutex.lock().map_err(|e| format!("DB lock error: {}", e))?;
+    let mut conn = conn_mutex.lock().unwrap_or_else(|p| p.into_inner());
     f(&mut conn).map_err(|e| format!("Database error: {}", e))
 }
 
@@ -424,6 +424,30 @@ pub fn index_local_track_fts(title: &str, artist: &str, album: &str, path: &str)
             "INSERT INTO library_fts (title, artist, album, path) VALUES (?1, ?2, ?3, ?4)",
             params![title, artist, album, path],
         )?;
+        tx.commit()?;
+        Ok(())
+    })
+}
+
+pub fn update_local_track_path(old_path: &str, new_path: &str) -> Result<(), String> {
+    with_db_mut(|conn| {
+        let tx = conn.transaction()?;
+        tx.execute(
+            "UPDATE library_fts SET path = ?1 WHERE path = ?2",
+            params![new_path, old_path],
+        )?;
+
+        let old_local_uri = format!("local://{}", old_path);
+        let new_local_uri = format!("local://{}", new_path);
+        tx.execute(
+            "UPDATE playlist_tracks SET url = ?1 WHERE url = ?2",
+            params![new_path, old_path],
+        )?;
+        tx.execute(
+            "UPDATE playlist_tracks SET url = ?1 WHERE url = ?2",
+            params![new_local_uri, old_local_uri],
+        )?;
+
         tx.commit()?;
         Ok(())
     })
