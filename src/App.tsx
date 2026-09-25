@@ -225,12 +225,12 @@ export function App() {
   const setUiScale = useCallback((scale: number) => {
     setUiScaleState(scale);
     saveLS('vg_uiScale', scale);
-    (document.documentElement.style as any).zoom = `${100 + scale * 5}%`;
   }, []);
 
   useEffect(() => {
-    (document.documentElement.style as any).zoom = `${100 + uiScale * 5}%`;
-  }, [uiScale]);
+    // Clear any stale zoom value set by old versions
+    (document.documentElement.style as any).zoom = '';
+  }, []);
 
   useEffect(() => {
     invoke('set_cache_enabled', { enabled: cacheEnabled }).catch(() => {});
@@ -1173,7 +1173,6 @@ export function App() {
           setUiScaleState(prev => {
             const next = Math.max(-5, Math.min(5, prev - 1));
             saveLS('vg_uiScale', next);
-            (document.documentElement.style as any).zoom = `${100 + next * 5}%`;
             showToast(`UI Scale: ${next > 0 ? `+${next}` : next} (${100 + next * 5}%)`);
             return next;
           });
@@ -1185,7 +1184,6 @@ export function App() {
           setUiScaleState(prev => {
             const next = Math.max(-5, Math.min(5, prev + 1));
             saveLS('vg_uiScale', next);
-            (document.documentElement.style as any).zoom = `${100 + next * 5}%`;
             showToast(`UI Scale: ${next > 0 ? `+${next}` : next} (${100 + next * 5}%)`);
             return next;
           });
@@ -1197,7 +1195,6 @@ export function App() {
           setUiScaleState(prev => {
             if (prev === 0) return 0;
             saveLS('vg_uiScale', 0);
-            (document.documentElement.style as any).zoom = '100%';
             showToast('UI Scale: Default (100%)');
             return 0;
           });
@@ -1912,20 +1909,45 @@ export function App() {
     setLastfmApiSecret, setFollowedArtists, setUserPreferences, setRecommendedTracks
   ]);
 
+  const scaleFactor = 1 + uiScale * 0.05;
+  const inversePercent = `${(1 / scaleFactor) * 100}%`;
+
   return (
+    <>
+    {/* Outer shell: always exactly 100vw x 100vh, clips overflow on every scale level */}
     <div
       style={{
-        display: "flex",
-        flexDirection: "column",
-        height: "100vh",
+        position: "fixed",
+        top: 0,
+        left: 0,
         width: "100vw",
-        background: "var(--v-bg0)",
-        color: "var(--v-fg)",
+        height: "100vh",
         overflow: "hidden",
-        fontSize: "16px",
       }}
-      onContextMenu={e => e.preventDefault()}
     >
+      {/* Inner shell: transform-scaled content. Width/height are inverse of scale so the
+          scaled content fills the full viewport without causing overflow or scrollbars. */}
+      <div
+        style={{
+          width: inversePercent,
+          height: inversePercent,
+          transformOrigin: "top left",
+          transform: `scale(${scaleFactor})`,
+        }}
+      >
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100%",
+          width: "100%",
+          background: "var(--v-bg0)",
+          color: "var(--v-fg)",
+          overflow: "hidden",
+          fontSize: "16px",
+        }}
+        onContextMenu={e => e.preventDefault()}
+      >
       {/* 1. Main Content Body (Sidebar + View + Queue Panel) */}
       <div style={{ display: "flex", flex: 1, minHeight: 0, overflow: "hidden", position: "relative" }}>
         {/* Sidebar */}
@@ -3414,7 +3436,10 @@ export function App() {
         />
       </Suspense>
 
-      {/* Toast Notification */}
+      </div>   {/* end app content div */}
+      </div>   {/* end inner scale div */}
+
+      {/* Toast Notification — outside scale wrapper so it renders at true viewport coords */}
       {toast && (
         <div style={{
           position: 'fixed',
@@ -3439,7 +3464,8 @@ export function App() {
           {toast}
         </div>
       )}
-    </div>
+    </div>       {/* end outer fixed shell */}
+    </>
   );
 }
 

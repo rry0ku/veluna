@@ -302,14 +302,8 @@ export function saveLS(key: string, v: unknown) {
 }
 
 export function getZoomFactor(): number {
-  if (typeof document === 'undefined') return 1;
-  const zoomStr = (document.documentElement.style as any).zoom || (document.body.style as any).zoom || '';
-  if (zoomStr) {
-    const parsed = parseFloat(zoomStr);
-    if (!isNaN(parsed) && parsed > 0) {
-      return zoomStr.includes('%') ? parsed / 100 : parsed;
-    }
-  }
+  // CSS transform:scale() does not affect scrollTop/clientHeight, so no zoom correction needed.
+  // Kept for API compatibility with VirtualTrackList.
   return 1;
 }
 

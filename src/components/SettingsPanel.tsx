@@ -250,7 +250,6 @@ export const SettingsPanel = React.memo(function SettingsPanel({
     setInternalUiScale(clamped);
     propSetUiScale?.(clamped);
     saveLS('vg_uiScale', clamped);
-    (document.documentElement.style as any).zoom = `${100 + clamped * 5}%`;
   };
 
   const handleToggleCache = async (enabled: boolean) => {
