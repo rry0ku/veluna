@@ -79,7 +79,6 @@ export type ActiveDownload = {
   error?: string;
   startedAt: number;
 };
-export type BatchProgress = { index: number; total: number; title: string; success: boolean; error?: string };
 export type SettingsTab = 'playback' | 'appearance' | 'downloads' | 'integrations' | 'network' | 'storage' | 'updates';
 
 export interface UserPreferences {
