@@ -16,7 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { Track, RepeatMode, LyricsData } from '../../types';
-import { formatTime, parseTrackMeta, parseArtistParts } from '../../utils';
+import { formatTime, parseTrackMeta, parseArtistParts, handleThumbnailError } from '../../utils';
 
 interface LyricsViewProps {
   showLyrics: boolean;
@@ -127,7 +127,7 @@ export const LyricsView: React.FC<LyricsViewProps> = ({
         {/* Album art */}
         <div style={{width:"clamp(130px, 24vh, 220px)",height:"clamp(130px, 24vh, 220px)",borderRadius:"12px",overflow:"hidden",flexShrink:0,boxShadow:"0 24px 64px rgba(0,0,0,0.65)",position:"relative",marginTop:"12px"}}>
           {getTrackCover(currentTrack)
-            ? <img src={getTrackCover(currentTrack)} alt={currentTrack.title} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+            ? <img src={getTrackCover(currentTrack)} alt={currentTrack.title} onError={handleThumbnailError} style={{width:"100%",height:"100%",objectFit:"cover"}}/>
             : <div style={{width:"100%",height:"100%",background:"var(--v-bdr2)",display:"flex",alignItems:"center",justifyContent:"center"}}><Music size={32} style={{color:"var(--v-fg3)"}}/></div>}
         </div>
 
@@ -249,7 +249,7 @@ export const LyricsView: React.FC<LyricsViewProps> = ({
           <button onClick={togglePlayPause}
             style={{width:"44px",height:"44px",borderRadius:"50%",background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",border:"none",cursor:"pointer",boxShadow:"0 4px 16px rgba(0,0,0,0.5)",transition:"transform .1s"}}
             onMouseEnter={e=>e.currentTarget.style.transform="scale(1.06)"} onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
-            {isLoadingTrack && !isPlaying
+            {isLoadingTrack
               ? <svg width="20" height="20" viewBox="0 0 24 24" style={{animation:"spin 0.9s cubic-bezier(0.4, 0, 0.2, 1) infinite"}}>
                   <circle cx="12" cy="12" r="8.5" fill="none" stroke="rgba(0,0,0,0.15)" strokeWidth="2.5"/>
                   <circle cx="12" cy="12" r="8.5" fill="none" stroke="#000" strokeWidth="2.5" strokeDasharray="53.4" strokeDashoffset="36" strokeLinecap="round"/>

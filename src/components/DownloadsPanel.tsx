@@ -7,7 +7,7 @@ import {
   AlertCircle, FileMusic, Play, Pencil, Trash2, ArrowUpDown, CheckSquare, Square
 } from 'lucide-react';
 import { LocalTrack, DiskInfo, Track, Playlist } from '../types';
-import { cleanArtist, formatBytes, parseDurationToSeconds } from '../utils';
+import { cleanArtist, formatBytes, parseDurationToSeconds, parseTrackMeta } from '../utils';
 import { VirtualTrackList } from './VirtualTrackList';
 import { ThemedSelect } from './ThemedSelect';
 import { BatchActionBar } from './BatchActionBar';
@@ -104,15 +104,18 @@ export const DownloadsPanel = React.memo(function DownloadsPanel({
     clearSelection();
   }, [downloadPath, searchQ, clearSelection]);
 
-  const toTrack = useCallback((t: LocalTrack): Track => ({
-    id: 0,
-    title: t.title,
-    artist: t.artist || '',
-    album: t.album || '',
-    url: `local://${t.path}`,
-    cover: t.cover || '',
-    duration: t.duration || '0:00',
-  }), []);
+  const toTrack = useCallback((t: LocalTrack): Track => {
+    const meta = parseTrackMeta(t.title, t.artist);
+    return {
+      id: 0,
+      title: meta.title || t.title,
+      artist: meta.artist || t.artist || '',
+      album: t.album || '',
+      url: `local://${t.path}`,
+      cover: t.cover || '',
+      duration: t.duration || '0:00',
+    };
+  }, []);
 
   const filtered = (() => {
     let list = searchQ.trim()
@@ -535,7 +538,7 @@ export const DownloadsPanel = React.memo(function DownloadsPanel({
                         <CheckSquare size={13} style={{ color: 'var(--v-accent)', margin: '0 auto' }} />
                       ) : isMultiSelectActive ? (
                         <Square size={13} style={{ color: '#5c5755', margin: '0 auto' }} />
-                      ) : isActive&&isLoadingTrack&&!isPlaying ? (
+                      ) : isActive&&isLoadingTrack ? (
                         <svg width="14" height="14" viewBox="0 0 24 24" style={{animation:'spin 0.9s cubic-bezier(0.4, 0, 0.2, 1) infinite',margin:'0 auto',display:'block'}}>
                           <circle cx="12" cy="12" r="8.5" fill="none" stroke="rgba(226,221,217,0.15)" strokeWidth="2.5"/>
                           <circle cx="12" cy="12" r="8.5" fill="none" stroke="#e2ddd9" strokeWidth="2.5" strokeDasharray="53.4" strokeDashoffset="36" strokeLinecap="round"/>
@@ -551,10 +554,15 @@ export const DownloadsPanel = React.memo(function DownloadsPanel({
                     <div style={{width:"38px",height:"38px",borderRadius:"7px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,background:isActive?"rgba(226,221,217,0.06)":"var(--v-bdr2)",border:`1px solid ${isActive?"rgba(226,221,217,0.1)":"rgba(255,255,255,0.05)"}`,overflow:"hidden"}}>
                       <LocalTrackCover key={track.path} path={track.path} hasCover={track.has_cover} cover={track.cover} isActive={isActive} />
                     </div>
-                    <div className="v-track__info">
-                      <div className="v-track__title">{track.title}</div>
-                      <div className="v-track__artist">{track.artist||track.extension.toUpperCase()} · {formatBytes(track.size_bytes)}</div>
-                    </div>
+                    {(() => {
+                      const meta = parseTrackMeta(track.title, track.artist);
+                      return (
+                        <div className="v-track__info">
+                          <div className="v-track__title">{meta.title || track.title}</div>
+                          <div className="v-track__artist">{(meta.artist || track.artist || track.extension.toUpperCase())} · {formatBytes(track.size_bytes)}</div>
+                        </div>
+                      );
+                    })()}
                     <div className="v-track__actions">
                       <button className="v-track__btn" title="Rename" onClick={e=>{e.stopPropagation();setRenaming(track);setRenameVal(track.title);setRenameArtistVal(track.artist || '');}}><Pencil size={12}/></button>
                       <button className="v-track__btn" title="Show in folder" onClick={e=>{e.stopPropagation();onOpenInFileManager(track.path);}}><FolderOpen size={12}/></button>

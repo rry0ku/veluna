@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { Track, LocalTrack, AudioInfo, RepeatMode } from '../types';
-import { loadLS, saveLS, parseDurationToSeconds, cleanArtist } from '../utils';
+import { loadLS, saveLS, parseDurationToSeconds, cleanArtist, parseTrackMeta } from '../utils';
 
 interface UseAudioPlayerProps {
   volume: number;
@@ -228,9 +228,6 @@ export function useAudioPlayer({
 
     try {
       await invoke('play_audio', { url: track.url });
-      setLoadingTrackUrlSync(null);
-      setIsLoadingTrackSync(false);
-      setIsPlayingSync(true);
       invoke('set_volume', { volume }).catch(() => {});
       invoke('set_playback_speed', { speed: playbackSpeed }).catch(() => {});
       invoke('set_equalizer', { bass: eq.bass, mid: eq.mid, treble: eq.treble }).catch(() => {});
@@ -238,20 +235,30 @@ export function useAudioPlayer({
       if (codecPollRef.current) clearInterval(codecPollRef.current);
       let codecWaited = 0;
       codecPollRef.current = setInterval(async () => {
-        codecWaited += 300;
+        codecWaited += 200;
         try {
           const info: AudioInfo = await invoke('get_audio_info');
           if (info?.codec && info.codec !== 'unknown' && info.codec !== '') {
             setAudioInfo(info);
+            if (currentTrackRef.current?.url === track.url) {
+              setIsLoadingTrackSync(false);
+              setLoadingTrackUrlSync(null);
+              setIsPlayingSync(true);
+            }
             if (codecPollRef.current) clearInterval(codecPollRef.current);
             codecPollRef.current = null;
           }
         } catch {}
-        if (codecWaited >= 5000) {
+        if (codecWaited >= 12000) {
           if (codecPollRef.current) clearInterval(codecPollRef.current);
           codecPollRef.current = null;
+          if (isLoadingTrackRef.current && currentTrackRef.current?.url === track.url) {
+            setIsLoadingTrackSync(false);
+            setLoadingTrackUrlSync(null);
+            setIsPlayingSync(true);
+          }
         }
-      }, 300);
+      }, 200);
     } catch (err: any) {
       if (currentTrackRef.current?.url !== track.url) return;
       setIsPlayingSync(false);
@@ -308,10 +315,11 @@ export function useAudioPlayer({
       } catch {}
     }
 
+    const meta = parseTrackMeta(local.title, local.artist);
     const synth: Track = {
       id: -1,
-      title: local.title,
-      artist: local.artist || local.extension.toUpperCase(),
+      title: meta.title || local.title,
+      artist: meta.artist || local.artist || local.extension.toUpperCase(),
       album: local.album || '',
       duration: local.duration || '0:00',
       url: `local://${local.path}`,
@@ -337,9 +345,6 @@ export function useAudioPlayer({
     setIsLoadingTrackSync(true);
     try {
       await invoke('play_local_file', { path: local.path });
-      setLoadingTrackUrlSync(null);
-      setIsLoadingTrackSync(false);
-      setIsPlayingSync(true);
       await invoke('set_volume', { volume });
       await invoke('set_playback_speed', { speed: playbackSpeed });
       
@@ -350,8 +355,13 @@ export function useAudioPlayer({
             setTrackDurationSeconds(s.duration);
             trackDurationRef.current = s.duration;
           }
+          if (isLoadingTrackRef.current && currentTrackRef.current?.url === synth.url) {
+            setIsLoadingTrackSync(false);
+            setLoadingTrackUrlSync(null);
+            setIsPlayingSync(true);
+          }
         } catch {}
-      }, 300);
+      }, 250);
     } catch {
       setIsPlayingSync(false);
       setLoadingTrackUrlSync(null);
@@ -373,6 +383,16 @@ export function useAudioPlayer({
   const togglePlayPause = useCallback(async () => {
     if (!currentTrackRef.current) return;
     
+    if (isLoadingTrackRef.current) {
+      try {
+        await invoke('pause_audio');
+        setIsLoadingTrackSync(false);
+        setLoadingTrackUrlSync(null);
+        setIsPlayingSync(false);
+      } catch {}
+      return;
+    }
+
     if (!isPlayingRef.current) {
       try {
         const state: { playing: boolean; paused: boolean; position: number; duration: number; eof_reached: boolean } =

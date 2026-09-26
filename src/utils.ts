@@ -70,13 +70,12 @@ export const hexToRgb = (hex: string): string => {
 export const cleanArtist = (a?: string | null): string => {
   if (!a) return '';
   let t = a.trim();
-  const bad = ['unknown', 'na', 'n/a', 'none', '-', '--', 'unknown artist', 'various artists', 'various', '?'];
+  const bad = ['unknown', 'na', 'n/a', 'none', '-', '--', 'unknown artist', 'various artists', 'various', 'youtube', '?'];
   if (bad.includes(t.toLowerCase())) return '';
 
   t = t.replace(/\s*-\s*Topic\s*$/i, '')
-       .replace(/\s+VEVO\s*$/i, '')
-       .replace(/\s+Official\s*$/i, '')
-       .replace(/\s+Official Channel\s*$/i, '')
+       .replace(/(?:[-_\s]+|(?<=[a-z]))VEVO$/i, '')
+       .replace(/\s+Official\s*(?:Channel)?\s*$/i, '')
        .replace(/\s+Channel\s*$/i, '')
        .trim();
 
@@ -131,14 +130,25 @@ export function parseArtistParts(rawArtist?: string | null): ArtistPart[] {
   return result;
 }
 
+export function hasUnbalancedParens(str: string): boolean {
+  let depth = 0;
+  for (const ch of str) {
+    if (ch === '(' || ch === '[' || ch === '{') depth++;
+    if (ch === ')' || ch === ']' || ch === '}') depth--;
+    if (depth < 0) return true;
+  }
+  return depth !== 0;
+}
+
 export function parseTrackMeta(rawTitle: string, rawArtist?: string | null): { title: string; artist: string } {
   let title = (rawTitle || '').trim();
   let artist = cleanArtist(rawArtist);
+  if (!title) return { title: '', artist: artist || '' };
 
   const isChannelOrCurator = (art: string): boolean => {
     if (!art) return true;
     const lower = art.toLowerCase().trim();
-    const bad = ['unknown', 'na', 'n/a', 'none', 'unknown artist', 'various artists', 'various'];
+    const bad = ['unknown', 'na', 'n/a', 'none', 'unknown artist', 'various artists', 'various', 'youtube'];
     if (bad.includes(lower)) return true;
 
     const channelSuffixes = [
@@ -149,8 +159,9 @@ export function parseTrackMeta(rawTitle: string, rawArtist?: string | null): { t
       'series', 'company', 'label', 'production', 'productions'
     ];
     for (const suf of channelSuffixes) {
-      if (lower.endsWith(' ' + suf) || lower === suf) return true;
+      if (lower.endsWith(' ' + suf) || lower.endsWith('-' + suf) || lower.endsWith('_' + suf) || lower === suf) return true;
     }
+    if (lower.endsWith('vevo') || lower.endsWith('topic')) return true;
 
     const knownCurators = [
       '7clouds', 't-series', 'sonymusicindiavevo', 'zee music company', 'tips official',
@@ -164,37 +175,158 @@ export function parseTrackMeta(rawTitle: string, rawArtist?: string | null): { t
   };
 
   const cleanNoise = (str: string) => {
-    return str
-      .replace(/\s*[\(\[\{]\s*(?:official\s+music\s+video|official\s+lyric\s+video|official\s+video|official\s+audio|official\s+visualizer|lyric\s+video|lyrics\s+video|full\s+song|full\s+video|music\s+video|lyrics|lyric|audio|visualizer|video|4k|hd|remastered|hq|explicit|clean)\s*[\)\]\}]\s*/gi, ' ')
-      .replace(/\s*[-–—|]\s*(?:official\s+video|official\s+audio|lyrics|lyric|visualizer|audio)\s*$/i, '')
-      .replace(/\s+/g, ' ')
-      .trim();
+    let s = str;
+    s = s.replace(/\s*[-–—|:]\s*(?:official\s+(?:music\s+)?video|official\s+audio|official\s+visualizer|lyrics|lyric\s+video|visualizer|audio|video|clip\s+officiel|audio\s+oficial)\s*$/i, '');
+    s = s.replace(/\s*[\(\[\{]([^\)\]\}]+)[\)\]\}]\s*/g, (match, inner) => {
+      const lower = inner.toLowerCase();
+      if (/\b(?:feat|ft\.?|featuring|with|remix|mix|edit|version|acoustic|live|cover|instrumental|orchestral|karaoke|vip|deluxe|reprise)\b/i.test(lower)) {
+        return match;
+      }
+      if (/\b(?:official|video|music\s+video|lyric|lyrics|audio|visualizer|visualiser|clip|officiel|oficial|4k|hd|hq|1080p|720p|remastered|full\s+song|full\s+audio|stream|out\s+now|free\s+download|premiere)\b/i.test(lower)) {
+        return ' ';
+      }
+      return match;
+    });
+    s = s.replace(/(^|\s)["'«“]([^"']+)["'»”](\s|$)/g, '$1$2$3');
+    s = s.trim();
+    if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'")) || (s.startsWith('“') && s.endsWith('”'))) {
+      s = s.slice(1, -1).trim();
+    }
+    return s.replace(/\s+/g, ' ').trim();
   };
 
-  // Check if title has format: "Artist - Song Title" or "Artist - Song Title (Lyrics)"
-  const sepMatch = title.match(/^([^–—\-|]+?)\s*[-–—|]\s*(.+)$/);
-  if (sepMatch) {
-    const candidateArtist = cleanArtist(sepMatch[1].trim());
-    const candidateTitle = cleanNoise(sepMatch[2].trim());
+  // Find separator outside parentheses/brackets so hyphenated names (Anne-Marie, Jay-Z) or parenthetical phrases are preserved
+  const splitOutsideParens = (str: string): [string, string] | null => {
+    let depth = 0;
+    for (let i = 0; i < str.length; i++) {
+      const ch = str[i];
+      if (ch === '(' || ch === '[' || ch === '{') depth++;
+      else if (ch === ')' || ch === ']' || ch === '}') depth = Math.max(0, depth - 1);
+      else if (depth === 0) {
+        const sub = str.slice(i);
+        const m = sub.match(/^\s+(?:[-–—|:]|\/\/)\s+/);
+        if (m) {
+          const left = str.slice(0, i).trim();
+          const right = str.slice(i + m[0].length).trim();
+          if (left && right) {
+            return [left, right];
+          }
+        }
+      }
+    }
+    return null;
+  };
 
-    if (candidateArtist.length > 0 && candidateArtist.length <= 60 && candidateTitle.length > 0) {
-      if (isChannelOrCurator(artist) || !artist || artist.toLowerCase() === candidateArtist.toLowerCase()) {
+  const sep = splitOutsideParens(title);
+  if (sep) {
+    const [leftRaw, rightRaw] = sep;
+    const candidateArtist = cleanArtist(leftRaw);
+    const candidateTitle = cleanNoise(rightRaw);
+
+    if (
+      candidateArtist.length > 0 &&
+      candidateArtist.length <= 60 &&
+      candidateTitle.length > 0 &&
+      !hasUnbalancedParens(candidateArtist) &&
+      !hasUnbalancedParens(candidateTitle)
+    ) {
+      if (isChannelOrCurator(candidateArtist)) {
+        const subMeta = parseTrackMeta(rightRaw, artist);
+        if (subMeta.artist && subMeta.artist !== candidateArtist) {
+          return subMeta;
+        }
+      }
+
+      const artistLower = artist.toLowerCase();
+      const candLower = candidateArtist.toLowerCase();
+      const candNorm = candLower.replace(/[^a-z0-9]/g, '');
+      const artNorm = artistLower.replace(/[^a-z0-9]/g, '');
+
+      // If artist is unknown or a YouTube curator/channel, use the artist from the title
+      if (isChannelOrCurator(artist)) {
         return {
           title: candidateTitle,
-          artist: candidateArtist
+          artist: candidateArtist,
         };
       }
-      return {
-        title: candidateTitle,
-        artist: candidateArtist
-      };
+
+      // If candidate artist matches the known artist (e.g. "Alan Walker - Faded")
+      const artistMatches = candNorm.length >= 3 && artNorm.length >= 3 && (
+        candNorm === artNorm ||
+        candNorm.startsWith(artNorm) ||
+        artNorm.startsWith(candNorm) ||
+        candLower.includes(artistLower) ||
+        artistLower.includes(candLower)
+      );
+
+      if (artistMatches) {
+        return {
+          title: candidateTitle,
+          artist: candidateArtist.length >= artist.length || candidateArtist.includes(' ') ? candidateArtist : artist,
+        };
+      }
+
+      // If title is in "Title - Artist" format matching the known artist
+      const rightArtist = cleanArtist(rightRaw);
+      const rightLower = rightArtist.toLowerCase();
+      const rightNorm = rightLower.replace(/[^a-z0-9]/g, '');
+      const rightMatches = rightNorm.length >= 3 && artNorm.length >= 3 && (
+        rightNorm === artNorm ||
+        rightNorm.startsWith(artNorm) ||
+        artNorm.startsWith(rightNorm) ||
+        rightLower.includes(artistLower) ||
+        artistLower.includes(rightLower)
+      );
+
+      if (rightMatches) {
+        return {
+          title: cleanNoise(leftRaw),
+          artist: rightArtist.length >= artist.length || rightArtist.includes(' ') ? rightArtist : artist,
+        };
+      }
     }
   }
 
   return {
     title: cleanNoise(title) || rawTitle,
-    artist: artist
+    artist: artist,
   };
+}
+
+export function getTrackCoverUrl(track: { cover?: string | null; url?: string | null } | null | undefined): string {
+  if (!track) return '';
+  if (track.cover && track.cover.trim()) return track.cover.trim();
+  if (track.url) {
+    const ytMatch = track.url.match(/(?:v=|youtu\.be\/|\/v\/|\/embed\/|\/shorts\/)([a-zA-Z0-9_-]{11})/);
+    if (ytMatch) {
+      return `https://i.ytimg.com/vi/${ytMatch[1]}/mqdefault.jpg`;
+    }
+  }
+  return '';
+}
+
+export function handleThumbnailError(e: React.SyntheticEvent<HTMLImageElement, Event>) {
+  const img = e.currentTarget;
+  const currentSrc = img.src || '';
+
+  const ytMatch = currentSrc.match(/(?:i\.ytimg\.com|img\.youtube\.com)\/vi\/([a-zA-Z0-9_-]{11})\/([a-z0-9_]+)\.jpg/i);
+  if (ytMatch) {
+    const id = ytMatch[1];
+    const quality = ytMatch[2];
+
+    if (quality === 'mqdefault') {
+      img.src = `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+      return;
+    } else if (quality === 'hqdefault') {
+      img.src = `https://img.youtube.com/vi/${id}/mqdefault.jpg`;
+      return;
+    } else if (quality === 'default') {
+      img.src = `https://img.youtube.com/vi/${id}/hqdefault.jpg`;
+      return;
+    }
+  }
+
+  img.style.display = 'none';
 }
 
 export const getTrackGradient = (title?: string | null, artist?: string | null): string => {

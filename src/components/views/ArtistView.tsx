@@ -575,7 +575,7 @@ export const ArtistView: React.FC<ArtistViewProps> = React.memo(({
                     index={i}
                     isActive={currentTrack?.url === track.url}
                     isHovered={hoveredTrackUrl === track.url}
-                    isLoadingTrack={(loadingTrackUrl === track.url || (currentTrack?.url === track.url && isLoadingTrack)) && !isPlaying}
+                    isLoadingTrack={loadingTrackUrl === track.url || (currentTrack?.url === track.url && isLoadingTrack)}
                     isPlaying={currentTrack?.url === track.url && isPlaying}
                     isLiked={isTrackLiked(track)}
                     isDownloading={downloadingTracks[track.url] || 0}

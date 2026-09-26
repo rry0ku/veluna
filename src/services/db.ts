@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { Playlist, Track, ListeningEvent } from '../types';
+import { getTrackCoverUrl } from '../utils';
 
 export interface DbTrackStat {
   url: string;
@@ -26,7 +27,7 @@ export async function dbSavePlaylist(playlist: Playlist): Promise<void> {
       artist: t.artist || '',
       duration: t.duration || '0:00',
       url: t.url || '',
-      cover: t.cover || '',
+      cover: getTrackCoverUrl(t),
       media_type: t.mediaType || 'music',
     }));
 
@@ -58,7 +59,7 @@ export async function dbGetPlaylists(): Promise<Playlist[]> {
         artist: t.artist,
         duration: t.duration,
         url: t.url,
-        cover: t.cover,
+        cover: getTrackCoverUrl(t),
         mediaType: t.media_type || 'music',
       })),
     }));

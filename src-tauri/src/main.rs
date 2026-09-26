@@ -3504,6 +3504,7 @@ fn start_mpv_event_listener(app_handle: tauri::AppHandle) {
                         r#"{"command": ["observe_property", 2, "pause"]}"#,
                         r#"{"command": ["observe_property", 3, "duration"]}"#,
                         r#"{"command": ["observe_property", 4, "eof-reached"]}"#,
+                        r#"{"command": ["observe_property", 5, "audio-codec-name"]}"#,
                     ];
                     for cmd in obs_cmds {
                         let _ = writer.write_all(cmd.as_bytes());
@@ -3522,11 +3523,23 @@ fn start_mpv_event_listener(app_handle: tauri::AppHandle) {
                                         let mut state = current_playback_state().lock().unwrap();
                                         let mut changed = false;
                                         match name {
+                                            "audio-codec-name" => {
+                                                if let Some(codec) = v["data"].as_str() {
+                                                    let trimmed_c = codec.trim();
+                                                    if !trimmed_c.is_empty() && trimmed_c != "null" && trimmed_c != "none" {
+                                                        if !state.playing && !state.paused {
+                                                            state.playing = true;
+                                                            let _ = app_handle.emit("mpv_track_started", ());
+                                                        }
+                                                        changed = true;
+                                                    }
+                                                }
+                                            }
                                             "time-pos" => {
                                                 if let Some(pos) = v["data"].as_f64() {
                                                     let p = safe_f64(pos);
                                                     state.position = p;
-                                                    if p > 0.05 && !state.playing && !state.paused {
+                                                    if p > 0.01 && !state.playing && !state.paused {
                                                         state.playing = true;
                                                         let _ = app_handle.emit("mpv_track_started", ());
                                                     }
@@ -3599,6 +3612,17 @@ fn start_mpv_event_listener(app_handle: tauri::AppHandle) {
                                             let s_clone = current_playback_state().lock().unwrap().clone();
                                             let _ = app_handle.emit("mpv_playback_state", &s_clone);
                                         }
+                                    }
+                                    "file-loaded" => {
+                                        {
+                                            let mut state = current_playback_state().lock().unwrap();
+                                            if !state.paused {
+                                                state.playing = true;
+                                            }
+                                        }
+                                        let _ = app_handle.emit("mpv_track_started", ());
+                                        let s_clone = current_playback_state().lock().unwrap().clone();
+                                        let _ = app_handle.emit("mpv_playback_state", &s_clone);
                                     }
                                     "playback-restart" => {
                                         {

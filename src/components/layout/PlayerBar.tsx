@@ -18,7 +18,7 @@ import {
   VolumeX,
 } from 'lucide-react';
 import { Track, AudioInfo, RepeatMode, CtxMenu } from '../../types';
-import { getTrackGradient, formatTime, parseDurationToSeconds, parseTrackMeta, parseArtistParts } from '../../utils';
+import { getTrackGradient, formatTime, parseDurationToSeconds, parseTrackMeta, parseArtistParts, handleThumbnailError } from '../../utils';
 import { invoke } from '@tauri-apps/api/core';
 import { WaveformBar } from '../WaveformBar';
 import { SpeedSelector } from '../SpeedSelector';
@@ -186,15 +186,19 @@ export const PlayerBar: React.FC<PlayerBarProps> = React.memo(({
               onMouseEnter={e=>{ const ov=e.currentTarget.querySelector<HTMLElement>('.art-ov'); if(ov) ov.style.opacity='1'; }}
               onMouseLeave={e=>{ const ov=e.currentTarget.querySelector<HTMLElement>('.art-ov'); if(ov) ov.style.opacity='0'; }}>
               <FileMusic size={18} style={{position: 'absolute', color:"rgba(255,255,255,0.25)"}}/>
-              {currentTrack.cover && (
-                <img
-                  src={getTrackCover(currentTrack) || currentTrack.cover}
-                  alt={currentTrack.title}
-                  style={{position: 'absolute', inset: 0, width:"100%",height:"100%",objectFit:"cover"}}
-                  onError={e => { e.currentTarget.style.display = 'none'; }}
-                />
-              )}
-              {isLoadingTrack && !isPlaying
+              {(() => {
+                const coverSrc = getTrackCover(currentTrack) || currentTrack.cover;
+                if (!coverSrc) return null;
+                return (
+                  <img
+                    src={coverSrc}
+                    alt={currentTrack.title}
+                    style={{position: 'absolute', inset: 0, width:"100%",height:"100%",objectFit:"cover"}}
+                    onError={handleThumbnailError}
+                  />
+                );
+              })()}
+              {isLoadingTrack
                 ? <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.2)",display:"flex",alignItems:"center",justifyContent:"center"}}>
                     <svg width="22" height="22" viewBox="0 0 24 24" style={{animation:"spin 0.9s cubic-bezier(0.4, 0, 0.2, 1) infinite"}}>
                       <circle cx="12" cy="12" r="9" fill="none" stroke="rgba(226,221,217,0.2)" strokeWidth="2.2"/>
@@ -242,7 +246,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = React.memo(({
                       >
                         {meta.title || currentTrack.title}
                       </div>
-                      {isLoadingTrack && !isPlaying ? (
+                      {isLoadingTrack ? (
                         <div style={{ display: "flex", alignItems: "center", height: "16px" }}>
                           <div style={{ display: "flex", gap: "3px", alignItems: "center", height: "12px" }}>
                             {[0, 1, 2, 3, 4].map(i => (

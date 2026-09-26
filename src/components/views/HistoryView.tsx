@@ -13,7 +13,7 @@ import {
   MoreVertical
 } from 'lucide-react';
 import { Track, HistoryItem, CtxMenu } from '../../types';
-import { getTrackGradient, cleanArtist, parseArtistParts } from '../../utils';
+import { getTrackGradient, cleanArtist, parseArtistParts, getTrackCoverUrl, handleThumbnailError } from '../../utils';
 import { VirtualTrackList } from '../VirtualTrackList';
 
 interface HistoryViewProps {
@@ -170,7 +170,7 @@ const HistoryTrackRow = React.memo(({
             src={cover}
             alt={track.title}
             style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }}
-            onError={e => { e.currentTarget.style.display = 'none'; }}
+            onError={handleThumbnailError}
             loading="lazy"
           />
         )}
@@ -412,7 +412,7 @@ export const HistoryView: React.FC<HistoryViewProps> = React.memo(({
 
   const [searchQ, setSearchQ] = useState('');
 
-  const getTrackCover = customGetTrackCover || ((t: Track | null | undefined) => t?.cover || '');
+  const getTrackCover = customGetTrackCover || ((t: Track | null | undefined) => getTrackCoverUrl(t));
 
   // Guaranteed Deduplication by track.url (keeps newest instance)
   const uniqueHistory = useMemo(() => {

@@ -22,7 +22,7 @@ import {
 import { Track, Playlist, LocalTrack, CtxMenu, SettingsTab, FollowedArtist } from '../../types';
 import { GENRES, matchGenreTrack } from '../../constants';
 import { invoke } from '@tauri-apps/api/core';
-import { getTrackGradient, cleanArtist, globalArtistAvatarCache } from '../../utils';
+import { getTrackGradient, cleanArtist, globalArtistAvatarCache, getTrackCoverUrl, handleThumbnailError } from '../../utils';
 import { TrackRow, TrackRowSkeleton } from '../TrackRow';
 import { VirtualTrackList } from '../VirtualTrackList';
 import { BatchActionBar } from '../BatchActionBar';
@@ -528,7 +528,7 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
   const playAll = customPlayAll || ((list: Track[]) => {
     if (list.length > 0) handlePlayInContext(list[0], list);
   });
-  const getTrackCover = customGetTrackCover || ((track: Track | null | undefined) => track?.cover || '');
+  const getTrackCover = customGetTrackCover || ((track: Track | null | undefined) => getTrackCoverUrl(track));
 
   const localAsTrack: Track[] = useMemo(() => {
     return localTracks.map((lt, i) => ({
@@ -1120,7 +1120,7 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                 <div className="v-home-quickpicks-grid">
                   {recommendedTracks.slice(0, 15).map((track, cardIdx) => {
                     const isActive = currentTrack?.url === track.url;
-                    const isCardLoading = (loadingTrackUrl === track.url || (isActive && isLoadingTrack)) && !isPlaying;
+                    const isCardLoading = loadingTrackUrl === track.url || (isActive && isLoadingTrack);
                     return (
                       <div
                         key={track.url}
@@ -1171,7 +1171,7 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                                 height: '100%',
                                 objectFit: 'cover'
                               }}
-                              onError={e => { e.currentTarget.style.display = 'none'; }}
+                              onError={handleThumbnailError}
                               loading="lazy"
                             />
                           )}
@@ -1296,7 +1296,7 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
               <div className="v-home-quickpicks-grid">
                 {quickPicks.slice(0, 10).map((track, cardIdx) => {
                   const isActive = currentTrack?.url === track.url;
-                  const isCardLoading = (loadingTrackUrl === track.url || (isActive && isLoadingTrack)) && !isPlaying;
+                  const isCardLoading = loadingTrackUrl === track.url || (isActive && isLoadingTrack);
                   return (
                     <div
                       key={track.url}
@@ -1347,7 +1347,7 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                               height: '100%',
                               objectFit: 'cover'
                             }}
-                            onError={e => { e.currentTarget.style.display = 'none'; }}
+                            onError={handleThumbnailError}
                             loading="lazy"
                           />
                         )}
@@ -1525,7 +1525,7 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                       >
                         {genreTracks.map((track, tIdx) => {
                           const isActive = currentTrack?.url === track.url;
-                          const isCardLoading = (loadingTrackUrl === track.url || (isActive && isLoadingTrack)) && !isPlaying;
+                          const isCardLoading = loadingTrackUrl === track.url || (isActive && isLoadingTrack);
                           return (
                             <div
                               key={track.url}
@@ -1565,7 +1565,7 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                                       height: '100%',
                                       objectFit: 'cover'
                                     }}
-                                    onError={e => { e.currentTarget.style.display = 'none'; }}
+                                    onError={handleThumbnailError}
                                     loading="lazy"
                                   />
                                 )}
@@ -1740,7 +1740,7 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                                     height: '100%',
                                     objectFit: 'cover'
                                   }}
-                                  onError={e => { e.currentTarget.style.display = 'none'; }}
+                                  onError={handleThumbnailError}
                                   loading="lazy"
                                 />
                               )}
@@ -1892,7 +1892,7 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                                     height: '100%',
                                     objectFit: 'cover'
                                   }}
-                                  onError={e => { e.currentTarget.style.display = 'none'; }}
+                                  onError={handleThumbnailError}
                                   loading="lazy"
                                 />
                               )}
@@ -2499,7 +2499,7 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                           index={i}
                           isActive={currentTrack?.url === track.url}
                           isHovered={hoveredTrackUrl === track.url}
-                          isLoadingTrack={(loadingTrackUrl === track.url || (currentTrack?.url === track.url && isLoadingTrack)) && !isPlaying}
+                          isLoadingTrack={loadingTrackUrl === track.url || (currentTrack?.url === track.url && isLoadingTrack)}
                           isPlaying={isPlaying}
                           isLiked={isTrackLiked(track.url)}
                           isDownloading={(downloadingTracks[track.url] ?? 0)}

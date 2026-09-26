@@ -19,7 +19,7 @@ import {
   Layers,
 } from 'lucide-react';
 import { Track, Playlist, CtxMenu } from '../../types';
-import { getTrackGradient, saveLS, cleanArtist, parseDurationToSeconds, findDuplicateTracks } from '../../utils';
+import { getTrackGradient, saveLS, cleanArtist, parseDurationToSeconds, findDuplicateTracks, getTrackCoverUrl, handleThumbnailError } from '../../utils';
 import { TrackRow } from '../TrackRow';
 import { ThemedSelect } from '../ThemedSelect';
 import { BatchActionBar } from '../BatchActionBar';
@@ -173,8 +173,8 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
   const getPlaylistCover = customGetPlaylistCover || ((playlist: Playlist) => {
     if (playlist.id === 'p1') return null;
     if (playlist.customCover) return playlist.customCover;
-    const firstWithCover = playlist.tracks.find(t => t.cover);
-    return firstWithCover ? firstWithCover.cover : null;
+    const firstWithCover = playlist.tracks.find(t => getTrackCoverUrl(t));
+    return firstWithCover ? getTrackCoverUrl(firstWithCover) : null;
   });
 
   const playAll = customPlayAll || ((list: Track[]) => {
@@ -611,7 +611,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                         keyExtractor={(t, i) => `${t.url}_${i}`}
                         renderItem={(t, i) => {
                           const origIdx = openPlaylist.tracks.indexOf(t);
-                          const enrichedTrack = { ...t, cover: t.cover || '' };
+                          const enrichedTrack = { ...t, cover: getTrackCoverUrl(t) };
                           return (
                             <div
                               key={enrichedTrack.url + origIdx}
@@ -670,7 +670,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                                   onRemove={() => removeFromPlaylist(openPlaylist.id, enrichedTrack.url)}
                                   isActive={currentTrack?.url === enrichedTrack.url}
                                   isHovered={hoveredTrackUrl === enrichedTrack.url}
-                                  isLoadingTrack={(loadingTrackUrl === enrichedTrack.url || (currentTrack?.url === enrichedTrack.url && isLoadingTrack)) && !isPlaying}
+                                  isLoadingTrack={loadingTrackUrl === enrichedTrack.url || (currentTrack?.url === enrichedTrack.url && isLoadingTrack)}
                                   isPlaying={isPlaying}
                                   isLiked={isTrackLiked(enrichedTrack.url)}
                                   isDownloading={(downloadingTracks[enrichedTrack.url] ?? 0)}
@@ -1277,7 +1277,10 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                         onClick={() => handlePlayInContext(track, playHistory.slice(0, 4))}
                         className="v-library-recent-row">
                         <div className="v-library-recent-art" style={{background: getTrackGradient(track.title, track.artist)}}>
-                          {track.cover ? <img src={track.cover} alt="" onError={e => { e.currentTarget.style.display = 'none'; }} /> : <Music size={12} style={{color:"rgba(255,255,255,0.2)"}} />}
+                          {(() => {
+                            const c = getTrackCoverUrl(track);
+                            return c ? <img src={c} alt="" onError={handleThumbnailError} /> : <Music size={12} style={{color:"rgba(255,255,255,0.2)"}} />;
+                          })()}
                         </div>
                         <div style={{flex:1,minWidth:0}}>
                           <div className="v-library-recent-title">{track.title}</div>

@@ -512,11 +512,15 @@ export function App() {
 
   const getTrackCover = useCallback((track: Track | null | undefined) => {
     if (!track) return '';
-    if (track.cover) return track.cover;
+    if (track.cover && track.cover.trim()) return track.cover.trim();
     if (track.url?.startsWith('local://')) {
       const path = track.url.slice(8);
       const found = localTracks.find(lt => lt.path === path);
       if (found && found.cover) return found.cover;
+    }
+    const ytMatch = track.url?.match(/(?:v=|youtu\.be\/|\/v\/|\/embed\/|\/shorts\/)([a-zA-Z0-9_-]{11})/);
+    if (ytMatch) {
+      return `https://i.ytimg.com/vi/${ytMatch[1]}/mqdefault.jpg`;
     }
     return '';
   }, [localTracks]);
@@ -1515,18 +1519,13 @@ export function App() {
 
         for (const line of lines) {
           if (line.startsWith('#EXTINF:')) {
-            const meta = line.slice(line.indexOf(',') + 1);
-            const dashIdx = meta.indexOf(' - ');
-            if (dashIdx !== -1) {
-              pendingArtist = meta.slice(0, dashIdx).trim();
-              pendingTitle = meta.slice(dashIdx + 3).trim();
-            } else {
-              pendingTitle = meta.trim();
-              pendingArtist = '';
-            }
+            const metaStr = line.slice(line.indexOf(',') + 1).trim();
+            const parsed = parseTrackMeta(metaStr, '');
+            pendingArtist = parsed.artist;
+            pendingTitle = parsed.title;
           } else if (!line.startsWith('#')) {
             const url = line;
-            const ytId = url.match(/(?:[?&]v=|youtu\.be\/)([A-Za-z0-9_-]{11})/)?.[1] || '';
+            const ytId = url.match(/(?:[?&]v=|youtu\.be\/|\/v\/|\/embed\/|\/shorts\/)([A-Za-z0-9_-]{11})/)?.[1] || '';
             if (!pendingTitle) {
               pendingTitle = ytId ? 'YouTube Track' : url.split('/').pop()?.replace(/\.[^.]+$/, '') || 'Track';
             }

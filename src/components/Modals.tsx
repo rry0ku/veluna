@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { PlusCircle, ChevronDown, FileOutput, Upload, X, CheckCircle2, Trash2, Minus } from 'lucide-react';
 import { Track } from '../types';
-import { cleanArtist } from '../utils';
+import { cleanArtist, parseTrackMeta } from '../utils';
 import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 
@@ -1028,28 +1028,14 @@ export function YtImportModal({
           artistStr = artistStr.slice(0, -4).trim();
         }
 
-        if (titleStr.includes(' - ')) {
-          const dashIdx = titleStr.indexOf(' - ');
-          const left = titleStr.slice(0, dashIdx).trim();
-          const right = titleStr.slice(dashIdx + 3).trim();
-          if (left && right) {
-            artistStr = left;
-            titleStr = right;
-          }
-        }
-
-        titleStr = titleStr
-          .replace(/\s*[\(\[](official\s*)?(music\s*)?(video|audio|lyric|lyrics|visualizer|hd|4k)?[\)\]]/gi, '')
-          .replace(/\s*[\(\[]from\s+the\s+.*[\)\]]/gi, '')
-          .trim() || titleStr;
-
-        const cleaned = cleanArtist(artistStr);
-        const finalArtist = cleaned ? cleaned : (artistStr && artistStr !== 'Unknown' && artistStr !== '?' ? artistStr : 'YouTube');
+        const meta = parseTrackMeta(titleStr, artistStr);
+        const finalTitle = meta.title || titleStr;
+        const finalArtist = meta.artist || 'YouTube';
         const cover = `https://i.ytimg.com/vi/${idTrim}/mqdefault.jpg`;
 
         return {
           id: idx,
-          title: titleStr,
+          title: finalTitle,
           artist: finalArtist,
           duration: duration?.trim() || '0:00',
           url: `https://youtube.com/watch?v=${idTrim}`,

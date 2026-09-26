@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { ListOrdered, ListPlus, Music, Play, X, FileMusic } from 'lucide-react';
 import { Track, Playlist, CtxMenu } from '../../types';
-import { getTrackGradient, cleanArtist } from '../../utils';
+import { getTrackGradient, cleanArtist, getTrackCoverUrl, handleThumbnailError } from '../../utils';
 
 interface QueuePanelProps {
   isQueueOpen: boolean;
@@ -215,12 +215,12 @@ export const QueuePanel: React.FC<QueuePanelProps> = React.memo(({
                   alignItems: 'center',
                   justifyContent: 'center'
                 }}>
-                  {currentTrack.cover ? (
-                    <img src={currentTrack.cover} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                  {getTrackCoverUrl(currentTrack) ? (
+                    <img src={getTrackCoverUrl(currentTrack)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={handleThumbnailError} alt="" />
                   ) : (
                     <FileMusic size={16} style={{ color: 'var(--v-fg2)' }} />
                   )}
-                  {isLoadingTrack && !isPlaying ? (
+                  {isLoadingTrack ? (
                     <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" style={{ animation: 'spin 0.9s cubic-bezier(0.4, 0, 0.2, 1) infinite' }}>
                         <circle cx="12" cy="12" r="8.5" fill="none" stroke="rgba(255,255,255,0.15)" strokeWidth="2.5" />
@@ -324,7 +324,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = React.memo(({
                             display: "flex", alignItems: "center", justifyContent: "center"
                           }}>
                             <Music size={12} style={{ position: 'absolute', color: 'rgba(255,255,255,0.25)' }} />
-                            {track.cover && <img src={track.cover} style={{ position: 'absolute', inset: 0, width: "100%", height: "100%", objectFit: "cover" }} onError={e => { e.currentTarget.style.display = 'none'; }} alt="" />}
+                            {getTrackCoverUrl(track) && <img src={getTrackCoverUrl(track)} style={{ position: 'absolute', inset: 0, width: "100%", height: "100%", objectFit: "cover" }} onError={handleThumbnailError} alt="" />}
                           </div>
                           <div className="v-queue-play-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff' }}>
                             <Play size={12} fill="currentColor" />
