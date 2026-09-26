@@ -213,7 +213,7 @@ export function App() {
   const [discordBtnLabel, setDiscordBtnLabel] = useState<string>(() => loadLS('vg_discordBtnLabel', ''));
   const [discordBtnUrl, setDiscordBtnUrl] = useState<string>(() => loadLS('vg_discordBtnUrl', ''));
   const [autoplayEnabled, setAutoplayEnabled] = useState<boolean>(() => loadLS('vg_autoplay', true));
-  const [appVersion, setAppVersion] = useState<string>('0.1.5');
+  const [appVersion, setAppVersion] = useState<string>('0.1.6');
   const [updateAvailable, setUpdateAvailable] = useState<string | null>(null);
 
   const setCacheEnabled = useCallback((enabled: boolean) => {

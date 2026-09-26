@@ -1,6 +1,6 @@
 # Maintainer: rry0ku <https://github.com/rry0ku>
 pkgname=veluna
-pkgver=0.1.5
+pkgver=0.1.6
 pkgrel=1
 pkgdesc="Ad-free desktop music streaming powered by YouTube"
 arch=('x86_64')
