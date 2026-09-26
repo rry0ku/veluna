@@ -126,7 +126,7 @@ fn mpris_notify() {
 }
 #[cfg(target_os = "windows")]
 fn mpris_notify() {
-    let meta = mpris_meta().lock().unwrap().clone();
+    let meta = mpris_meta().lock().unwrap_or_else(|p| p.into_inner()).clone();
     windows_smtc::update_windows_smtc(&meta);
 }
 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
@@ -368,11 +368,11 @@ fn network_config() -> &'static Mutex<NetworkConfig> {
 }
 
 fn get_proxy_url() -> Option<String> {
-    network_config().lock().unwrap().proxy_url.clone()
+    network_config().lock().unwrap_or_else(|p| p.into_inner()).proxy_url.clone()
 }
 
 fn get_custom_instance() -> Option<String> {
-    network_config().lock().unwrap().custom_instance.clone()
+    network_config().lock().unwrap_or_else(|p| p.into_inner()).custom_instance.clone()
 }
 
 fn apply_proxy_to_cmd(cmd: &mut std::process::Command) {
@@ -381,7 +381,8 @@ fn apply_proxy_to_cmd(cmd: &mut std::process::Command) {
     }
 }
 
-static CURRENT_HTTP_CLIENT: std::sync::OnceLock<Mutex<Option<(Option<String>, reqwest::Client)>>> = std::sync::OnceLock::new();
+type HttpClientCache = Mutex<Option<(Option<String>, reqwest::Client)>>;
+static CURRENT_HTTP_CLIENT: std::sync::OnceLock<HttpClientCache> = std::sync::OnceLock::new();
 
 fn create_http_client(timeout_ms: u64) -> reqwest::Client {
     let mut builder = reqwest::Client::builder()
@@ -400,7 +401,7 @@ fn create_http_client(timeout_ms: u64) -> reqwest::Client {
 fn get_http_client() -> reqwest::Client {
     let current_proxy = get_proxy_url();
     let cache_lock = CURRENT_HTTP_CLIENT.get_or_init(|| Mutex::new(None));
-    let mut guard = cache_lock.lock().unwrap();
+    let mut guard = cache_lock.lock().unwrap_or_else(|p| p.into_inner());
     if let Some((ref cached_proxy, ref client)) = *guard {
         if cached_proxy == &current_proxy {
             return client.clone();
@@ -594,9 +595,9 @@ async fn search_youtube_direct(query: &str) -> Option<String> {
                 let mut video_id = None;
 
                 if let Some(flex_cols) = item.get("flexColumns").and_then(|f| f.as_array()) {
-                    if let Some(col0) = flex_cols.get(0) {
+                    if let Some(col0) = flex_cols.first() {
                         if let Some(runs) = col0.pointer("/musicResponsiveListItemFlexColumnRenderer/text/runs").and_then(|r| r.as_array()) {
-                            if let Some(run0) = runs.get(0) {
+                            if let Some(run0) = runs.first() {
                                 if let Some(t) = run0.get("text").and_then(|t| t.as_str()) {
                                     title = t.to_string();
                                 }
@@ -635,9 +636,9 @@ async fn search_youtube_direct(query: &str) -> Option<String> {
                     }
                 }
                 if let Some(fixed_cols) = item.get("fixedColumns").and_then(|f| f.as_array()) {
-                    if let Some(col0) = fixed_cols.get(0) {
+                    if let Some(col0) = fixed_cols.first() {
                         if let Some(runs) = col0.pointer("/musicResponsiveListItemFixedColumnRenderer/text/runs").and_then(|r| r.as_array()) {
-                            if let Some(run0) = runs.get(0) {
+                            if let Some(run0) = runs.first() {
                                 if let Some(d) = run0.get("text").and_then(|t| t.as_str()) {
                                     duration = d.to_string();
                                 }
@@ -737,9 +738,9 @@ async fn search_youtube_artists_direct(query: &str) -> Option<String> {
                 let mut browse_id = String::new();
 
                 if let Some(flex_cols) = item.get("flexColumns").and_then(|f| f.as_array()) {
-                    if let Some(col0) = flex_cols.get(0) {
+                    if let Some(col0) = flex_cols.first() {
                         if let Some(runs) = col0.pointer("/musicResponsiveListItemFlexColumnRenderer/text/runs").and_then(|r| r.as_array()) {
-                            if let Some(run0) = runs.get(0) {
+                            if let Some(run0) = runs.first() {
                                 if let Some(t) = run0.get("text").and_then(|t| t.as_str()) {
                                     name = t.to_string();
                                 }
@@ -788,7 +789,7 @@ async fn search_youtube_artists_direct(query: &str) -> Option<String> {
                 let mut browse_id = String::new();
 
                 if let Some(runs) = item.pointer("/title/runs").and_then(|r| r.as_array()) {
-                    if let Some(run0) = runs.get(0) {
+                    if let Some(run0) = runs.first() {
                         if let Some(t) = run0.get("text").and_then(|t| t.as_str()) {
                             name = t.to_string();
                         }
@@ -823,7 +824,7 @@ async fn search_youtube_artists_direct(query: &str) -> Option<String> {
                 let mut browse_id = String::new();
 
                 if let Some(runs) = item.pointer("/title/runs").and_then(|r| r.as_array()) {
-                    if let Some(run0) = runs.get(0) {
+                    if let Some(run0) = runs.first() {
                         if let Some(t) = run0.get("text").and_then(|t| t.as_str()) {
                             name = t.to_string();
                         }
@@ -1011,9 +1012,9 @@ async fn fetch_artist_browse_details(browse_id: &str) -> Option<(String, String,
                 let mut video_id = None;
 
                 if let Some(flex_cols) = item.get("flexColumns").and_then(|f| f.as_array()) {
-                    if let Some(col0) = flex_cols.get(0) {
+                    if let Some(col0) = flex_cols.first() {
                         if let Some(runs) = col0.pointer("/musicResponsiveListItemFlexColumnRenderer/text/runs").and_then(|r| r.as_array()) {
-                            if let Some(run0) = runs.get(0) {
+                            if let Some(run0) = runs.first() {
                                 if let Some(t) = run0.get("text").and_then(|t| t.as_str()) {
                                     title = t.to_string();
                                 }
@@ -1134,7 +1135,7 @@ async fn get_artist_page_details(artist_name: String) -> Result<String, String> 
 
         if let Some(line) = matched_line {
             let parts: Vec<&str> = line.split("====").collect();
-            if let Some(n) = parts.get(0) { if !n.trim().is_empty() { canonical_name = n.trim().to_string(); } }
+            if let Some(n) = parts.first() { if !n.trim().is_empty() { canonical_name = n.trim().to_string(); } }
             if let Some(a) = parts.get(1) { if !a.trim().is_empty() { avatar = a.trim().to_string(); } }
             if let Some(bid) = parts.get(3) { if !bid.trim().is_empty() { browse_id = bid.trim().to_string(); } }
         }
@@ -1185,12 +1186,11 @@ async fn get_artist_page_details(artist_name: String) -> Result<String, String> 
                     let title = parts[0].trim();
                     let uploader = parts[1].trim();
                     let vid = parts[3].trim();
-                    if !seen_ids.contains(vid) && !vid.is_empty() && vid != "NA" {
-                        if track_matches_artist(title, uploader, &canonical_name) || tracks.is_empty() {
+                    if !seen_ids.contains(vid) && !vid.is_empty() && vid != "NA"
+                        && (track_matches_artist(title, uploader, &canonical_name) || tracks.is_empty()) {
                             seen_ids.insert(vid.to_string());
                             tracks.push(line.to_string());
                         }
-                    }
                 }
             }
         }
@@ -1206,12 +1206,11 @@ async fn get_artist_page_details(artist_name: String) -> Result<String, String> 
                     let title = parts[0].trim();
                     let uploader = parts[1].trim();
                     let vid = parts[3].trim();
-                    if !seen_ids.contains(vid) && !vid.is_empty() && vid != "NA" {
-                        if track_matches_artist(title, uploader, &canonical_name) || tracks.is_empty() {
+                    if !seen_ids.contains(vid) && !vid.is_empty() && vid != "NA"
+                        && (track_matches_artist(title, uploader, &canonical_name) || tracks.is_empty()) {
                             seen_ids.insert(vid.to_string());
                             tracks.push(line.to_string());
                         }
-                    }
                 }
             }
         }
@@ -1283,6 +1282,7 @@ async fn search_youtube(query: String) -> Result<String, String> {
         format!("ytsearch25:{}", q_trim)
     };
     let mut cmd = tokio::process::Command::new(bin_ytdlp());
+    cmd.kill_on_drop(true);
     cmd.args([
         &search_arg,
         "--flat-playlist",
@@ -1326,6 +1326,7 @@ async fn open_url_in_browser(app: tauri::AppHandle, url: String) -> Result<(), S
 async fn import_youtube_playlist(url: String) -> Result<String, String> {
     let u_trim = url.trim();
     let mut cmd = tokio::process::Command::new(bin_ytdlp());
+    cmd.kill_on_drop(true);
     cmd.args([
         "--flat-playlist",
         "--yes-playlist",
@@ -1596,9 +1597,9 @@ fn build_af_string(loudnorm_on: bool, skip_sil: bool, (b, m, t): (f64, f64, f64)
 }
 
 fn sync_active_af_filters() {
-    let loudnorm_on = *LOUDNORM_ENABLED.lock().unwrap();
-    let skip_sil = *SKIP_SILENCE.lock().unwrap();
-    let eq = *CURRENT_EQ.lock().unwrap();
+    let loudnorm_on = *LOUDNORM_ENABLED.lock().unwrap_or_else(|p| p.into_inner());
+    let skip_sil = *SKIP_SILENCE.lock().unwrap_or_else(|p| p.into_inner());
+    let eq = *CURRENT_EQ.lock().unwrap_or_else(|p| p.into_inner());
 
     let af_opt = build_af_string(loudnorm_on, skip_sil, eq);
     let cmd = if let Some(af_str) = af_opt {
@@ -1611,27 +1612,27 @@ fn sync_active_af_filters() {
 
 #[tauri::command]
 fn set_loudnorm_enabled(enabled: bool) -> Result<(), String> {
-    *LOUDNORM_ENABLED.lock().unwrap() = enabled;
+    *LOUDNORM_ENABLED.lock().unwrap_or_else(|p| p.into_inner()) = enabled;
     sync_active_af_filters();
     Ok(())
 }
 
 #[tauri::command]
 fn get_loudnorm_enabled() -> bool {
-    *LOUDNORM_ENABLED.lock().unwrap()
+    *LOUDNORM_ENABLED.lock().unwrap_or_else(|p| p.into_inner())
 }
 
 #[tauri::command]
 fn set_skip_silence(enabled: bool) -> Result<(), String> {
-    *SKIP_SILENCE.lock().unwrap() = enabled;
+    *SKIP_SILENCE.lock().unwrap_or_else(|p| p.into_inner()) = enabled;
     sync_active_af_filters();
     Ok(())
 }
 
 fn mpv_af_flag() -> Option<String> {
-    let loudnorm = *LOUDNORM_ENABLED.lock().unwrap();
-    let skip_silence = *SKIP_SILENCE.lock().unwrap();
-    let eq = *CURRENT_EQ.lock().unwrap();
+    let loudnorm = *LOUDNORM_ENABLED.lock().unwrap_or_else(|p| p.into_inner());
+    let skip_silence = *SKIP_SILENCE.lock().unwrap_or_else(|p| p.into_inner());
+    let eq = *CURRENT_EQ.lock().unwrap_or_else(|p| p.into_inner());
     build_af_string(loudnorm, skip_silence, eq).map(|s| format!("--af={}", s))
 }
 
@@ -1694,7 +1695,7 @@ fn ensure_mpv_running() -> bool {
 
 fn switch_track_ipc(url: &str) -> Result<(), String> {
     {
-        let mut state = current_playback_state().lock().unwrap();
+        let mut state = current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
         state.position = 0.0;
         state.duration = 0.0;
         state.playing = false;
@@ -1707,11 +1708,53 @@ fn switch_track_ipc(url: &str) -> Result<(), String> {
 }
 
 static LOG_PATH: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+static APP_CACHE_DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
 
 fn init_log_path(app: &tauri::AppHandle) {
     if let Ok(dir) = app.path().app_log_dir().or_else(|_| app.path().app_data_dir()) {
         let _ = std::fs::create_dir_all(&dir);
         let _ = LOG_PATH.set(dir.join("veluna_debug.log"));
+    }
+}
+
+fn init_cache_dir(app: &tauri::AppHandle) {
+    let dir = app.path().app_cache_dir().ok().or_else(|| {
+        #[cfg(target_os = "linux")]
+        {
+            std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join(".cache").join("com.veluna.player"))
+        }
+        #[cfg(target_os = "windows")]
+        {
+            std::env::var("LOCALAPPDATA").ok().map(|l| std::path::PathBuf::from(l).join("com.veluna.player").join("cache"))
+        }
+        #[cfg(target_os = "macos")]
+        {
+            std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join("Library").join("Caches").join("com.veluna.player"))
+        }
+    });
+
+    if let Some(d) = dir {
+        let _ = std::fs::create_dir_all(&d);
+        let _ = APP_CACHE_DIR.set(d.clone());
+        cache::migrate_legacy_cache(&d);
+    }
+}
+
+fn path_to_file_uri(path: &std::path::Path) -> String {
+    let target = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+    let lossy = target.to_string_lossy().to_string();
+    let clean = lossy.trim_start_matches(r"\\?\");
+    #[cfg(windows)]
+    {
+        format!("file:///{}", clean.replace('\\', "/"))
+    }
+    #[cfg(not(windows))]
+    {
+        if clean.starts_with('/') {
+            format!("file://{}", clean)
+        } else {
+            format!("file:///{}", clean)
+        }
     }
 }
 
@@ -1743,6 +1786,18 @@ fn extract_video_id(url: &str) -> Option<String> {
     if let Some(pos) = url.find("youtu.be/") {
         let rest = &url[pos + 9..];
         let end = rest.find('?').or_else(|| rest.find('&')).unwrap_or(rest.len());
+        let id = &rest[..end];
+        if id.len() == 11 { return Some(id.to_string()); }
+    }
+    if let Some(pos) = url.find("/shorts/") {
+        let rest = &url[pos + 8..];
+        let end = rest.find('?').or_else(|| rest.find('&')).or_else(|| rest.find('/')).unwrap_or(rest.len());
+        let id = &rest[..end];
+        if id.len() == 11 { return Some(id.to_string()); }
+    }
+    if let Some(pos) = url.find("/embed/") {
+        let rest = &url[pos + 7..];
+        let end = rest.find('?').or_else(|| rest.find('&')).or_else(|| rest.find('/')).unwrap_or(rest.len());
         let id = &rest[..end];
         if id.len() == 11 { return Some(id.to_string()); }
     }
@@ -2177,7 +2232,7 @@ async fn seek_relative(seconds: f64) -> Result<(), String> {
 async fn set_volume(volume: f64) -> Result<(), String> {
     let vol = safe_f64(volume).clamp(0.0, 150.0);
     {
-        let mut m = mpris_meta().lock().unwrap();
+        let mut m = mpris_meta().lock().unwrap_or_else(|p| p.into_inner());
         m.volume = vol / 100.0;
     }
     mpris_notify();
@@ -2243,7 +2298,7 @@ pub(crate) fn current_playback_state() -> &'static Arc<Mutex<PlaybackState>> {
 
 #[tauri::command]
 async fn get_playback_state() -> Result<PlaybackState, String> {
-    Ok(current_playback_state().lock().unwrap().clone())
+    Ok(current_playback_state().lock().unwrap_or_else(|p| p.into_inner()).clone())
 }
 
 #[tauri::command]
@@ -2261,7 +2316,7 @@ async fn seek_to_start() -> Result<(), String> {
 async fn set_playback_speed(speed: f64) -> Result<(), String> {
     let s = speed.clamp(0.5, 2.0);
     {
-        let mut m = mpris_meta().lock().unwrap();
+        let mut m = mpris_meta().lock().unwrap_or_else(|p| p.into_inner());
         m.rate = s;
     }
     mpris_notify();
@@ -2347,7 +2402,7 @@ async fn set_equalizer(bass: f64, mid: f64, treble: f64) -> Result<(), String> {
         let b = bass.clamp(-12.0, 12.0);
         let m = mid.clamp(-12.0, 12.0);
         let t = treble.clamp(-12.0, 12.0);
-        *CURRENT_EQ.lock().unwrap() = (b, m, t);
+        *CURRENT_EQ.lock().unwrap_or_else(|p| p.into_inner()) = (b, m, t);
         sync_active_af_filters();
         Ok(())
     })
@@ -2459,7 +2514,7 @@ async fn download_song(
         if let Some(err_stream) = stderr {
             std::thread::spawn(move || {
                 let reader = BufReader::new(err_stream);
-                for line in reader.lines().flatten() {
+                for line in reader.lines().map_while(Result::ok) {
                     let mut b = stderr_buf_clone.lock().unwrap_or_else(|p| p.into_inner());
                     if b.len() < 2048 {
                         if !b.is_empty() { b.push('\n'); }
@@ -2473,13 +2528,12 @@ async fn download_song(
 
         if let Some(out) = stdout {
             let reader = BufReader::new(out);
-            for line in reader.lines().flatten() {
+            for line in reader.lines().map_while(Result::ok) {
                 if line.contains("[download] Destination:") {
                     if let Some(dest) = line.split("[download] Destination:").nth(1) {
                         let path = std::path::PathBuf::from(dest.trim());
-                        if let Ok(mut tf) = target_file_clone.lock() {
-                            *tf = Some(path);
-                        }
+                        let mut tf = target_file_clone.lock().unwrap_or_else(|p| p.into_inner());
+                        *tf = Some(path);
                     }
                 }
                 if line.contains("[download]") && line.contains('%') {
@@ -2666,7 +2720,7 @@ async fn batch_download(
         });
     }
 
-    while let Some(_) = set.join_next().await {}
+    while set.join_next().await.is_some() {}
     Ok(())
 }
 
@@ -2684,7 +2738,10 @@ pub struct LocalTrack {
     pub has_cover: Option<bool>,
 }
 
-fn collect_local_tracks(dir: &std::path::Path, tracks: &mut Vec<LocalTrack>, extensions: &[&str]) {
+fn collect_local_tracks(dir: &std::path::Path, tracks: &mut Vec<LocalTrack>, extensions: &[&str], depth: usize) {
+    if depth > 10 {
+        return;
+    }
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
             let p = entry.path();
@@ -2721,8 +2778,8 @@ fn collect_local_tracks(dir: &std::path::Path, tracks: &mut Vec<LocalTrack>, ext
                         }
                     }
                 }
-            } else if p.is_dir() {
-                collect_local_tracks(&p, tracks, extensions);
+            } else if p.is_dir() && !p.is_symlink() {
+                collect_local_tracks(&p, tracks, extensions, depth + 1);
             }
         }
     }
@@ -2738,8 +2795,8 @@ async fn scan_downloads(path: String) -> Result<Vec<LocalTrack>, String> {
         if !target_path.exists() {
             return Err("Directory does not exist".to_string());
         }
-        collect_local_tracks(target_path, &mut tracks, &extensions);
-        tracks.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+        collect_local_tracks(target_path, &mut tracks, &extensions, 0);
+        tracks.sort_by_key(|a| a.title.to_lowercase());
         Ok(tracks)
     })
     .await
@@ -2794,14 +2851,18 @@ async fn rename_local_file(old_path: String, new_title: String) -> Result<String
 async fn open_in_file_manager(path: String) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
         let clean_path = expand_tilde(path.trim_start_matches("local://").trim());
+        if clean_path.is_empty() {
+            return Ok(());
+        }
         let p = std::path::Path::new(&clean_path);
 
         #[cfg(target_os = "windows")]
         {
+            use std::os::windows::process::CommandExt;
             let win_path = clean_path.replace('/', "\\");
             if p.is_file() {
                 Command::new("explorer.exe")
-                    .arg(format!("/select,{}", win_path))
+                    .raw_arg(format!("/select,\"{}\"", win_path))
                     .no_window()
                     .spawn()
                     .map_err(|e| format!("explorer failed: {}", e))?;
@@ -2811,7 +2872,7 @@ async fn open_in_file_manager(path: String) -> Result<(), String> {
                     let _ = std::fs::create_dir_all(win_dir_path);
                 }
                 Command::new("explorer.exe")
-                    .arg(&win_path)
+                    .raw_arg(format!("\"{}\"", win_path))
                     .no_window()
                     .spawn()
                     .map_err(|e| format!("explorer failed: {}", e))?;
@@ -2831,7 +2892,7 @@ async fn open_in_file_manager(path: String) -> Result<(), String> {
                     let _ = std::fs::create_dir_all(p);
                 }
                 Command::new("open")
-                    .arg(&clean_path)
+                    .args(["-a", "Finder", &clean_path])
                     .no_window()
                     .spawn()
                     .map_err(|e| format!("open failed: {}", e))?;
@@ -2840,20 +2901,172 @@ async fn open_in_file_manager(path: String) -> Result<(), String> {
 
         #[cfg(target_os = "linux")]
         {
-            let dir = if p.is_file() {
-                p.parent().map(|d| d.to_string_lossy().to_string()).unwrap_or_else(|| clean_path.clone())
+            let is_file = p.is_file();
+            let target_dir = if is_file {
+                p.parent().map(|d| d.to_path_buf()).unwrap_or_else(|| p.to_path_buf())
             } else {
-                clean_path.clone()
+                p.to_path_buf()
             };
-            let dir_path = std::path::Path::new(&dir);
-            if !dir_path.exists() {
-                let _ = std::fs::create_dir_all(dir_path);
+            if !target_dir.exists() {
+                let _ = std::fs::create_dir_all(&target_dir);
             }
-            Command::new("xdg-open")
-                .arg(&dir)
-                .no_window()
-                .spawn()
-                .map_err(|e| format!("xdg-open failed: {}", e))?;
+
+            // Function to check if a binary exists in PATH
+            fn find_fm_binary(bin: &str) -> Option<std::path::PathBuf> {
+                if let Some(paths) = std::env::var_os("PATH") {
+                    for dir in std::env::split_paths(&paths) {
+                        let full = dir.join(bin);
+                        if full.is_file() {
+                            return Some(full);
+                        }
+                    }
+                }
+                None
+            }
+
+            // Prioritize the file manager matching the current desktop environment
+            let desktop = std::env::var("XDG_CURRENT_DESKTOP")
+                .or_else(|_| std::env::var("DESKTOP_SESSION"))
+                .unwrap_or_default()
+                .to_lowercase();
+
+            let mut candidates: Vec<&str> = Vec::new();
+            if desktop.contains("kde") {
+                candidates.push("dolphin");
+            } else if desktop.contains("gnome") {
+                candidates.push("nautilus");
+            } else if desktop.contains("cinnamon") {
+                candidates.push("nemo");
+            } else if desktop.contains("xfce") {
+                candidates.push("thunar");
+            } else if desktop.contains("mate") {
+                candidates.push("caja");
+            } else if desktop.contains("lxqt") {
+                candidates.push("pcmanfm-qt");
+            } else if desktop.contains("lxde") {
+                candidates.push("pcmanfm");
+            } else if desktop.contains("pantheon") {
+                candidates.push("io.elementary.files");
+            } else if desktop.contains("deepin") {
+                candidates.push("dde-file-manager");
+            }
+
+            // Fallback list of standard graphical file managers
+            let standard_fms = [
+                "nautilus",
+                "dolphin",
+                "nemo",
+                "thunar",
+                "pcmanfm-qt",
+                "pcmanfm",
+                "caja",
+                "io.elementary.files",
+                "dde-file-manager",
+                "peony",
+                "doublecmd",
+                "spacefm",
+            ];
+            for fm in standard_fms {
+                if !candidates.contains(&fm) {
+                    candidates.push(fm);
+                }
+            }
+
+            let mut launched = false;
+            for fm in candidates {
+                if let Some(bin_path) = find_fm_binary(fm) {
+                    let mut cmd = Command::new(&bin_path);
+                    match fm {
+                        "nautilus" => {
+                            if is_file {
+                                cmd.args(["--select", &clean_path]);
+                            } else {
+                                cmd.args(["-w", &clean_path]);
+                            }
+                        }
+                        "dolphin" => {
+                            if is_file {
+                                cmd.args(["--select", &clean_path]);
+                            } else {
+                                cmd.arg(&clean_path);
+                            }
+                        }
+                        "nemo" => {
+                            cmd.args(["--no-desktop", &clean_path]);
+                        }
+                        "dde-file-manager" => {
+                            if is_file {
+                                cmd.args(["--show-item", &clean_path]);
+                            } else {
+                                cmd.arg(&clean_path);
+                            }
+                        }
+                        _ => {
+                            if is_file {
+                                cmd.arg(target_dir.to_string_lossy().as_ref());
+                            } else {
+                                cmd.arg(&clean_path);
+                            }
+                        }
+                    }
+                    if cmd.no_window().spawn().is_ok() {
+                        launched = true;
+                        break;
+                    }
+                }
+            }
+
+            if !launched {
+                // If no known file manager binary was found in PATH, check default handler
+                let is_editor = |desktop_name: &str| -> bool {
+                    let lower = desktop_name.to_lowercase();
+                    lower.contains("code")
+                        || lower.contains("codium")
+                        || lower.contains("cursor")
+                        || lower.contains("sublime")
+                        || lower.contains("atom")
+                        || lower.contains("gedit")
+                        || lower.contains("kate")
+                        || lower.contains("emacs")
+                        || lower.contains("vim")
+                        || lower.contains("nano")
+                        || lower.contains("text-editor")
+                        || lower.contains("notepad")
+                        || lower.contains("zed")
+                        || lower.contains("fleet")
+                        || lower.contains("idea")
+                        || lower.contains("clion")
+                        || lower.contains("pycharm")
+                        || lower.contains("webstorm")
+                };
+
+                let default_fm = Command::new("xdg-mime")
+                    .args(["query", "default", "inode/directory"])
+                    .output()
+                    .ok()
+                    .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
+                    .unwrap_or_default();
+
+                let dir_str = target_dir.to_string_lossy().to_string();
+                if !default_fm.is_empty() && !is_editor(&default_fm) {
+                    Command::new("xdg-open")
+                        .arg(&dir_str)
+                        .no_window()
+                        .spawn()
+                        .map_err(|e| format!("xdg-open failed: {}", e))?;
+                } else {
+                    let _ = Command::new("gio")
+                        .args(["open", &dir_str])
+                        .no_window()
+                        .spawn()
+                        .or_else(|_| {
+                            Command::new("xdg-open")
+                                .arg(&dir_str)
+                                .no_window()
+                                .spawn()
+                        });
+                }
+            }
         }
 
         Ok(())
@@ -3027,7 +3240,7 @@ async fn write_audio_metadata(path: String, title: String, artist: String, album
 
 fn base64_encode(bytes: &[u8]) -> String {
     const CHARSET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let mut result = String::with_capacity((bytes.len() + 2) / 3 * 4);
+    let mut result = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for chunk in bytes.chunks(3) {
         match chunk.len() {
             3 => {
@@ -3068,7 +3281,7 @@ async fn get_waveform_thumbnail(path: String) -> Result<Vec<f32>, String> {
             .output()
             .map_err(|_| "ffmpeg not found".to_string())?;
         if output.stdout.is_empty() { return Err("No audio data".to_string()); }
-        let samples: Vec<f32> = output.stdout.chunks_exact(4)
+        let samples: Vec<f32> = output.stdout.as_chunks::<4>().0.iter()
             .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]).abs())
             .collect();
         let target = 200usize;
@@ -3233,19 +3446,19 @@ async fn normalize_file(path: String, output_path: String) -> Result<(), String>
 #[tauri::command]
 async fn set_sleep_timer(seconds: u64) -> Result<(), String> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(seconds);
-    let gen = { let mut g = SLEEP_TIMER_GEN.lock().unwrap(); *g += 1; *g };
-    *SLEEP_TIMER.lock().unwrap() = Some((deadline, gen));
+    let gen = { let mut g = SLEEP_TIMER_GEN.lock().unwrap_or_else(|p| p.into_inner()); *g += 1; *g };
+    *SLEEP_TIMER.lock().unwrap_or_else(|p| p.into_inner()) = Some((deadline, gen));
     tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(seconds)).await;
-        let cur_gen = *SLEEP_TIMER_GEN.lock().unwrap();
-        let fire = SLEEP_TIMER.lock().unwrap()
+        let cur_gen = *SLEEP_TIMER_GEN.lock().unwrap_or_else(|p| p.into_inner());
+        let fire = SLEEP_TIMER.lock().unwrap_or_else(|p| p.into_inner())
             .map(|(d, g)| g == gen && g == cur_gen && d <= std::time::Instant::now())
             .unwrap_or(false);
         if fire {
             let _ = tokio::task::spawn_blocking(|| {
                 send_ipc_command_with_retry(r#"{"command": ["set_property", "pause", true]}"#, 2)
             }).await;
-            *SLEEP_TIMER.lock().unwrap() = None;
+            *SLEEP_TIMER.lock().unwrap_or_else(|p| p.into_inner()) = None;
         }
     });
     Ok(())
@@ -3253,14 +3466,14 @@ async fn set_sleep_timer(seconds: u64) -> Result<(), String> {
 
 #[tauri::command]
 async fn cancel_sleep_timer() -> Result<(), String> {
-    *SLEEP_TIMER_GEN.lock().unwrap() += 1;
-    *SLEEP_TIMER.lock().unwrap() = None;
+    *SLEEP_TIMER_GEN.lock().unwrap_or_else(|p| p.into_inner()) += 1;
+    *SLEEP_TIMER.lock().unwrap_or_else(|p| p.into_inner()) = None;
     Ok(())
 }
 
 #[tauri::command]
 async fn get_sleep_timer_remaining() -> Result<i64, String> {
-    let remaining = SLEEP_TIMER.lock().unwrap().map(|(deadline, _)| {
+    let remaining = SLEEP_TIMER.lock().unwrap_or_else(|p| p.into_inner()).map(|(deadline, _)| {
         let now = std::time::Instant::now();
         if deadline > now { (deadline - now).as_secs() as i64 } else { 0 }
     }).unwrap_or(-1);
@@ -3520,7 +3733,7 @@ fn start_mpv_event_listener(app_handle: tauri::AppHandle) {
                                 match event {
                                     "property-change" => {
                                         let name = v["name"].as_str().unwrap_or("");
-                                        let mut state = current_playback_state().lock().unwrap();
+                                        let mut state = current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
                                         let mut changed = false;
                                         match name {
                                             "audio-codec-name" => {
@@ -3564,7 +3777,7 @@ fn start_mpv_event_listener(app_handle: tauri::AppHandle) {
                                                     state.duration = d;
                                                     changed = true;
                                                     if d > 0.0 {
-                                                        let mut meta = mpris_meta().lock().unwrap();
+                                                        let mut meta = mpris_meta().lock().unwrap_or_else(|p| p.into_inner());
                                                         let dur_us = (d * 1_000_000.0) as i64;
                                                         if meta.duration_us != dur_us {
                                                             meta.duration_us = dur_us;
@@ -3604,34 +3817,34 @@ fn start_mpv_event_listener(app_handle: tauri::AppHandle) {
                                             let _ = app_handle.emit("mpv_playback_state", &s_clone);
                                         } else if reason == "eof" {
                                             {
-                                                let mut state = current_playback_state().lock().unwrap();
+                                                let mut state = current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
                                                 state.eof_reached = true;
                                                 state.playing = false;
                                             }
                                             let _ = app_handle.emit("mpv_track_end", ());
-                                            let s_clone = current_playback_state().lock().unwrap().clone();
+                                            let s_clone = current_playback_state().lock().unwrap_or_else(|p| p.into_inner()).clone();
                                             let _ = app_handle.emit("mpv_playback_state", &s_clone);
                                         }
                                     }
                                     "file-loaded" => {
                                         {
-                                            let mut state = current_playback_state().lock().unwrap();
+                                            let mut state = current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
                                             if !state.paused {
                                                 state.playing = true;
                                             }
                                         }
                                         let _ = app_handle.emit("mpv_track_started", ());
-                                        let s_clone = current_playback_state().lock().unwrap().clone();
+                                        let s_clone = current_playback_state().lock().unwrap_or_else(|p| p.into_inner()).clone();
                                         let _ = app_handle.emit("mpv_playback_state", &s_clone);
                                     }
                                     "playback-restart" => {
                                         {
-                                            let mut state = current_playback_state().lock().unwrap();
+                                            let mut state = current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
                                             state.eof_reached = false;
                                             state.position = 0.0;
                                             state.playing = false;
                                         }
-                                        let s_clone = current_playback_state().lock().unwrap().clone();
+                                        let s_clone = current_playback_state().lock().unwrap_or_else(|p| p.into_inner()).clone();
                                         let _ = app_handle.emit("mpv_playback_state", &s_clone);
                                     }
                                     _ => {}
@@ -3804,6 +4017,7 @@ async fn search_yt_music(query: String, search_type: String) -> Result<String, S
     };
     let search_arg = format!("ytsearch15:{}", full_query);
     let mut cmd = tokio::process::Command::new(bin_ytdlp());
+    cmd.kill_on_drop(true);
     cmd.args([
         &search_arg,
         "--flat-playlist",
@@ -3882,15 +4096,24 @@ async fn check_for_update() -> Result<Option<String>, String> {
 }
 
 fn get_mpris_cover_cache_dir() -> std::path::PathBuf {
+    if let Some(cache_dir) = APP_CACHE_DIR.get() {
+        return cache_dir.join("mpris_covers");
+    }
     if let Ok(xdg) = std::env::var("XDG_CACHE_HOME") {
         if !xdg.is_empty() {
-            return std::path::PathBuf::from(xdg).join("veluna").join("mpris_covers");
+            return std::path::PathBuf::from(xdg).join("com.veluna.player").join("mpris_covers");
         }
     }
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_else(|_| ".".to_string());
-    std::path::PathBuf::from(home).join(".cache").join("veluna").join("mpris_covers")
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            return std::path::PathBuf::from(local_app_data).join("com.veluna.player").join("cache").join("mpris_covers");
+        }
+    }
+    std::path::PathBuf::from(home).join(".cache").join("com.veluna.player").join("mpris_covers")
 }
 
 fn resolve_mpris_cover(cover_input: &str, track_url: Option<&str>) -> String {
@@ -3929,11 +4152,7 @@ fn resolve_mpris_cover(cover_input: &str, track_url: Option<&str>) -> String {
                     if !file_path.exists() {
                         let _ = std::fs::write(&file_path, &bytes);
                     }
-                    if let Ok(canon) = file_path.canonicalize() {
-                        return format!("file://{}", canon.to_string_lossy());
-                    } else {
-                        return format!("file://{}", file_path.to_string_lossy());
-                    }
+                    return path_to_file_uri(&file_path);
                 }
             }
         }
@@ -3948,11 +4167,7 @@ fn resolve_mpris_cover(cover_input: &str, track_url: Option<&str>) -> String {
             if p.exists() {
                 // Check if directory has a cover (cover.jpg, folder.jpg, song stem image)
                 if let Some(cover_file) = metadata::find_directory_cover(p) {
-                    if let Ok(canon) = cover_file.canonicalize() {
-                        return format!("file://{}", canon.to_string_lossy());
-                    } else {
-                        return format!("file://{}", cover_file.to_string_lossy());
-                    }
+                    return path_to_file_uri(&cover_file);
                 }
 
                 // Check embedded tag picture via lofty/metadata
@@ -3971,11 +4186,7 @@ fn resolve_mpris_cover(cover_input: &str, track_url: Option<&str>) -> String {
                                 if !file_path.exists() {
                                     let _ = std::fs::write(&file_path, &bytes);
                                 }
-                                if let Ok(canon) = file_path.canonicalize() {
-                                    return format!("file://{}", canon.to_string_lossy());
-                                } else {
-                                    return format!("file://{}", file_path.to_string_lossy());
-                                }
+                                return path_to_file_uri(&file_path);
                             }
                         }
                     }
@@ -3998,11 +4209,7 @@ fn resolve_mpris_cover(cover_input: &str, track_url: Option<&str>) -> String {
                         if !file_path.exists() {
                             let _ = std::fs::write(&file_path, &bytes);
                         }
-                        if let Ok(canon) = file_path.canonicalize() {
-                            return format!("file://{}", canon.to_string_lossy());
-                        } else {
-                            return format!("file://{}", file_path.to_string_lossy());
-                        }
+                        return path_to_file_uri(&file_path);
                     }
                 }
             }
@@ -4013,17 +4220,14 @@ fn resolve_mpris_cover(cover_input: &str, track_url: Option<&str>) -> String {
     if !trimmed.is_empty() {
         let p = std::path::Path::new(trimmed);
         if p.is_file() {
-            if let Ok(canon) = p.canonicalize() {
-                return format!("file://{}", canon.to_string_lossy());
-            } else {
-                return format!("file://{}", p.to_string_lossy());
-            }
+            return path_to_file_uri(p);
         }
     }
 
     trimmed.to_string()
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 async fn set_mpris_metadata(
     title: String,
@@ -4052,8 +4256,7 @@ async fn set_mpris_metadata(
                 let clean_p = expand_tilde(u.trim_start_matches("local://"));
                 let p = std::path::Path::new(&clean_p);
                 if p.exists() {
-                    let canon = p.canonicalize().unwrap_or_else(|_| p.to_path_buf());
-                    final_url = format!("file://{}", canon.to_string_lossy());
+                    final_url = path_to_file_uri(p);
                     if let Some(meta) = metadata::probe_track_metadata(p) {
                         if final_title.is_empty() || final_title == "Unknown Track" {
                             final_title = meta.title;
@@ -4076,7 +4279,7 @@ async fn set_mpris_metadata(
         }
 
         if final_duration_us <= 0 {
-            let cur_dur = current_playback_state().lock().unwrap().duration;
+            let cur_dur = current_playback_state().lock().unwrap_or_else(|p| p.into_inner()).duration;
             if cur_dur > 0.0 {
                 final_duration_us = (cur_dur * 1_000_000.0) as i64;
             }
@@ -4085,7 +4288,7 @@ async fn set_mpris_metadata(
         let resolved_cover = resolve_mpris_cover(&cover_url, url.as_deref());
 
         {
-            let mut meta = mpris_meta().lock().unwrap();
+            let mut meta = mpris_meta().lock().unwrap_or_else(|p| p.into_inner());
             let is_same_track = meta.title == final_title && meta.artist == final_artist && !final_title.is_empty();
             let seq = if is_same_track {
                 meta.track_seq
@@ -4116,7 +4319,7 @@ async fn set_mpris_metadata(
 #[tauri::command]
 async fn update_mpris_playback(playing: bool) -> Result<(), String> {
     {
-        let mut meta = mpris_meta().lock().unwrap();
+        let mut meta = mpris_meta().lock().unwrap_or_else(|p| p.into_inner());
         meta.playing = playing;
         if playing {
             meta.is_stopped = false;
@@ -4134,7 +4337,7 @@ async fn sync_mpris_controls(
     rate: Option<f64>,
 ) -> Result<(), String> {
     {
-        let mut meta = mpris_meta().lock().unwrap();
+        let mut meta = mpris_meta().lock().unwrap_or_else(|p| p.into_inner());
         if let Some(ls) = loop_status {
             meta.loop_status = ls;
         }
@@ -4230,7 +4433,7 @@ async fn run_mpris_server(
     impl Player {
         #[dbus_interface(property)]
         fn playback_status(&self) -> String {
-            let m = mpris_meta().lock().unwrap();
+            let m = mpris_meta().lock().unwrap_or_else(|p| p.into_inner());
             if m.is_stopped || m.title.is_empty() {
                 "Stopped".into()
             } else if m.playing {
@@ -4241,7 +4444,7 @@ async fn run_mpris_server(
         }
         #[dbus_interface(property)]
         fn loop_status(&self) -> String {
-            mpris_meta().lock().unwrap().loop_status.clone()
+            mpris_meta().lock().unwrap_or_else(|p| p.into_inner()).loop_status.clone()
         }
         #[dbus_interface(property)]
         fn set_loop_status(&self, status: String) {
@@ -4250,7 +4453,7 @@ async fn run_mpris_server(
                 return;
             }
             {
-                let mut m = mpris_meta().lock().unwrap();
+                let mut m = mpris_meta().lock().unwrap_or_else(|p| p.into_inner());
                 m.loop_status = status.clone();
             }
             let _ = self.app.emit("mpris_set_loop_status", status);
@@ -4258,13 +4461,13 @@ async fn run_mpris_server(
         }
         #[dbus_interface(property)]
         fn rate(&self) -> f64 {
-            mpris_meta().lock().unwrap().rate
+            mpris_meta().lock().unwrap_or_else(|p| p.into_inner()).rate
         }
         #[dbus_interface(property)]
         fn set_rate(&self, rate: f64) {
             let clamped = rate.clamp(0.5, 2.0);
             {
-                let mut m = mpris_meta().lock().unwrap();
+                let mut m = mpris_meta().lock().unwrap_or_else(|p| p.into_inner());
                 m.rate = clamped;
             }
             let cmd = format!(r#"{{"command": ["set_property", "speed", {}]}}"#, clamped);
@@ -4274,12 +4477,12 @@ async fn run_mpris_server(
         }
         #[dbus_interface(property)]
         fn shuffle(&self) -> bool {
-            mpris_meta().lock().unwrap().shuffle
+            mpris_meta().lock().unwrap_or_else(|p| p.into_inner()).shuffle
         }
         #[dbus_interface(property)]
         fn set_shuffle(&self, shuffle: bool) {
             {
-                let mut m = mpris_meta().lock().unwrap();
+                let mut m = mpris_meta().lock().unwrap_or_else(|p| p.into_inner());
                 m.shuffle = shuffle;
             }
             let _ = self.app.emit("mpris_set_shuffle", shuffle);
@@ -4289,7 +4492,7 @@ async fn run_mpris_server(
         #[dbus_interface(property)]
         fn metadata(&self) -> HashMap<String, OwnedValue> {
             let (title, artist, album, album_artist, url, cover_url, duration_us, track_seq) = {
-                let m = mpris_meta().lock().unwrap();
+                let m = mpris_meta().lock().unwrap_or_else(|p| p.into_inner());
                 (m.title.clone(), m.artist.clone(), m.album.clone(), m.album_artist.clone(), m.url.clone(), m.cover_url.clone(), m.duration_us, m.track_seq)
             };
             let mut map: HashMap<String, OwnedValue> = HashMap::new();
@@ -4300,15 +4503,15 @@ async fn run_mpris_server(
             };
             if let Ok(op) = ObjectPath::try_from(track_path.as_str()) {
                 map.insert("mpris:trackid".into(),
-                    OwnedValue::try_from(ZValue::new(op)).unwrap());
+                    OwnedValue::from(ZValue::new(op)));
             }
             map.insert("xesam:title".into(),
-                OwnedValue::try_from(ZValue::new(title.as_str())).unwrap());
+                OwnedValue::from(ZValue::new(title.as_str())));
             map.insert("xesam:artist".into(),
-                OwnedValue::try_from(ZValue::new(vec![artist.as_str()])).unwrap());
+                OwnedValue::from(ZValue::new(vec![artist.as_str()])));
             if !album.is_empty() {
                 map.insert("xesam:album".into(),
-                    OwnedValue::try_from(ZValue::new(album.as_str())).unwrap());
+                    OwnedValue::from(ZValue::new(album.as_str())));
             }
             let resolved_album_artist = if !album_artist.is_empty() {
                 album_artist
@@ -4317,32 +4520,32 @@ async fn run_mpris_server(
             };
             if !resolved_album_artist.is_empty() {
                 map.insert("xesam:albumArtist".into(),
-                    OwnedValue::try_from(ZValue::new(vec![resolved_album_artist.as_str()])).unwrap());
+                    OwnedValue::from(ZValue::new(vec![resolved_album_artist.as_str()])));
             }
             if !url.is_empty() {
                 map.insert("xesam:url".into(),
-                    OwnedValue::try_from(ZValue::new(url.as_str())).unwrap());
+                    OwnedValue::from(ZValue::new(url.as_str())));
             }
             if !cover_url.is_empty() {
                 map.insert("mpris:artUrl".into(),
-                    OwnedValue::try_from(ZValue::new(cover_url.as_str())).unwrap());
+                    OwnedValue::from(ZValue::new(cover_url.as_str())));
             }
             if duration_us > 0 {
                 map.insert("mpris:length".into(),
-                    OwnedValue::try_from(ZValue::new(duration_us)).unwrap());
+                    OwnedValue::from(ZValue::new(duration_us)));
             }
             map
         }
 
         #[dbus_interface(property)]
         fn volume(&self) -> f64 {
-            mpris_meta().lock().unwrap().volume
+            mpris_meta().lock().unwrap_or_else(|p| p.into_inner()).volume
         }
         #[dbus_interface(property)]
         fn set_volume(&self, volume: f64) {
             let v = volume.max(0.0);
             {
-                let mut m = mpris_meta().lock().unwrap();
+                let mut m = mpris_meta().lock().unwrap_or_else(|p| p.into_inner());
                 m.volume = v;
             }
             let cmd = format!(r#"{{"command": ["set_property", "volume", {}]}}"#, (v * 100.0).clamp(0.0, 150.0));
@@ -4352,7 +4555,7 @@ async fn run_mpris_server(
         }
         #[dbus_interface(property)]
         fn position(&self) -> i64 {
-            let p = current_playback_state().lock().unwrap().position;
+            let p = current_playback_state().lock().unwrap_or_else(|p| p.into_inner()).position;
             if p.is_finite() && p >= 0.0 {
                 (p * 1_000_000.0) as i64
             } else {
@@ -4391,7 +4594,7 @@ async fn run_mpris_server(
             let cmd = format!(r#"{{"command": ["seek", {}, "relative"]}}"#, offset_secs);
             let _ = send_ipc_fire_and_forget(&cmd);
             let new_pos_us = {
-                let mut state = current_playback_state().lock().unwrap();
+                let mut state = current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
                 let dur = state.duration;
                 let mut new_pos = state.position + offset_secs;
                 if new_pos < 0.0 { new_pos = 0.0; }
@@ -4405,7 +4608,7 @@ async fn run_mpris_server(
         }
         async fn set_position(&self, #[zbus(signal_context)] ctxt: zbus::SignalContext<'_>, track_id: ObjectPath<'_>, position_us: i64) -> zbus::fdo::Result<()> {
             let (cur_track_seq, max_dur_us) = {
-                let m = mpris_meta().lock().unwrap();
+                let m = mpris_meta().lock().unwrap_or_else(|p| p.into_inner());
                 (m.track_seq, m.duration_us)
             };
             let expected_path = format!("/org/veluna/track/t{}", cur_track_seq);
@@ -4427,7 +4630,7 @@ async fn run_mpris_server(
             let cmd = format!(r#"{{"command": ["seek", {}, "absolute"]}}"#, pos_secs);
             let _ = send_ipc_fire_and_forget(&cmd);
             {
-                let mut state = current_playback_state().lock().unwrap();
+                let mut state = current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
                 state.position = pos_secs;
             }
             let _ = self.app.emit("mpris_seeked", pos_secs);
@@ -4490,12 +4693,12 @@ fn set_network_config(proxy_url: Option<String>, custom_instance: Option<String>
     let clean_proxy = proxy_url.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
     let clean_inst = custom_instance.map(|s| s.trim().trim_end_matches('/').to_string()).filter(|s| !s.is_empty());
     {
-        let mut cfg = network_config().lock().unwrap();
+        let mut cfg = network_config().lock().unwrap_or_else(|p| p.into_inner());
         cfg.proxy_url = clean_proxy.clone();
         cfg.custom_instance = clean_inst;
     }
     if let Some(cache_lock) = CURRENT_HTTP_CLIENT.get() {
-        let mut guard = cache_lock.lock().unwrap();
+        let mut guard = cache_lock.lock().unwrap_or_else(|p| p.into_inner());
         *guard = None;
     }
     let proxy_target = clean_proxy.as_deref().unwrap_or("");
@@ -4557,14 +4760,14 @@ fn watch_download_folder(app: tauri::AppHandle, path: String) -> Result<(), Stri
         return Ok(());
     }
 
-    let mut cur_folder = WATCHED_FOLDER.get_or_init(|| Mutex::new(None)).lock().unwrap();
+    let mut cur_folder = WATCHED_FOLDER.get_or_init(|| Mutex::new(None)).lock().unwrap_or_else(|p| p.into_inner());
     if cur_folder.as_deref() == Some(&resolved) {
         return Ok(());
     }
     *cur_folder = Some(resolved.clone());
 
     let app_clone = app.clone();
-    let mut watcher_lock = FOLDER_WATCHER.get_or_init(|| Mutex::new(None)).lock().unwrap();
+    let mut watcher_lock = FOLDER_WATCHER.get_or_init(|| Mutex::new(None)).lock().unwrap_or_else(|p| p.into_inner());
     *watcher_lock = None;
 
     let debounce_tx = Arc::new(Mutex::new(std::time::Instant::now() - std::time::Duration::from_secs(5)));
@@ -4581,7 +4784,7 @@ fn watch_download_folder(app: tauri::AppHandle, path: String) -> Result<(), Stri
                         }
                     });
                     if is_audio || event.paths.is_empty() {
-                        let mut last = debounce_tx.lock().unwrap();
+                        let mut last = debounce_tx.lock().unwrap_or_else(|p| p.into_inner());
                         if last.elapsed() > std::time::Duration::from_millis(400) {
                             *last = std::time::Instant::now();
                             let _ = app_clone.emit("local_folder_changed", ());
@@ -4598,6 +4801,7 @@ fn watch_download_folder(app: tauri::AppHandle, path: String) -> Result<(), Stri
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 fn update_discord_rpc(
     title: String,
@@ -4612,7 +4816,7 @@ fn update_discord_rpc(
     custom_button_url: Option<String>,
 ) {
     std::thread::spawn(move || {
-        let mut client_lock = get_discord_client().lock().unwrap();
+        let mut client_lock = get_discord_client().lock().unwrap_or_else(|p| p.into_inner());
         if client_lock.is_none() {
             let mut client = DiscordIpcClient::new("1517835351044001953");
             if client.connect().is_ok() {
@@ -4704,7 +4908,7 @@ fn update_discord_rpc(
 #[tauri::command]
 fn clear_discord_rpc() {
     std::thread::spawn(|| {
-        let mut client_lock = get_discord_client().lock().unwrap();
+        let mut client_lock = get_discord_client().lock().unwrap_or_else(|p| p.into_inner());
         if let Some(ref mut client) = *client_lock {
             if client.clear_activity().is_err() {
                 let _ = client.close();
@@ -4738,7 +4942,7 @@ fn silence_ayatana_warnings() {
     unsafe {
         let mask = 0xFFFFFFFCu32 as i32;
         g_log_set_handler(
-            b"libayatana-appindicator\0".as_ptr() as *const c_char,
+            c"libayatana-appindicator".as_ptr(),
             mask,
             dummy_log_handler,
             std::ptr::null_mut(),
@@ -4810,6 +5014,7 @@ fn db_search_library(query: String) -> Result<Vec<db::DbSearchResult>, String> {
     db::search_library_fts(&query)
 }
 
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 async fn download_stream_chunked(
     app: tauri::AppHandle,
@@ -4865,8 +5070,9 @@ fn main() {
 
             let handle = app.handle().clone();
 
-            init_log_path(&app.handle());
-            let _ = db::init_db(&app.handle());
+            init_log_path(app.handle());
+            init_cache_dir(app.handle());
+            let _ = db::init_db(app.handle());
             app.manage(tray::init());
 
             #[cfg(target_os = "linux")]
@@ -5009,7 +5215,7 @@ fn main() {
                     }
                 }
                 tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
-                    if let Some(mut child) = mpv_process().lock().unwrap().take() {
+                    if let Some(mut child) = mpv_process().lock().unwrap_or_else(|p| p.into_inner()).take() {
                         let _ = child.kill();
                         let _ = child.wait();
                     }

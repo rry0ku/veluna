@@ -13,6 +13,7 @@ pub struct DownloadProgressPayload {
     pub error: Option<String>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub async fn download_audio_stream_chunked(
     app: tauri::AppHandle,
     stream_url: String,
@@ -53,7 +54,7 @@ pub async fn download_audio_stream_chunked(
             resp.headers()
                 .get("content-range")
                 .and_then(|h| h.to_str().ok())
-                .and_then(|cr| cr.split('/').last())
+                .and_then(|cr| cr.split('/').next_back())
                 .and_then(|s| s.parse::<u64>().ok())
                 .or_else(|| resp.content_length())
         });

@@ -39,7 +39,7 @@ fn decode_png_to_rgba() -> Result<tauri::image::Image<'static>, String> {
     let expected_rgb = (w * h * 3) as usize;
     if raw.len() == expected_rgb {
         let mut rgba = Vec::with_capacity(expected_rgba);
-        for chunk in raw.chunks_exact(3) {
+        for chunk in raw.as_chunks::<3>().0 {
             rgba.extend_from_slice(chunk);
             rgba.push(0xFF);
         }

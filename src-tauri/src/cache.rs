@@ -11,26 +11,53 @@ pub struct CacheInfo {
     pub cache_dir: String,
 }
 
-fn get_cache_directories(app: &AppHandle) -> Vec<PathBuf> {
-    let mut dirs = Vec::new();
+static MIGRATED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-    if let Ok(app_cache) = app.path().app_cache_dir() {
-        if !dirs.contains(&app_cache) {
-            dirs.push(app_cache);
+fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    if src == dst || dst.starts_with(src) {
+        return Ok(());
+    }
+    if !dst.exists() {
+        fs::create_dir_all(dst)?;
+    }
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_symlink() {
+            continue;
+        }
+        let from = entry.path();
+        let to = dst.join(entry.file_name());
+        if ty.is_dir() {
+            copy_dir_all(&from, &to)?;
+        } else {
+            let _ = fs::copy(&from, &to);
         }
     }
+    Ok(())
+}
 
-    let temp_veluna = std::env::temp_dir().join("veluna");
-    if !dirs.contains(&temp_veluna) {
-        dirs.push(temp_veluna);
+pub fn migrate_legacy_cache(target_dir: &std::path::Path) {
+    if MIGRATED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
     }
+
+    let mut legacy_dirs: Vec<PathBuf> = Vec::new();
 
     #[cfg(target_os = "linux")]
     {
         if let Ok(home) = std::env::var("HOME") {
-            let user_cache = PathBuf::from(home).join(".cache").join("veluna");
-            if !dirs.contains(&user_cache) {
-                dirs.push(user_cache);
+            let p = PathBuf::from(home).join(".cache").join("veluna");
+            if p != target_dir && !legacy_dirs.contains(&p) {
+                legacy_dirs.push(p);
+            }
+        }
+        if let Ok(xdg) = std::env::var("XDG_CACHE_HOME") {
+            if !xdg.is_empty() {
+                let p = PathBuf::from(xdg).join("veluna");
+                if p != target_dir && !legacy_dirs.contains(&p) {
+                    legacy_dirs.push(p);
+                }
             }
         }
     }
@@ -38,10 +65,69 @@ fn get_cache_directories(app: &AppHandle) -> Vec<PathBuf> {
     #[cfg(target_os = "windows")]
     {
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-            let win_cache = PathBuf::from(local_app_data).join("veluna").join("cache");
-            if !dirs.contains(&win_cache) {
-                dirs.push(win_cache);
+            let p1 = PathBuf::from(&local_app_data).join("veluna").join("cache");
+            if p1 != target_dir && !legacy_dirs.contains(&p1) {
+                legacy_dirs.push(p1);
             }
+            let p2 = PathBuf::from(&local_app_data).join("veluna");
+            if p2 != target_dir && !legacy_dirs.contains(&p2) {
+                legacy_dirs.push(p2);
+            }
+        }
+        if let Ok(app_data) = std::env::var("APPDATA") {
+            let p3 = PathBuf::from(&app_data).join("veluna").join("cache");
+            if p3 != target_dir && !legacy_dirs.contains(&p3) {
+                legacy_dirs.push(p3);
+            }
+        }
+        if let Ok(user_profile) = std::env::var("USERPROFILE") {
+            let p4 = PathBuf::from(&user_profile).join(".cache").join("veluna");
+            if p4 != target_dir && !legacy_dirs.contains(&p4) {
+                legacy_dirs.push(p4);
+            }
+        }
+    }
+
+    let temp_veluna = std::env::temp_dir().join("veluna");
+    if temp_veluna != target_dir && !legacy_dirs.contains(&temp_veluna) {
+        legacy_dirs.push(temp_veluna);
+    }
+
+    for legacy in legacy_dirs {
+        if legacy.exists() && legacy.is_dir() && copy_dir_all(&legacy, target_dir).is_ok() {
+            let _ = fs::remove_dir_all(&legacy);
+        }
+    }
+}
+
+fn get_cache_directories(app: &AppHandle) -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+
+    if let Ok(app_cache) = app.path().app_cache_dir() {
+        let _ = fs::create_dir_all(&app_cache);
+        migrate_legacy_cache(&app_cache);
+        dirs.push(app_cache);
+    } else {
+        #[cfg(target_os = "linux")]
+        if let Ok(home) = std::env::var("HOME") {
+            let p = PathBuf::from(home).join(".cache").join("com.veluna.player");
+            let _ = fs::create_dir_all(&p);
+            migrate_legacy_cache(&p);
+            dirs.push(p);
+        }
+        #[cfg(target_os = "windows")]
+        if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+            let p = PathBuf::from(local_app_data).join("com.veluna.player").join("cache");
+            let _ = fs::create_dir_all(&p);
+            migrate_legacy_cache(&p);
+            dirs.push(p);
+        }
+        #[cfg(target_os = "macos")]
+        if let Ok(home) = std::env::var("HOME") {
+            let p = PathBuf::from(home).join("Library").join("Caches").join("com.veluna.player");
+            let _ = fs::create_dir_all(&p);
+            migrate_legacy_cache(&p);
+            dirs.push(p);
         }
     }
 
@@ -65,13 +151,16 @@ fn format_bytes(bytes: u64) -> String {
     }
 }
 
-fn scan_directory(dir: &PathBuf, files: &mut Vec<(PathBuf, u64, SystemTime)>) {
-    if !dir.exists() || !dir.is_dir() {
+fn scan_directory(dir: &std::path::Path, files: &mut Vec<(PathBuf, u64, SystemTime)>, depth: usize) {
+    if depth > 10 || !dir.exists() || !dir.is_dir() {
         return;
     }
 
     if let Ok(entries) = fs::read_dir(dir) {
         for entry in entries.flatten() {
+            if entry.file_type().map(|t| t.is_symlink()).unwrap_or(false) {
+                continue;
+            }
             let path = entry.path();
             if path.is_file() {
                 let is_protected = path.file_name().and_then(|n| n.to_str()).map(|n| {
@@ -94,7 +183,7 @@ fn scan_directory(dir: &PathBuf, files: &mut Vec<(PathBuf, u64, SystemTime)>) {
                     files.push((path, len, modified));
                 }
             } else if path.is_dir() {
-                scan_directory(&path, files);
+                scan_directory(&path, files, depth + 1);
             }
         }
     }
@@ -107,7 +196,7 @@ pub async fn get_cache_info(app: AppHandle) -> Result<CacheInfo, String> {
         let mut files = Vec::new();
 
         for d in &dirs {
-            scan_directory(d, &mut files);
+            scan_directory(d, &mut files, 0);
         }
 
         let total_bytes: u64 = files.iter().map(|(_, len, _)| *len).sum();
@@ -133,7 +222,7 @@ pub async fn clear_app_cache(app: AppHandle) -> Result<u64, String> {
         let mut files = Vec::new();
 
         for d in &dirs {
-            scan_directory(d, &mut files);
+            scan_directory(d, &mut files, 0);
         }
 
         let mut reclaimed_bytes: u64 = 0;
@@ -141,6 +230,25 @@ pub async fn clear_app_cache(app: AppHandle) -> Result<u64, String> {
             if fs::remove_file(&path).is_ok() {
                 reclaimed_bytes += len;
             }
+        }
+
+        // Clean up any empty subdirectories left behind (ignoring symlinks)
+        fn remove_empty_subdirs(dir: &std::path::Path) {
+            if let Ok(entries) = fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    if entry.file_type().map(|t| t.is_symlink()).unwrap_or(false) {
+                        continue;
+                    }
+                    let path = entry.path();
+                    if path.is_dir() {
+                        remove_empty_subdirs(&path);
+                        let _ = fs::remove_dir(&path);
+                    }
+                }
+            }
+        }
+        for d in &dirs {
+            remove_empty_subdirs(d);
         }
 
         Ok(reclaimed_bytes)
@@ -160,7 +268,7 @@ pub async fn prune_cache_if_needed(app: AppHandle, max_bytes: u64) -> Result<u64
         let mut files = Vec::new();
 
         for d in &dirs {
-            scan_directory(d, &mut files);
+            scan_directory(d, &mut files, 0);
         }
 
         let mut current_bytes: u64 = files.iter().map(|(_, len, _)| *len).sum();
@@ -221,7 +329,7 @@ mod tests {
         fs::write(&f_db, vec![9u8; 5000]).unwrap();
 
         let mut files = Vec::new();
-        scan_directory(&temp_dir, &mut files);
+        scan_directory(&temp_dir, &mut files, 0);
         // Only the 3 .tmp files should be scanned; veluna.db is protected
         assert_eq!(files.len(), 3);
         let total: u64 = files.iter().map(|(_, len, _)| *len).sum();
@@ -249,6 +357,26 @@ mod tests {
         assert!(f_db.exists()); // Protected DB file still intact!
 
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_copy_dir_all() {
+        let src_dir = std::env::temp_dir().join("veluna_test_copy_src");
+        let dst_dir = std::env::temp_dir().join("veluna_test_copy_dst");
+        let _ = fs::remove_dir_all(&src_dir);
+        let _ = fs::remove_dir_all(&dst_dir);
+
+        fs::create_dir_all(src_dir.join("subdir")).unwrap();
+        fs::write(src_dir.join("file1.txt"), b"hello").unwrap();
+        fs::write(src_dir.join("subdir").join("file2.txt"), b"world").unwrap();
+
+        assert!(copy_dir_all(&src_dir, &dst_dir).is_ok());
+
+        assert_eq!(fs::read(dst_dir.join("file1.txt")).unwrap(), b"hello");
+        assert_eq!(fs::read(dst_dir.join("subdir").join("file2.txt")).unwrap(), b"world");
+
+        let _ = fs::remove_dir_all(&src_dir);
+        let _ = fs::remove_dir_all(&dst_dir);
     }
 }
 

@@ -240,11 +240,12 @@ pub fn get_all_playlists() -> Result<Vec<DbPlaylist>, String> {
         })?.collect::<Result<Vec<_>, _>>()?;
 
         let mut playlists = Vec::new();
+        let mut track_stmt = conn.prepare(
+            "SELECT track_id, title, artist, duration, url, cover, media_type
+             FROM playlist_tracks WHERE playlist_id = ?1 ORDER BY position ASC"
+        )?;
+
         for (id, name, description, custom_cover) in playlist_rows {
-            let mut track_stmt = conn.prepare(
-                "SELECT track_id, title, artist, duration, url, cover, media_type
-                 FROM playlist_tracks WHERE playlist_id = ?1 ORDER BY position ASC"
-            )?;
             let tracks = track_stmt.query_map(params![id], |row| {
                 Ok(DbTrack {
                     id: row.get(0)?,

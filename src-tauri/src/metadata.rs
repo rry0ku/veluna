@@ -115,11 +115,17 @@ pub fn probe_track_metadata(path: &Path) -> Option<NativeTrackMeta> {
     }
 
     // Fallback: If title contains "Artist - Title" and artist was empty, parse from filename
-    if artist.is_empty() && title.contains(" - ") {
-        let parts: Vec<&str> = title.splitn(2, " - ").collect();
-        if parts.len() == 2 && !parts[0].trim().is_empty() && !parts[1].trim().is_empty() {
-            artist = parts[0].trim().to_string();
-            title = parts[1].trim().to_string();
+    if artist.is_empty() {
+        for sep in &[" - ", " – ", " — ", " | "] {
+            if let Some(pos) = title.find(sep) {
+                let left = title[..pos].trim();
+                let right = title[pos + sep.len()..].trim();
+                if !left.is_empty() && !right.is_empty() {
+                    artist = left.to_string();
+                    title = right.to_string();
+                    break;
+                }
+            }
         }
     }
 
