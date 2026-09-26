@@ -36,7 +36,6 @@ export function usePlaylists(showToast?: (msg: string) => void) {
   const setPlaylists = useCallback((playlistsOrUpdater: Playlist[] | ((prev: Playlist[]) => Playlist[])) => {
     setPlaylistsState(prev => {
       const next = typeof playlistsOrUpdater === 'function' ? playlistsOrUpdater(prev) : playlistsOrUpdater;
-      saveLS('vg_playlists', next);
       return next;
     });
   }, []);

@@ -265,7 +265,7 @@ export function useAudioPlayer({
         console.warn('Track playback issue:', errMsg);
       }
     }
-  }, [volume, playbackSpeed, eq, onTrackPlayed, setPlayHistory, setQuickPicks, setIsPlayingSync, setLoadingTrackUrlSync, showToast, setLyricsData]);
+  }, [volume, playbackSpeed, eq, onTrackPlayed, setPlayHistory, setQuickPicks, setIsPlayingSync, setIsLoadingTrackSync, setLoadingTrackUrlSync, showToast, setLyricsData]);
 
   const handlePlayLocalTrack = useCallback(async (local: LocalTrack, localList?: LocalTrack[], localIndex?: number) => {
     invoke('pause_audio').catch(() => {});
@@ -334,6 +334,7 @@ export function useAudioPlayer({
     invoke<number[]>('get_waveform_thumbnail', { path: local.path })
       .then(setWaveformData).catch(() => setWaveformData([]));
 
+    setIsLoadingTrackSync(true);
     try {
       await invoke('play_local_file', { path: local.path });
       setLoadingTrackUrlSync(null);
@@ -354,8 +355,9 @@ export function useAudioPlayer({
     } catch {
       setIsPlayingSync(false);
       setLoadingTrackUrlSync(null);
+      setIsLoadingTrackSync(false);
     }
-  }, [volume, playbackSpeed, setPlayHistory, setQuickPicks, setIsPlayingSync, setLoadingTrackUrlSync, setQueue]);
+  }, [volume, playbackSpeed, setPlayHistory, setQuickPicks, setIsPlayingSync, setIsLoadingTrackSync, setLoadingTrackUrlSync, setQueue]);
 
   const handlePlayInContext = useCallback((track: Track, contextList: Track[]) => {
     localTracksListRef.current = [];
@@ -901,22 +903,28 @@ export function useAudioPlayer({
     showToast('Sleep timer cancelled');
   }, [showToast]);
 
+  const sleepTimerRef = useRef(sleepTimer);
+  useEffect(() => {
+    sleepTimerRef.current = sleepTimer;
+  }, [sleepTimer]);
+
   useEffect(() => {
     if (sleepTimer <= 0) return;
     const interval = setInterval(() => {
-      setSleepTimer(prev => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          invoke('pause_audio').catch(() => {});
-          setIsPlayingSync(false);
-          showToast('Sleep timer expired: Playback stopped');
-          return 0;
-        }
-        return prev - 1;
-      });
+      sleepTimerRef.current -= 1;
+      if (sleepTimerRef.current <= 0) {
+        clearInterval(interval);
+        setSleepTimer(0);
+        invoke('pause_audio').catch(() => {});
+        setIsPlayingSync(false);
+        showToastRef.current('Sleep timer expired: Playback stopped');
+      } else {
+        setSleepTimer(sleepTimerRef.current);
+      }
     }, 1000);
     return () => clearInterval(interval);
-  }, [sleepTimer, setIsPlayingSync, showToast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sleepTimer > 0, setIsPlayingSync]);
 
   const prefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prefetchedSetRef = useRef<Set<string>>(new Set());

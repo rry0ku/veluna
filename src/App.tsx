@@ -1331,6 +1331,8 @@ export function App() {
   useEffect(() => {
     if (showCsvImportModal || droppedCsvBatch || isSpotifyImporting) {
       isSpotifyImportActiveRef.current = true;
+    } else {
+      isSpotifyImportActiveRef.current = false;
     }
   }, [showCsvImportModal, droppedCsvBatch, isSpotifyImporting]);
 

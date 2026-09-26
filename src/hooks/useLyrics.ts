@@ -65,11 +65,13 @@ export function useLyrics(currentTrack: Track | null, trackDurationSeconds: numb
         }
       })
       .finally(() => {
-        if (currentTrack?.url === activeUrl) {
-          setLyricsLoading(false);
-        }
+        // Always clear loading — even if track changed, the new track needs a fresh fetch
+        // which will set its own loading state. Leaving it true causes a permanent spinner.
+        setLyricsLoading(false);
       });
-  }, [currentTrack, trackDurationSeconds, lyricsSource]);
+  // Depend on primitive fields, not the whole object — avoids refetch when track
+  // re-renders with a new object reference but identical URL/title/artist.
+  }, [currentTrack?.url, currentTrack?.title, currentTrack?.artist, trackDurationSeconds, lyricsSource]);
 
   useEffect(() => {
     if (showLyrics && currentTrack) {

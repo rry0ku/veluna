@@ -165,13 +165,20 @@ export function CopyButton({ text, label, icon: Icon, disabled = false }: {
   text: string; label: string; icon: React.ElementType; disabled?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
   const handleCopy = async () => {
     if (!text || disabled) return;
     try {
       if (navigator?.clipboard?.writeText) await navigator.clipboard.writeText(text);
       else { const el = document.createElement('textarea'); el.value = text; el.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(el); el.select(); document.execCommand('copy'); document.body.removeChild(el); }
       setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 1500);
     } catch {}
   };
   return (
