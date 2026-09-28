@@ -31,7 +31,7 @@ pub fn init_windows_smtc(app: tauri::AppHandle, hwnd: *mut std::ffi::c_void) -> 
         })
         .map_err(|e| format!("Failed to attach SMTC event handler: {:?}", e))?;
 
-    let mut lock = windows_smtc().lock().unwrap();
+    let mut lock = windows_smtc().lock().unwrap_or_else(|p| p.into_inner());
     *lock = Some(controls);
     println!("[SMTC] Windows System Media Transport Controls initialized successfully.");
     Ok(())
@@ -65,7 +65,7 @@ fn handle_smtc_event(app: &tauri::AppHandle, event: MediaControlEvent) {
             let cmd = format!(r#"{{"command": ["seek", {}, "relative"]}}"#, offset_secs);
             let _ = crate::send_ipc_fire_and_forget(&cmd);
             let new_pos = {
-                let mut state = crate::current_playback_state().lock().unwrap();
+                let mut state = crate::current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
                 let dur = state.duration;
                 let mut p = state.position + offset_secs;
                 if p < 0.0 { p = 0.0; }
@@ -84,7 +84,7 @@ fn handle_smtc_event(app: &tauri::AppHandle, event: MediaControlEvent) {
             let cmd = format!(r#"{{"command": ["seek", {}, "relative"]}}"#, offset_secs);
             let _ = crate::send_ipc_fire_and_forget(&cmd);
             let new_pos = {
-                let mut state = crate::current_playback_state().lock().unwrap();
+                let mut state = crate::current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
                 let dur = state.duration;
                 let mut p = state.position + offset_secs;
                 if p < 0.0 { p = 0.0; }
@@ -99,7 +99,7 @@ fn handle_smtc_event(app: &tauri::AppHandle, event: MediaControlEvent) {
             let cmd = format!(r#"{{"command": ["seek", {}, "absolute"]}}"#, pos_secs);
             let _ = crate::send_ipc_fire_and_forget(&cmd);
             {
-                let mut state = crate::current_playback_state().lock().unwrap();
+                let mut state = crate::current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
                 state.position = pos_secs;
             }
             let _ = app.emit("mpris_seeked", pos_secs);

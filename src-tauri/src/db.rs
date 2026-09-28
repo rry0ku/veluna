@@ -272,18 +272,25 @@ pub fn get_all_playlists() -> Result<Vec<DbPlaylist>, String> {
 
 pub fn delete_playlist(id: &str) -> Result<(), String> {
     with_db_mut(|conn| {
-        conn.execute("DELETE FROM playlists WHERE id = ?1", params![id])?;
+        let tx = conn.transaction()?;
+        tx.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?1", params![id])?;
+        tx.execute("DELETE FROM playlists WHERE id = ?1", params![id])?;
+        tx.commit()?;
         Ok(())
     })
 }
 
 pub fn record_play_event(url: &str, title: &str, artist: &str, secs: i64) -> Result<(), String> {
+    let clean_url = url.trim();
+    if clean_url.is_empty() {
+        return Ok(());
+    }
     let now = chrono_now_iso();
     with_db_mut(|conn| {
         let tx = conn.transaction()?;
         tx.execute(
             "INSERT INTO listening_history (url, title, artist, played_at, secs) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![url, title, artist, now, secs],
+            params![clean_url, title, artist, now, secs],
         )?;
 
         tx.execute(
@@ -295,7 +302,7 @@ pub fn record_play_event(url: &str, title: &str, artist: &str, secs: i64) -> Res
                 title = CASE WHEN excluded.title != '' THEN excluded.title ELSE track_stats.title END,
                 artist = CASE WHEN excluded.artist != '' THEN excluded.artist ELSE track_stats.artist END,
                 last_played = excluded.last_played",
-            params![url, title, artist, secs, now],
+            params![clean_url, title, artist, secs, now],
         )?;
 
         tx.commit()?;

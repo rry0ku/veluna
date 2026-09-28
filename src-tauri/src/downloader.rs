@@ -122,6 +122,8 @@ pub async fn download_audio_stream_chunked(
                             },
                         );
                     }
+                    file.flush().map_err(|e| e.to_string())?;
+                    drop(file);
                     Ok::<(), String>(())
                 }));
             }
@@ -206,8 +208,11 @@ pub async fn download_audio_stream_chunked(
                     },
                 );
             }
+            file.flush().map_err(|e| format!("File flush error: {}", e))?;
             Ok(())
         }.await;
+
+        drop(file);
 
         if let Err(e) = stream_result {
             let _ = std::fs::remove_file(&target_path);

@@ -16,6 +16,7 @@ export function useSearch(showToast?: (msg: string) => void, cacheEnabled: boole
   const [quickPicks, setQuickPicks] = useState<Track[]>(() => loadLS('vg_quickPicks', []));
 
   const searchCacheRef = useRef<Map<string, { music: Track[]; video: Track[] }>>(new Map());
+  const searchIdRef = useRef(0);
 
   useEffect(() => {
     if (!cacheEnabled) {
@@ -32,6 +33,7 @@ export function useSearch(showToast?: (msg: string) => void, cacheEnabled: boole
   }, [quickPicks]);
 
   const resetSearch = useCallback(() => {
+    searchIdRef.current++;
     setSearchQuery('');
     setYtMusicTracks([]);
     setVideoTracks([]);
@@ -43,7 +45,8 @@ export function useSearch(showToast?: (msg: string) => void, cacheEnabled: boole
 
   const searchMusic = useCallback(async (override?: string) => {
     const q = (override ?? searchQuery).trim();
-    if (!q || isSearching) return;
+    if (!q) return;
+    const currentId = ++searchIdRef.current;
     const cacheKey = q.toLowerCase();
     setShowHistory(false);
     setSearchHistory(prev => [q, ...prev.filter(h => h !== q)].slice(0, 8));
@@ -77,6 +80,8 @@ export function useSearch(showToast?: (msg: string) => void, cacheEnabled: boole
             invoke<string>('search_youtube', { query: `${q} video` }).catch(() => '')
           ]);
 
+      if (currentId !== searchIdRef.current) return;
+
       const parseLines = (res: string, mediaType: 'music' | 'video'): Track[] => {
         return res.trim().split('\n').filter(Boolean).map((line, i): Track | null => {
           const parts = line.split('====');
@@ -101,6 +106,7 @@ export function useSearch(showToast?: (msg: string) => void, cacheEnabled: boole
 
       if (parsedMusic.length === 0 && parsedVideo.length === 0) {
         const resFallback = await invoke<string>('search_youtube', { query: q }).catch(() => '');
+        if (currentId !== searchIdRef.current) return;
         parsedMusic = parseLines(resFallback, 'music');
       }
 
@@ -118,6 +124,8 @@ export function useSearch(showToast?: (msg: string) => void, cacheEnabled: boole
           img.src = t.cover;
         }
       });
+
+      if (currentId !== searchIdRef.current) return;
 
       startTransition(() => {
         setYtMusicTracks(parsedMusic);
@@ -143,6 +151,7 @@ export function useSearch(showToast?: (msg: string) => void, cacheEnabled: boole
         });
       }
     } catch (err: any) {
+      if (currentId !== searchIdRef.current) return;
       if (!hasInstantHit) {
         startTransition(() => {
           setYtMusicTracks([]);
@@ -156,7 +165,7 @@ export function useSearch(showToast?: (msg: string) => void, cacheEnabled: boole
         setIsSearching(false);
       }
     }
-  }, [searchQuery, isSearching, showToast, cacheEnabled]);
+  }, [searchQuery, showToast, cacheEnabled]);
 
   const tracks = searchTab === 'music' ? ytMusicTracks : videoTracks;
 

@@ -1538,7 +1538,7 @@ static CACHE_ENABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicB
 async fn set_cache_enabled(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
     CACHE_ENABLED.store(enabled, std::sync::atomic::Ordering::SeqCst);
     if !enabled {
-        PREFETCH_CACHE.write().unwrap().clear();
+        PREFETCH_CACHE.write().unwrap_or_else(|p| p.into_inner()).clear();
         let _ = cache::clear_app_cache(app).await;
     }
     Ok(())
@@ -1553,15 +1553,15 @@ fn get_cache_enabled() -> bool {
 async fn prefetch_track(url: String) -> Result<(), String> {
     if !CACHE_ENABLED.load(std::sync::atomic::Ordering::SeqCst) { return Ok(()); }
     if url.starts_with("local://") { return Ok(()); }
-    if PREFETCH_CACHE.read().unwrap().contains_key(&url) { return Ok(()); }
+    if PREFETCH_CACHE.read().unwrap_or_else(|p| p.into_inner()).contains_key(&url) { return Ok(()); }
     let cache = Arc::clone(&PREFETCH_CACHE);
     tokio::spawn(async move {
         let permit = prefetch_semaphore().acquire().await.ok();
         if !CACHE_ENABLED.load(std::sync::atomic::Ordering::SeqCst) { return; }
-        if cache.read().unwrap().contains_key(&url) { return; }
+        if cache.read().unwrap_or_else(|p| p.into_inner()).contains_key(&url) { return; }
         if let Some(stream_url) = extract_stream_url_async(url.clone(), None).await {
             if !CACHE_ENABLED.load(std::sync::atomic::Ordering::SeqCst) { return; }
-            let mut c = cache.write().unwrap();
+            let mut c = cache.write().unwrap_or_else(|p| p.into_inner());
             let now = std::time::Instant::now();
             c.retain(|_, v| now.duration_since(v.ts) < std::time::Duration::from_secs(4 * 3600));
             if c.len() >= 200 { c.retain(|_, v| std::time::Instant::now().duration_since(v.ts) < std::time::Duration::from_secs(3600)); }
@@ -2095,7 +2095,7 @@ async fn play_audio(url: String) -> Result<(), String> {
 
     let is_cache_on = CACHE_ENABLED.load(std::sync::atomic::Ordering::SeqCst);
     let cached = if is_cache_on {
-        let cache = PREFETCH_CACHE.read().unwrap();
+        let cache = PREFETCH_CACHE.read().unwrap_or_else(|p| p.into_inner());
         cache.get(&safe_url).and_then(|entry| {
             let age = std::time::Instant::now().duration_since(entry.ts);
             
@@ -2127,7 +2127,7 @@ async fn play_audio(url: String) -> Result<(), String> {
         }
 
         if is_cache_on {
-            let mut cache = PREFETCH_CACHE.write().unwrap();
+            let mut cache = PREFETCH_CACHE.write().unwrap_or_else(|p| p.into_inner());
             let now = std::time::Instant::now();
             cache.insert(safe_url.clone(), CacheEntry { url: extracted.clone(), ts: now });
         }

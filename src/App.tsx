@@ -1263,6 +1263,7 @@ export function App() {
   }, [setShowHistory, setShowSleepPopover]);
 
   useEffect(() => {
+    let active = true;
     let lastDropTime = 0;
     let unlisten: (() => void) | undefined;
 
@@ -1299,7 +1300,13 @@ export function App() {
             }
           }
         }
-      }).then(u => { unlisten = u; }).catch(() => {});
+      }).then(u => {
+        if (active) {
+          unlisten = u;
+        } else {
+          u();
+        }
+      }).catch(() => {});
     } catch {}
 
     const onDrop = (e: DragEvent) => {
@@ -1326,6 +1333,7 @@ export function App() {
     window.addEventListener('dragover', onDragOver);
 
     return () => {
+      active = false;
       if (unlisten) unlisten();
       window.removeEventListener('drop', onDrop);
       window.removeEventListener('dragover', onDragOver);
