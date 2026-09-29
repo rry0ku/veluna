@@ -1,8 +1,8 @@
 use std::sync::Mutex;
 use tauri::{
-    Emitter, Manager, AppHandle,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Emitter, Manager,
 };
 
 const TRAY_ID: &str = "veluna-tray";
@@ -20,13 +20,13 @@ fn load_icon() -> Result<tauri::image::Image<'static>, String> {
 fn decode_png_to_rgba() -> Result<tauri::image::Image<'static>, String> {
     let png_bytes = include_bytes!("../icons/icon.png");
     let mut decoder = png::Decoder::new(std::io::Cursor::new(png_bytes as &[u8]));
-    
-    decoder.set_transformations(
-        png::Transformations::EXPAND | png::Transformations::ALPHA
-    );
+
+    decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::ALPHA);
     let mut reader = decoder.read_info().map_err(|e| format!("read_info: {e}"))?;
     let mut buf = vec![0u8; reader.output_buffer_size()];
-    let info = reader.next_frame(&mut buf).map_err(|e| format!("decode: {e}"))?;
+    let info = reader
+        .next_frame(&mut buf)
+        .map_err(|e| format!("decode: {e}"))?;
     let (w, h) = (info.width, info.height);
     let raw = buf[..info.buffer_size()].to_vec();
 
@@ -48,7 +48,11 @@ fn decode_png_to_rgba() -> Result<tauri::image::Image<'static>, String> {
 
     Err(format!(
         "Unexpected buffer size {} for {}x{} (expected {} RGBA or {} RGB)",
-        raw.len(), w, h, expected_rgba, expected_rgb
+        raw.len(),
+        w,
+        h,
+        expected_rgba,
+        expected_rgb
     ))
 }
 
@@ -66,8 +70,19 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
     let quit_i = MenuItem::with_id(app, "quit", "Quit Veluna", true, None::<&str>)
         .map_err(|e| e.to_string())?;
 
-    let menu = Menu::with_items(app, &[&play_pause_i, &next_i, &prev_i, &sep1, &show_i, &sep2, &quit_i])
-        .map_err(|e| e.to_string())?;
+    let menu = Menu::with_items(
+        app,
+        &[
+            &play_pause_i,
+            &next_i,
+            &prev_i,
+            &sep1,
+            &show_i,
+            &sep2,
+            &quit_i,
+        ],
+    )
+    .map_err(|e| e.to_string())?;
 
     let icon = load_icon()?;
 
@@ -79,19 +94,26 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
             .menu(&menu)
             .show_menu_on_left_click(false)
             .on_menu_event(|app, event| match event.id.as_ref() {
-                "play_pause" => { let _ = app.emit("tray_play_pause", ()); }
-                "next"       => { let _ = app.emit("tray_next", ()); }
-                "prev"       => { let _ = app.emit("tray_prev", ()); }
-                "show"       => toggle_window(app),
-                "quit"       => app.exit(0),
-                _            => {}
+                "play_pause" => {
+                    let _ = app.emit("tray_play_pause", ());
+                }
+                "next" => {
+                    let _ = app.emit("tray_next", ());
+                }
+                "prev" => {
+                    let _ = app.emit("tray_prev", ());
+                }
+                "show" => toggle_window(app),
+                "quit" => app.exit(0),
+                _ => {}
             })
             .on_tray_icon_event(|tray, event| {
                 if let TrayIconEvent::Click {
                     button: MouseButton::Left,
                     button_state: MouseButtonState::Up,
                     ..
-                } = event {
+                } = event
+                {
                     let app = tray.app_handle();
                     toggle_window(app);
                 }
@@ -100,17 +122,15 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
     }));
 
     match result {
-        Ok(Ok(_))  => Ok(()),
+        Ok(Ok(_)) => Ok(()),
         Ok(Err(e)) => Err(format!("Tray build failed: {e}")),
-        Err(_)     => Err(
-            "Tray init panicked - on Linux install: libayatana-appindicator3-1".into()
-        ),
+        Err(_) => Err("Tray init panicked - on Linux install: libayatana-appindicator3-1".into()),
     }
 }
 
 fn toggle_window(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
-        let visible   = w.is_visible().unwrap_or(false);
+        let visible = w.is_visible().unwrap_or(false);
         let minimized = w.is_minimized().unwrap_or(false);
         if visible && !minimized {
             let _ = w.hide();
@@ -124,7 +144,9 @@ fn toggle_window(app: &AppHandle) {
 }
 
 fn ensure_created(app: &AppHandle) -> Result<(), String> {
-    if app.tray_by_id(TRAY_ID).is_some() { return Ok(()); }
+    if app.tray_by_id(TRAY_ID).is_some() {
+        return Ok(());
+    }
     build_tray(app)
 }
 
@@ -144,8 +166,10 @@ pub fn tray_set(
             let _ = tray.set_visible(false);
         }
     }
-    
-    if let Ok(mut guard) = flag.lock() { *guard = enabled; }
+
+    if let Ok(mut guard) = flag.lock() {
+        *guard = enabled;
+    }
     Ok(enabled)
 }
 
@@ -175,7 +199,9 @@ pub fn tray_update_title(
 
 pub fn handle_close_requested(app: &AppHandle, flag: &TrayFlag) -> bool {
     let active = flag.lock().map(|g| *g).unwrap_or(false);
-    if !active { return false; }
+    if !active {
+        return false;
+    }
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.hide();
     }

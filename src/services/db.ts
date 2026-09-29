@@ -100,12 +100,23 @@ export async function dbGetListeningStats(): Promise<DbTrackStat[]> {
   }
 }
 
+export function parsePlayedAt(raw?: string): string {
+  if (!raw) return new Date().toISOString();
+  const trimmed = raw.trim();
+  if (/^\d+$/.test(trimmed)) {
+    const num = Number(trimmed);
+    const ms = num < 1e11 ? num * 1000 : num;
+    return new Date(ms).toISOString();
+  }
+  return trimmed;
+}
+
 export async function dbGetListeningHistory(limit = 100): Promise<ListeningEvent[]> {
   try {
     const events = await invoke<any[]>('db_get_listening_history', { limit });
     return events.map(e => ({
       url: e.url,
-      playedAt: e.played_at,
+      playedAt: parsePlayedAt(e.played_at),
       secs: e.secs,
     }));
   } catch (err) {

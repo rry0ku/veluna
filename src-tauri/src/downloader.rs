@@ -47,22 +47,25 @@ pub async fn download_audio_stream_chunked(
         .send()
         .await;
 
-    let total_size = probe_res
+    let probe_supports_range = probe_res
         .as_ref()
         .ok()
-        .and_then(|resp| {
-            resp.headers()
-                .get("content-range")
-                .and_then(|h| h.to_str().ok())
-                .and_then(|cr| cr.split('/').next_back())
-                .and_then(|s| s.parse::<u64>().ok())
-                .or_else(|| resp.content_length())
-        });
+        .map(|r| r.status() == reqwest::StatusCode::PARTIAL_CONTENT)
+        .unwrap_or(false);
+
+    let total_size = probe_res.as_ref().ok().and_then(|resp| {
+        resp.headers()
+            .get("content-range")
+            .and_then(|h| h.to_str().ok())
+            .and_then(|cr| cr.split('/').next_back())
+            .and_then(|s| s.parse::<u64>().ok())
+            .or_else(|| resp.content_length())
+    });
 
     let mut chunked_success = false;
 
-    // 2. Try 4-thread parallel chunked range requests if file size > 512KB
-    if let Some(total_bytes) = total_size.filter(|&s| s > 512 * 1024) {
+    // 2. Try 4-thread parallel chunked range requests if Range is supported & file size > 512KB
+    if let Some(total_bytes) = total_size.filter(|&s| probe_supports_range && s > 512 * 1024) {
         let num_workers = 4u64;
         let chunk_size = total_bytes / num_workers;
 
@@ -97,20 +100,26 @@ pub async fn download_audio_stream_chunked(
                         .await
                         .map_err(|e| e.to_string())?;
 
-                    if !res.status().is_success() && res.status() != reqwest::StatusCode::PARTIAL_CONTENT {
-                        return Err(format!("Chunk HTTP {}", res.status()));
+                    if res.status() != reqwest::StatusCode::PARTIAL_CONTENT {
+                        return Err(format!(
+                            "Expected 206 Partial Content, got HTTP {}",
+                            res.status()
+                        ));
                     }
 
                     let mut file = File::options()
                         .write(true)
                         .open(&p)
                         .map_err(|e| e.to_string())?;
-                    file.seek(SeekFrom::Start(start)).map_err(|e| e.to_string())?;
+                    file.seek(SeekFrom::Start(start))
+                        .map_err(|e| e.to_string())?;
 
                     while let Some(chunk) = res.chunk().await.map_err(|e| e.to_string())? {
                         file.write_all(&chunk).map_err(|e| e.to_string())?;
-                        let current = d_counter.fetch_add(chunk.len() as u64, Ordering::SeqCst) + chunk.len() as u64;
-                        let pct = 5.0 + ((current as f64 / total_bytes as f64) * 85.0).clamp(0.0, 85.0);
+                        let current = d_counter.fetch_add(chunk.len() as u64, Ordering::SeqCst)
+                            + chunk.len() as u64;
+                        let pct =
+                            5.0 + ((current as f64 / total_bytes as f64) * 85.0).clamp(0.0, 85.0);
 
                         let _ = app_h.emit(
                             "download_progress",
@@ -133,7 +142,7 @@ pub async fn download_audio_stream_chunked(
             while !pending_tasks.is_empty() {
                 let task = pending_tasks.remove(0);
                 match task.await {
-                    Ok(Ok(())) => {},
+                    Ok(Ok(())) => {}
                     _ => {
                         all_ok = false;
                         for remaining in pending_tasks {
@@ -153,23 +162,19 @@ pub async fn download_audio_stream_chunked(
 
     // 3. Fallback: Single stream if chunking was unsupported or errored
     if !chunked_success {
-        let mut res = client
-            .get(&stream_url)
-            .send()
-            .await
-            .map_err(|e| {
-                let err_msg = format!("Stream request failed: {}", e);
-                let _ = app.emit(
-                    "download_progress",
-                    &DownloadProgressPayload {
-                        url: track_url.clone(),
-                        percent: 0.0,
-                        status: "Error".to_string(),
-                        error: Some(err_msg.clone()),
-                    },
-                );
-                err_msg
-            })?;
+        let mut res = client.get(&stream_url).send().await.map_err(|e| {
+            let err_msg = format!("Stream request failed: {}", e);
+            let _ = app.emit(
+                "download_progress",
+                &DownloadProgressPayload {
+                    url: track_url.clone(),
+                    percent: 0.0,
+                    status: "Error".to_string(),
+                    error: Some(err_msg.clone()),
+                },
+            );
+            err_msg
+        })?;
 
         let mut file = match File::create(&target_path) {
             Ok(f) => f,
@@ -190,8 +195,13 @@ pub async fn download_audio_stream_chunked(
         let mut dl_bytes = 0u64;
 
         let stream_result: Result<(), String> = async {
-            while let Some(chunk) = res.chunk().await.map_err(|e| format!("Stream read error: {}", e))? {
-                file.write_all(&chunk).map_err(|e| format!("File write error: {}", e))?;
+            while let Some(chunk) = res
+                .chunk()
+                .await
+                .map_err(|e| format!("Stream read error: {}", e))?
+            {
+                file.write_all(&chunk)
+                    .map_err(|e| format!("File write error: {}", e))?;
                 dl_bytes += chunk.len() as u64;
                 let pct = if let Some(tot) = total_size {
                     5.0 + ((dl_bytes as f64 / tot as f64) * 85.0).clamp(0.0, 85.0)
@@ -208,9 +218,11 @@ pub async fn download_audio_stream_chunked(
                     },
                 );
             }
-            file.flush().map_err(|e| format!("File flush error: {}", e))?;
+            file.flush()
+                .map_err(|e| format!("File flush error: {}", e))?;
             Ok(())
-        }.await;
+        }
+        .await;
 
         drop(file);
 
@@ -242,22 +254,31 @@ pub async fn download_audio_stream_chunked(
     // 4. Fetch cover art bytes if available
     let mut cover_bytes: Option<Vec<u8>> = None;
     if let Some(ref c_url) = cover_url {
-        if c_url.starts_with("http") {
+        if c_url.starts_with("http://") || c_url.starts_with("https://") {
             if let Ok(c_res) = client.get(c_url).send().await {
                 if let Ok(bytes) = c_res.bytes().await {
                     cover_bytes = Some(bytes.to_vec());
                 }
             }
+        } else {
+            let local_path = if let Some(stripped) = c_url.strip_prefix("file://") {
+                #[cfg(windows)]
+                let p = stripped.trim_start_matches('/');
+                #[cfg(not(windows))]
+                let p = stripped;
+                PathBuf::from(p)
+            } else {
+                PathBuf::from(c_url)
+            };
+            if let Ok(bytes) = std::fs::read(local_path) {
+                cover_bytes = Some(bytes);
+            }
         }
     }
 
     // 5. Embed ID3 tags, cover art, and lyrics via lofty
-    let _ = crate::metadata::write_track_tags(
-        &target_path,
-        Some(&title),
-        Some(&artist),
-        Some(&album),
-    );
+    let _ =
+        crate::metadata::write_track_tags(&target_path, Some(&title), Some(&artist), Some(&album));
     let _ = crate::metadata::embed_cover_and_lyrics(
         &target_path,
         cover_bytes.as_deref(),

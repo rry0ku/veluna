@@ -42,7 +42,15 @@ interface HistoryViewProps {
 
 function formatPlayedAt(isoStr?: string): string {
   if (!isoStr) return '';
-  const date = new Date(isoStr);
+  const trimmed = isoStr.trim();
+  let date: Date;
+  if (/^\d+$/.test(trimmed)) {
+    const num = Number(trimmed);
+    const ms = num < 1e11 ? num * 1000 : num;
+    date = new Date(ms);
+  } else {
+    date = new Date(trimmed);
+  }
   if (isNaN(date.getTime())) return '';
 
   const now = new Date();

@@ -1,11 +1,11 @@
+use base64::Engine;
+use lofty::config::WriteOptions;
 use lofty::file::{AudioFile, TaggedFileExt};
+use lofty::picture::{MimeType, Picture, PictureType};
 use lofty::prelude::*;
 use lofty::probe::Probe;
 use lofty::tag::{ItemKey, Tag};
-use lofty::picture::{Picture, PictureType, MimeType};
-use lofty::config::WriteOptions;
 use std::path::Path;
-use base64::Engine;
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
 pub struct NativeTrackMeta {
@@ -60,8 +60,16 @@ pub fn find_directory_cover(path: &Path) -> Option<std::path::PathBuf> {
             let candidate = parent.join(format!("{}.{}", name, ext));
             if candidate.is_file() {
                 // If it's a dedicated album folder (not a general Downloads/Music root), allow it
-                let parent_name = parent.file_name().and_then(|s| s.to_str()).unwrap_or("").to_lowercase();
-                if parent_name != "downloads" && parent_name != "download" && parent_name != "music" && parent_name != "desktop" {
+                let parent_name = parent
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("")
+                    .to_lowercase();
+                if parent_name != "downloads"
+                    && parent_name != "download"
+                    && parent_name != "music"
+                    && parent_name != "desktop"
+                {
                     return Some(candidate);
                 }
             }
@@ -74,8 +82,15 @@ pub fn find_directory_cover(path: &Path) -> Option<std::path::PathBuf> {
 pub fn probe_track_metadata(path: &Path) -> Option<NativeTrackMeta> {
     let metadata = std::fs::metadata(path).ok()?;
     let size_bytes = metadata.len();
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-    let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown Track");
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    let file_stem = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("Unknown Track");
 
     let tagged_file = Probe::open(path).ok().and_then(|p| p.read().ok());
 
@@ -208,7 +223,9 @@ pub fn write_track_tags(
         Some(t) => t,
         None => {
             tagged_file.insert_tag(Tag::new(tag_type));
-            tagged_file.tag_mut(tag_type).ok_or("Failed to create tag")?
+            tagged_file
+                .tag_mut(tag_type)
+                .ok_or("Failed to create tag")?
         }
     };
 
@@ -243,7 +260,9 @@ pub fn embed_cover_and_lyrics(
         Some(t) => t,
         None => {
             tagged_file.insert_tag(Tag::new(tag_type));
-            tagged_file.tag_mut(tag_type).ok_or("Failed to create tag")?
+            tagged_file
+                .tag_mut(tag_type)
+                .ok_or("Failed to create tag")?
         }
     };
 
@@ -252,12 +271,8 @@ pub fn embed_cover_and_lyrics(
             tag.remove_picture_type(PictureType::CoverFront);
             let mime_str = detect_image_mime(img);
             let mime = MimeType::from_str(mime_str);
-            let picture = Picture::new_unchecked(
-                PictureType::CoverFront,
-                Some(mime),
-                None,
-                img.to_vec(),
-            );
+            let picture =
+                Picture::new_unchecked(PictureType::CoverFront, Some(mime), None, img.to_vec());
             tag.push_picture(picture);
         }
     }

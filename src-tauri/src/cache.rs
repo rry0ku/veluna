@@ -117,14 +117,19 @@ fn get_cache_directories(app: &AppHandle) -> Vec<PathBuf> {
         }
         #[cfg(target_os = "windows")]
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-            let p = PathBuf::from(local_app_data).join("com.veluna.player").join("cache");
+            let p = PathBuf::from(local_app_data)
+                .join("com.veluna.player")
+                .join("cache");
             let _ = fs::create_dir_all(&p);
             migrate_legacy_cache(&p);
             dirs.push(p);
         }
         #[cfg(target_os = "macos")]
         if let Ok(home) = std::env::var("HOME") {
-            let p = PathBuf::from(home).join("Library").join("Caches").join("com.veluna.player");
+            let p = PathBuf::from(home)
+                .join("Library")
+                .join("Caches")
+                .join("com.veluna.player");
             let _ = fs::create_dir_all(&p);
             migrate_legacy_cache(&p);
             dirs.push(p);
@@ -151,7 +156,11 @@ fn format_bytes(bytes: u64) -> String {
     }
 }
 
-fn scan_directory(dir: &std::path::Path, files: &mut Vec<(PathBuf, u64, SystemTime)>, depth: usize) {
+fn scan_directory(
+    dir: &std::path::Path,
+    files: &mut Vec<(PathBuf, u64, SystemTime)>,
+    depth: usize,
+) {
     if depth > 10 || !dir.exists() || !dir.is_dir() {
         return;
     }
@@ -163,15 +172,19 @@ fn scan_directory(dir: &std::path::Path, files: &mut Vec<(PathBuf, u64, SystemTi
             }
             let path = entry.path();
             if path.is_file() {
-                let is_protected = path.file_name().and_then(|n| n.to_str()).map(|n| {
-                    n.ends_with(".db")
-                        || n.ends_with(".sqlite")
-                        || n.ends_with(".sqlite3")
-                        || n.ends_with(".sock")
-                        || n.ends_with(".lock")
-                        || n.ends_with("-wal")
-                        || n.ends_with("-shm")
-                }).unwrap_or(false);
+                let is_protected = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .map(|n| {
+                        n.ends_with(".db")
+                            || n.ends_with(".sqlite")
+                            || n.ends_with(".sqlite3")
+                            || n.ends_with(".sock")
+                            || n.ends_with(".lock")
+                            || n.ends_with("-wal")
+                            || n.ends_with("-shm")
+                    })
+                    .unwrap_or(false);
 
                 if is_protected {
                     continue;
@@ -202,7 +215,10 @@ pub async fn get_cache_info(app: AppHandle) -> Result<CacheInfo, String> {
         let total_bytes: u64 = files.iter().map(|(_, len, _)| *len).sum();
         let file_count = files.len();
         let formatted_size = format_bytes(total_bytes);
-        let primary_dir = dirs.first().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+        let primary_dir = dirs
+            .first()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
 
         Ok(CacheInfo {
             total_bytes,
@@ -373,10 +389,12 @@ mod tests {
         assert!(copy_dir_all(&src_dir, &dst_dir).is_ok());
 
         assert_eq!(fs::read(dst_dir.join("file1.txt")).unwrap(), b"hello");
-        assert_eq!(fs::read(dst_dir.join("subdir").join("file2.txt")).unwrap(), b"world");
+        assert_eq!(
+            fs::read(dst_dir.join("subdir").join("file2.txt")).unwrap(),
+            b"world"
+        );
 
         let _ = fs::remove_dir_all(&src_dir);
         let _ = fs::remove_dir_all(&dst_dir);
     }
 }
-

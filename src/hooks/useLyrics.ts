@@ -20,6 +20,11 @@ export function useLyrics(currentTrack: Track | null, trackDurationSeconds: numb
   const [lyricsLoading, setLyricsLoading] = useState(false);
   const [lyricsSource, setLyricsSourceState] = useState<string>(() => loadLS('vg_lyricsSource', 'lrclib'));
 
+  const currentTrackRef = useRef(currentTrack);
+  useEffect(() => {
+    currentTrackRef.current = currentTrack;
+  }, [currentTrack]);
+
   const lyricsScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const lastScrolledLyricIdxRef = useRef<number>(-1);
   const lastFetchedKeyRef = useRef<string>('');
@@ -51,7 +56,7 @@ export function useLyrics(currentTrack: Track | null, trackDurationSeconds: numb
       source: lyricsSource,
     })
       .then(raw => {
-        if (currentTrack?.url !== activeUrl) return;
+        if (currentTrackRef.current?.url !== activeUrl) return;
         try {
           const lines: LyricLine[] = JSON.parse(raw);
           setLyricsData({ lines, title, artist });
@@ -60,7 +65,7 @@ export function useLyrics(currentTrack: Track | null, trackDurationSeconds: numb
         }
       })
       .catch(() => {
-        if (currentTrack?.url === activeUrl) {
+        if (currentTrackRef.current?.url === activeUrl) {
           setLyricsData({ lines: [], title, artist });
         }
       })

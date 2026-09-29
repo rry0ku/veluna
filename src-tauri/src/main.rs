@@ -1,19 +1,19 @@
-mod tray;
 mod cache;
-mod metadata;
 mod db;
 mod downloader;
+mod metadata;
+mod tray;
 #[cfg(target_os = "windows")]
 mod windows_smtc;
 
-use std::io::{Write, BufRead, BufReader};
+use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
+use serde_json::Value;
+use std::collections::HashMap;
+use std::io::{BufRead, BufReader, Write};
 use std::process::Command;
 use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
-use serde_json::Value;
 use tauri::Emitter;
 use tauri::Manager;
-use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -58,10 +58,18 @@ fn socket_path() -> &'static str {
         #[cfg(unix)]
         {
             if let Ok(runtime_dir) = std::env::var("XDG_RUNTIME_DIR") {
-                format!("{}/veluna-mpv-{}.sock", runtime_dir.trim_end_matches('/'), pid)
+                format!(
+                    "{}/veluna-mpv-{}.sock",
+                    runtime_dir.trim_end_matches('/'),
+                    pid
+                )
             } else {
                 let tmp = std::env::temp_dir();
-                format!("{}/veluna-mpv-{}.sock", tmp.to_string_lossy().trim_end_matches('/'), pid)
+                format!(
+                    "{}/veluna-mpv-{}.sock",
+                    tmp.to_string_lossy().trim_end_matches('/'),
+                    pid
+                )
             }
         }
         #[cfg(windows)]
@@ -122,11 +130,16 @@ static MPRIS_TX: std::sync::OnceLock<tokio::sync::watch::Sender<()>> = std::sync
 
 #[cfg(target_os = "linux")]
 fn mpris_notify() {
-    if let Some(tx) = MPRIS_TX.get() { let _ = tx.send(()); }
+    if let Some(tx) = MPRIS_TX.get() {
+        let _ = tx.send(());
+    }
 }
 #[cfg(target_os = "windows")]
 fn mpris_notify() {
-    let meta = mpris_meta().lock().unwrap_or_else(|p| p.into_inner()).clone();
+    let meta = mpris_meta()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone();
     windows_smtc::update_windows_smtc(&meta);
 }
 #[cfg(not(any(target_os = "linux", target_os = "windows")))]
@@ -157,10 +170,10 @@ fn resolve_bin(name: &str, search_paths: &[String]) -> String {
     name.to_string()
 }
 
-static BIN_MPV:     std::sync::OnceLock<String> = std::sync::OnceLock::new();
-static BIN_YTDLP:   std::sync::OnceLock<String> = std::sync::OnceLock::new();
+static BIN_MPV: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+static BIN_YTDLP: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 static BIN_FFPROBE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-static BIN_FFMPEG:  std::sync::OnceLock<String> = std::sync::OnceLock::new();
+static BIN_FFMPEG: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
 fn init_bin_paths() {
     let mut paths: Vec<String> = Vec::new();
@@ -177,18 +190,21 @@ fn init_bin_paths() {
         }
 
         let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
-        let user_profile   = std::env::var("USERPROFILE").unwrap_or_default();
-        
-        paths.push(format!("{}\\Programs\\veluna-deps\\mpv",    local_app_data));
-        paths.push(format!("{}\\Programs\\veluna-deps\\ffmpeg",  local_app_data));
-        paths.push(format!("{}\\Programs\\veluna-deps",          local_app_data));
-        
-        paths.push(format!("{}\\Programs\\mpv",    local_app_data));
+        let user_profile = std::env::var("USERPROFILE").unwrap_or_default();
+
+        paths.push(format!("{}\\Programs\\veluna-deps\\mpv", local_app_data));
+        paths.push(format!("{}\\Programs\\veluna-deps\\ffmpeg", local_app_data));
+        paths.push(format!("{}\\Programs\\veluna-deps", local_app_data));
+
+        paths.push(format!("{}\\Programs\\mpv", local_app_data));
         paths.push("C:\\Program Files\\mpv".into());
         paths.push("C:\\Program Files (x86)\\mpv".into());
         paths.push("C:\\ProgramData\\chocolatey\\bin".into());
         paths.push(format!("{}\\scoop\\shims", user_profile));
-        paths.push(format!("{}\\AppData\\Local\\Microsoft\\WindowsApps", user_profile));
+        paths.push(format!(
+            "{}\\AppData\\Local\\Microsoft\\WindowsApps",
+            user_profile
+        ));
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -207,7 +223,9 @@ fn init_bin_paths() {
             "/var/lib/flatpak/exports/bin".to_string(),
             "/usr/games".to_string(),
         ] {
-            if !host.is_empty() { paths.push(format!("{}{}", host, p)); }
+            if !host.is_empty() {
+                paths.push(format!("{}{}", host, p));
+            }
             paths.push(p.clone());
         }
     }
@@ -219,7 +237,9 @@ fn init_bin_paths() {
         let sep = ':';
         for p in env_path.split(sep) {
             let s = p.to_string();
-            if !paths.contains(&s) { paths.push(s); }
+            if !paths.contains(&s) {
+                paths.push(s);
+            }
         }
     }
 
@@ -228,16 +248,17 @@ fn init_bin_paths() {
     #[cfg(not(target_os = "windows"))]
     let sep = ":";
 
-    let clean: Vec<&str> = paths.iter()
+    let clean: Vec<&str> = paths
+        .iter()
         .filter(|p| !p.starts_with("/proc/1/root"))
         .map(|s| s.as_str())
         .collect();
     std::env::set_var("PATH", clean.join(sep));
 
-    let mpv     = resolve_bin("mpv",     &paths);
-    let ytdlp   = resolve_bin("yt-dlp",  &paths);
+    let mpv = resolve_bin("mpv", &paths);
+    let ytdlp = resolve_bin("yt-dlp", &paths);
     let ffprobe = resolve_bin("ffprobe", &paths);
-    let ffmpeg  = resolve_bin("ffmpeg",  &paths);
+    let ffmpeg = resolve_bin("ffmpeg", &paths);
 
     eprintln!("[veluna] mpv     -> {}", mpv);
     eprintln!("[veluna] yt-dlp  -> {}", ytdlp);
@@ -248,20 +269,30 @@ fn init_bin_paths() {
         if lock.get().is_none() {
             let _ = lock.set(val);
         }
-        
     }
-    set_or_update(&BIN_MPV,     mpv);
-    set_or_update(&BIN_YTDLP,   ytdlp);
+    set_or_update(&BIN_MPV, mpv);
+    set_or_update(&BIN_YTDLP, ytdlp);
     set_or_update(&BIN_FFPROBE, ffprobe);
-    set_or_update(&BIN_FFMPEG,  ffmpeg);
+    set_or_update(&BIN_FFMPEG, ffmpeg);
 }
 
-fn bin_mpv()     -> &'static str { BIN_MPV.get().map(|s| s.as_str()).unwrap_or("mpv") }
-fn bin_ytdlp()   -> &'static str { BIN_YTDLP.get().map(|s| s.as_str()).unwrap_or("yt-dlp") }
-fn bin_ffprobe() -> &'static str { BIN_FFPROBE.get().map(|s| s.as_str()).unwrap_or("ffprobe") }
-fn bin_ffmpeg()  -> &'static str { BIN_FFMPEG.get().map(|s| s.as_str()).unwrap_or("ffmpeg") }
+fn bin_mpv() -> &'static str {
+    BIN_MPV.get().map(|s| s.as_str()).unwrap_or("mpv")
+}
+fn bin_ytdlp() -> &'static str {
+    BIN_YTDLP.get().map(|s| s.as_str()).unwrap_or("yt-dlp")
+}
+fn bin_ffprobe() -> &'static str {
+    BIN_FFPROBE.get().map(|s| s.as_str()).unwrap_or("ffprobe")
+}
+fn bin_ffmpeg() -> &'static str {
+    BIN_FFMPEG.get().map(|s| s.as_str()).unwrap_or("ffmpeg")
+}
 
-struct CacheEntry { url: String, ts: std::time::Instant }
+struct CacheEntry {
+    url: String,
+    ts: std::time::Instant,
+}
 
 lazy_static::lazy_static! {
     static ref PREFETCH_CACHE: Arc<std::sync::RwLock<HashMap<String, CacheEntry>>> =
@@ -278,13 +309,13 @@ lazy_static::lazy_static! {
 
 // Persistent mpv process handle: spawned once at startup, reused across all tracks.
 // Using Option<Child> so we can detect crashes and respawn.
-static MPV_PROCESS: std::sync::OnceLock<Mutex<Option<std::process::Child>>> = std::sync::OnceLock::new();
+static MPV_PROCESS: std::sync::OnceLock<Mutex<Option<std::process::Child>>> =
+    std::sync::OnceLock::new();
 fn mpv_process() -> &'static Mutex<Option<std::process::Child>> {
     MPV_PROCESS.get_or_init(|| Mutex::new(None))
 }
 
-static PLAY_COUNTER: std::sync::atomic::AtomicU64 =
-    std::sync::atomic::AtomicU64::new(0);
+static PLAY_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 static PREFETCH_SEMAPHORE: std::sync::OnceLock<tokio::sync::Semaphore> = std::sync::OnceLock::new();
 fn prefetch_semaphore() -> &'static tokio::sync::Semaphore {
@@ -313,7 +344,10 @@ fn sanitize_stream_url(url: &str) -> Result<String, String> {
     if u.starts_with("https://") || u.starts_with("http://") {
         Ok(u.to_string())
     } else {
-        Err(format!("Rejected URL with unsafe scheme: {}", truncate_str(u, 80)))
+        Err(format!(
+            "Rejected URL with unsafe scheme: {}",
+            truncate_str(u, 80)
+        ))
     }
 }
 
@@ -322,37 +356,56 @@ fn sanitize_file_path(path: &str) -> Result<std::path::PathBuf, String> {
     let mut expanded = expand_tilde(
         path.trim_start_matches("local://")
             .trim_start_matches("file://")
-            .trim()
+            .trim(),
     );
     #[cfg(target_os = "windows")]
     {
         if expanded.starts_with('/') || expanded.starts_with('\\') {
             let rest = &expanded[1..];
             if rest.len() >= 2
-                && rest.chars().next().map(|c| c.is_ascii_alphabetic()).unwrap_or(false)
+                && rest
+                    .chars()
+                    .next()
+                    .map(|c| c.is_ascii_alphabetic())
+                    .unwrap_or(false)
                 && rest.chars().nth(1) == Some(':')
             {
                 expanded = rest.to_string();
             }
         }
     }
+    if expanded.contains("..") {
+        return Err("Path traversal not allowed".to_string());
+    }
     let p = std::path::Path::new(&expanded);
     if !p.is_absolute() {
-        return Err(format!("Path must be absolute: {}", truncate_str(&expanded, 200)));
+        return Err(format!(
+            "Path must be absolute: {}",
+            truncate_str(&expanded, 200)
+        ));
     }
-    match p.canonicalize() {
-        Ok(canon) => Ok(canon),
-        Err(_) => {
-            if expanded.contains("..") {
-                return Err("Path traversal not allowed".to_string());
-            }
-            Ok(p.to_path_buf())
+    let resolved = match p.canonicalize() {
+        Ok(canon) => canon,
+        Err(_) => p.to_path_buf(),
+    };
+    #[cfg(target_os = "windows")]
+    {
+        let s = resolved.to_string_lossy();
+        if let Some(stripped_unc) = s.strip_prefix(r"\\?\UNC\") {
+            return Ok(std::path::PathBuf::from(format!(r"\\{}", stripped_unc)));
+        } else if let Some(stripped) = s.strip_prefix(r"\\?\") {
+            return Ok(std::path::PathBuf::from(stripped));
         }
     }
+    Ok(resolved)
 }
 
 fn safe_f64(v: f64) -> f64 {
-    if v.is_finite() { v } else { 0.0 }
+    if v.is_finite() {
+        v
+    } else {
+        0.0
+    }
 }
 
 #[derive(Clone, Default)]
@@ -368,11 +421,19 @@ fn network_config() -> &'static Mutex<NetworkConfig> {
 }
 
 fn get_proxy_url() -> Option<String> {
-    network_config().lock().unwrap_or_else(|p| p.into_inner()).proxy_url.clone()
+    network_config()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .proxy_url
+        .clone()
 }
 
 fn get_custom_instance() -> Option<String> {
-    network_config().lock().unwrap_or_else(|p| p.into_inner()).custom_instance.clone()
+    network_config()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .custom_instance
+        .clone()
 }
 
 fn apply_proxy_to_cmd(cmd: &mut std::process::Command) {
@@ -414,7 +475,9 @@ fn get_http_client() -> reqwest::Client {
 
 async fn search_custom_instance(query: &str, instance_url: &str) -> Option<String> {
     let clean_inst = instance_url.trim().trim_end_matches('/');
-    if clean_inst.is_empty() { return None; }
+    if clean_inst.is_empty() {
+        return None;
+    }
     let base_url = if clean_inst.starts_with("http://") || clean_inst.starts_with("https://") {
         clean_inst.to_string()
     } else {
@@ -429,11 +492,23 @@ async fn search_custom_instance(query: &str, instance_url: &str) -> Option<Strin
     if let Ok(res) = client.get(&piped_url).send().await {
         if res.status().is_success() {
             if let Ok(json) = res.json::<serde_json::Value>().await {
-                if let Some(arr) = json.get("items").and_then(|i| i.as_array()).or_else(|| json.as_array()) {
+                if let Some(arr) = json
+                    .get("items")
+                    .and_then(|i| i.as_array())
+                    .or_else(|| json.as_array())
+                {
                     let mut items = Vec::new();
                     for item in arr {
-                        let title = item.get("title").and_then(|t| t.as_str()).unwrap_or("").trim();
-                        let uploader = item.get("uploaderName").and_then(|u| u.as_str()).unwrap_or("Unknown").trim();
+                        let title = item
+                            .get("title")
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("")
+                            .trim();
+                        let uploader = item
+                            .get("uploaderName")
+                            .and_then(|u| u.as_str())
+                            .unwrap_or("Unknown")
+                            .trim();
                         let dur_secs = item.get("duration").and_then(|d| d.as_i64()).unwrap_or(0);
                         let dur_str = if dur_secs > 0 {
                             format!("{}:{:02}", dur_secs / 60, dur_secs % 60)
@@ -442,14 +517,17 @@ async fn search_custom_instance(query: &str, instance_url: &str) -> Option<Strin
                         };
                         let url_str = item.get("url").and_then(|u| u.as_str()).unwrap_or("");
                         let video_id = if let Some(idx) = url_str.find("v=") {
-                            &url_str[idx+2..]
+                            &url_str[idx + 2..]
                         } else if let Some(idx) = url_str.find("/watch?v=") {
-                            &url_str[idx+9..]
+                            &url_str[idx + 9..]
                         } else {
                             url_str.trim_start_matches('/')
                         };
                         if !title.is_empty() && !video_id.is_empty() {
-                            items.push(format!("{}===={}===={}===={}", title, uploader, dur_str, video_id));
+                            items.push(format!(
+                                "{}===={}===={}===={}",
+                                title, uploader, dur_str, video_id
+                            ));
                         }
                     }
                     if !items.is_empty() {
@@ -468,9 +546,20 @@ async fn search_custom_instance(query: &str, instance_url: &str) -> Option<Strin
                 if let Some(arr) = json.as_array() {
                     let mut items = Vec::new();
                     for item in arr {
-                        let title = item.get("title").and_then(|t| t.as_str()).unwrap_or("").trim();
-                        let uploader = item.get("author").and_then(|u| u.as_str()).unwrap_or("Unknown").trim();
-                        let dur_secs = item.get("lengthSeconds").and_then(|d| d.as_i64()).unwrap_or(0);
+                        let title = item
+                            .get("title")
+                            .and_then(|t| t.as_str())
+                            .unwrap_or("")
+                            .trim();
+                        let uploader = item
+                            .get("author")
+                            .and_then(|u| u.as_str())
+                            .unwrap_or("Unknown")
+                            .trim();
+                        let dur_secs = item
+                            .get("lengthSeconds")
+                            .and_then(|d| d.as_i64())
+                            .unwrap_or(0);
                         let dur_str = if dur_secs > 0 {
                             format!("{}:{:02}", dur_secs / 60, dur_secs % 60)
                         } else {
@@ -478,7 +567,10 @@ async fn search_custom_instance(query: &str, instance_url: &str) -> Option<Strin
                         };
                         let video_id = item.get("videoId").and_then(|v| v.as_str()).unwrap_or("");
                         if !title.is_empty() && !video_id.is_empty() {
-                            items.push(format!("{}===={}===={}===={}", title, uploader, dur_str, video_id));
+                            items.push(format!(
+                                "{}===={}===={}===={}",
+                                title, uploader, dur_str, video_id
+                            ));
                         }
                     }
                     if !items.is_empty() {
@@ -494,7 +586,9 @@ async fn search_custom_instance(query: &str, instance_url: &str) -> Option<Strin
 
 async fn extract_stream_custom_instance(video_id: &str, instance_url: &str) -> Option<String> {
     let clean_inst = instance_url.trim().trim_end_matches('/');
-    if clean_inst.is_empty() { return None; }
+    if clean_inst.is_empty() {
+        return None;
+    }
     let base_url = if clean_inst.starts_with("http://") || clean_inst.starts_with("https://") {
         clean_inst.to_string()
     } else {
@@ -512,7 +606,8 @@ async fn extract_stream_custom_instance(video_id: &str, instance_url: &str) -> O
                     let mut best_url: Option<(i64, String)> = None;
                     for stream in audio_streams {
                         if let Some(url) = stream.get("url").and_then(|u| u.as_str()) {
-                            let bitrate = stream.get("bitrate").and_then(|b| b.as_i64()).unwrap_or(0);
+                            let bitrate =
+                                stream.get("bitrate").and_then(|b| b.as_i64()).unwrap_or(0);
                             if best_url.as_ref().map(|(b, _)| bitrate > *b).unwrap_or(true) {
                                 best_url = Some((bitrate, url.to_string()));
                             }
@@ -537,7 +632,13 @@ async fn extract_stream_custom_instance(video_id: &str, instance_url: &str) -> O
                         let type_str = fmt.get("type").and_then(|t| t.as_str()).unwrap_or("");
                         if type_str.starts_with("audio/") {
                             if let Some(url) = fmt.get("url").and_then(|u| u.as_str()) {
-                                let bitrate = fmt.get("bitrate").and_then(|b| b.as_i64()).or_else(|| fmt.get("bitrate").and_then(|b| b.as_str()?.parse().ok())).unwrap_or(0);
+                                let bitrate = fmt
+                                    .get("bitrate")
+                                    .and_then(|b| b.as_i64())
+                                    .or_else(|| {
+                                        fmt.get("bitrate").and_then(|b| b.as_str()?.parse().ok())
+                                    })
+                                    .unwrap_or(0);
                                 if best_url.as_ref().map(|(b, _)| bitrate > *b).unwrap_or(true) {
                                     best_url = Some((bitrate, url.to_string()));
                                 }
@@ -557,7 +658,9 @@ async fn extract_stream_custom_instance(video_id: &str, instance_url: &str) -> O
 
 async fn search_youtube_direct(query: &str) -> Option<String> {
     let q = query.trim();
-    if q.is_empty() { return None; }
+    if q.is_empty() {
+        return None;
+    }
     let client = get_http_client();
 
     let body = serde_json::json!({
@@ -582,7 +685,9 @@ async fn search_youtube_direct(query: &str) -> Option<String> {
         .await
         .ok()?;
 
-    if !res.status().is_success() { return None; }
+    if !res.status().is_success() {
+        return None;
+    }
     let json: serde_json::Value = res.json().await.ok()?;
 
     let mut items = Vec::new();
@@ -596,12 +701,18 @@ async fn search_youtube_direct(query: &str) -> Option<String> {
 
                 if let Some(flex_cols) = item.get("flexColumns").and_then(|f| f.as_array()) {
                     if let Some(col0) = flex_cols.first() {
-                        if let Some(runs) = col0.pointer("/musicResponsiveListItemFlexColumnRenderer/text/runs").and_then(|r| r.as_array()) {
+                        if let Some(runs) = col0
+                            .pointer("/musicResponsiveListItemFlexColumnRenderer/text/runs")
+                            .and_then(|r| r.as_array())
+                        {
                             if let Some(run0) = runs.first() {
                                 if let Some(t) = run0.get("text").and_then(|t| t.as_str()) {
                                     title = t.to_string();
                                 }
-                                if let Some(v_id) = run0.pointer("/navigationEndpoint/watchEndpoint/videoId").and_then(|id| id.as_str()) {
+                                if let Some(v_id) = run0
+                                    .pointer("/navigationEndpoint/watchEndpoint/videoId")
+                                    .and_then(|id| id.as_str())
+                                {
                                     video_id = Some(v_id.to_string());
                                 }
                             }
@@ -613,7 +724,10 @@ async fn search_youtube_direct(query: &str) -> Option<String> {
                         }
                     }
                     if let Some(col1) = flex_cols.get(1) {
-                        if let Some(runs) = col1.pointer("/musicResponsiveListItemFlexColumnRenderer/text/runs").and_then(|r| r.as_array()) {
+                        if let Some(runs) = col1
+                            .pointer("/musicResponsiveListItemFlexColumnRenderer/text/runs")
+                            .and_then(|r| r.as_array())
+                        {
                             let mut artist_parts = Vec::new();
                             let mut found_separator = false;
                             for r in runs {
@@ -624,7 +738,12 @@ async fn search_youtube_direct(query: &str) -> Option<String> {
                                     } else if !found_separator && !t.is_empty() {
                                         artist_parts.push(t);
                                     }
-                                    if trimmed.contains(':') && (trimmed.len() == 4 || trimmed.len() == 5 || trimmed.len() == 7 || trimmed.len() == 8) {
+                                    if trimmed.contains(':')
+                                        && (trimmed.len() == 4
+                                            || trimmed.len() == 5
+                                            || trimmed.len() == 7
+                                            || trimmed.len() == 8)
+                                    {
                                         duration = trimmed.to_string();
                                     }
                                 }
@@ -637,7 +756,10 @@ async fn search_youtube_direct(query: &str) -> Option<String> {
                 }
                 if let Some(fixed_cols) = item.get("fixedColumns").and_then(|f| f.as_array()) {
                     if let Some(col0) = fixed_cols.first() {
-                        if let Some(runs) = col0.pointer("/musicResponsiveListItemFixedColumnRenderer/text/runs").and_then(|r| r.as_array()) {
+                        if let Some(runs) = col0
+                            .pointer("/musicResponsiveListItemFixedColumnRenderer/text/runs")
+                            .and_then(|r| r.as_array())
+                        {
                             if let Some(run0) = runs.first() {
                                 if let Some(d) = run0.get("text").and_then(|t| t.as_str()) {
                                     duration = d.to_string();
@@ -649,7 +771,10 @@ async fn search_youtube_direct(query: &str) -> Option<String> {
 
                 if let Some(vid) = video_id {
                     if !title.is_empty() {
-                        items.push(format!("{}===={}===={}===={}", title, uploader, duration, vid));
+                        items.push(format!(
+                            "{}===={}===={}===={}",
+                            title, uploader, duration, vid
+                        ));
                     }
                 }
             }
@@ -686,7 +811,12 @@ fn find_thumbnail_url(val: &serde_json::Value) -> Option<String> {
     }
     if let Some(obj) = val.as_object() {
         for (k, v) in obj {
-            if k == "thumbnail" || k == "thumbnails" || k == "thumbnailRenderer" || k == "musicThumbnailRenderer" || k == "leftThumbnail" {
+            if k == "thumbnail"
+                || k == "thumbnails"
+                || k == "thumbnailRenderer"
+                || k == "musicThumbnailRenderer"
+                || k == "leftThumbnail"
+            {
                 if let Some(found) = find_thumbnail_url(v) {
                     return Some(found);
                 }
@@ -698,7 +828,9 @@ fn find_thumbnail_url(val: &serde_json::Value) -> Option<String> {
 
 async fn search_youtube_artists_direct(query: &str) -> Option<String> {
     let q = query.trim();
-    if q.is_empty() { return None; }
+    if q.is_empty() {
+        return None;
+    }
     let client = get_http_client();
 
     let body = serde_json::json!({
@@ -723,13 +855,19 @@ async fn search_youtube_artists_direct(query: &str) -> Option<String> {
         .await
         .ok()?;
 
-    if !res.status().is_success() { return None; }
+    if !res.status().is_success() {
+        return None;
+    }
     let json: serde_json::Value = res.json().await.ok()?;
 
     let mut items = Vec::new();
     let mut seen_names = std::collections::HashSet::new();
 
-    fn extract_artists(val: &serde_json::Value, items: &mut Vec<String>, seen: &mut std::collections::HashSet<String>) {
+    fn extract_artists(
+        val: &serde_json::Value,
+        items: &mut Vec<String>,
+        seen: &mut std::collections::HashSet<String>,
+    ) {
         if let Some(obj) = val.as_object() {
             if let Some(item) = obj.get("musicResponsiveListItemRenderer") {
                 let mut name = String::new();
@@ -739,20 +877,32 @@ async fn search_youtube_artists_direct(query: &str) -> Option<String> {
 
                 if let Some(flex_cols) = item.get("flexColumns").and_then(|f| f.as_array()) {
                     if let Some(col0) = flex_cols.first() {
-                        if let Some(runs) = col0.pointer("/musicResponsiveListItemFlexColumnRenderer/text/runs").and_then(|r| r.as_array()) {
+                        if let Some(runs) = col0
+                            .pointer("/musicResponsiveListItemFlexColumnRenderer/text/runs")
+                            .and_then(|r| r.as_array())
+                        {
                             if let Some(run0) = runs.first() {
                                 if let Some(t) = run0.get("text").and_then(|t| t.as_str()) {
                                     name = t.to_string();
                                 }
-                                if let Some(bid) = run0.pointer("/navigationEndpoint/browseEndpoint/browseId").and_then(|id| id.as_str()) {
+                                if let Some(bid) = run0
+                                    .pointer("/navigationEndpoint/browseEndpoint/browseId")
+                                    .and_then(|id| id.as_str())
+                                {
                                     browse_id = bid.to_string();
                                 }
                             }
                         }
                     }
                     if let Some(col1) = flex_cols.get(1) {
-                        if let Some(runs) = col1.pointer("/musicResponsiveListItemFlexColumnRenderer/text/runs").and_then(|r| r.as_array()) {
-                            let sub: Vec<&str> = runs.iter().filter_map(|r| r.get("text").and_then(|t| t.as_str())).collect();
+                        if let Some(runs) = col1
+                            .pointer("/musicResponsiveListItemFlexColumnRenderer/text/runs")
+                            .and_then(|r| r.as_array())
+                        {
+                            let sub: Vec<&str> = runs
+                                .iter()
+                                .filter_map(|r| r.get("text").and_then(|t| t.as_str()))
+                                .collect();
                             if !sub.is_empty() {
                                 subtitle = sub.concat();
                             }
@@ -761,7 +911,10 @@ async fn search_youtube_artists_direct(query: &str) -> Option<String> {
                 }
 
                 if browse_id.is_empty() {
-                    if let Some(bid) = item.pointer("/navigationEndpoint/browseEndpoint/browseId").and_then(|id| id.as_str()) {
+                    if let Some(bid) = item
+                        .pointer("/navigationEndpoint/browseEndpoint/browseId")
+                        .and_then(|id| id.as_str())
+                    {
                         browse_id = bid.to_string();
                     }
                 }
@@ -778,7 +931,13 @@ async fn search_youtube_artists_direct(query: &str) -> Option<String> {
                 let norm_name = name.trim().to_lowercase();
                 if !norm_name.is_empty() && !seen.contains(&norm_name) {
                     seen.insert(norm_name);
-                    items.push(format!("{}===={}===={}===={}", name.trim(), avatar.trim(), subtitle.trim(), browse_id.trim()));
+                    items.push(format!(
+                        "{}===={}===={}===={}",
+                        name.trim(),
+                        avatar.trim(),
+                        subtitle.trim(),
+                        browse_id.trim()
+                    ));
                 }
             }
 
@@ -793,27 +952,42 @@ async fn search_youtube_artists_direct(query: &str) -> Option<String> {
                         if let Some(t) = run0.get("text").and_then(|t| t.as_str()) {
                             name = t.to_string();
                         }
-                        if let Some(bid) = run0.pointer("/navigationEndpoint/browseEndpoint/browseId").and_then(|id| id.as_str()) {
+                        if let Some(bid) = run0
+                            .pointer("/navigationEndpoint/browseEndpoint/browseId")
+                            .and_then(|id| id.as_str())
+                        {
                             browse_id = bid.to_string();
                         }
                     }
                 }
                 if browse_id.is_empty() {
-                    if let Some(bid) = item.pointer("/title/runs/0/navigationEndpoint/browseEndpoint/browseId").and_then(|id| id.as_str()) {
+                    if let Some(bid) = item
+                        .pointer("/title/runs/0/navigationEndpoint/browseEndpoint/browseId")
+                        .and_then(|id| id.as_str())
+                    {
                         browse_id = bid.to_string();
                     }
                 }
                 if let Some(found_avatar) = find_thumbnail_url(item) {
                     avatar = found_avatar;
                 }
-                if let Some(sub) = item.pointer("/subtitle/runs/0/text").and_then(|s| s.as_str()) {
+                if let Some(sub) = item
+                    .pointer("/subtitle/runs/0/text")
+                    .and_then(|s| s.as_str())
+                {
                     subtitle = sub.to_string();
                 }
 
                 let norm_name = name.trim().to_lowercase();
                 if !norm_name.is_empty() && !seen.contains(&norm_name) {
                     seen.insert(norm_name);
-                    items.push(format!("{}===={}===={}===={}", name.trim(), avatar.trim(), subtitle.trim(), browse_id.trim()));
+                    items.push(format!(
+                        "{}===={}===={}===={}",
+                        name.trim(),
+                        avatar.trim(),
+                        subtitle.trim(),
+                        browse_id.trim()
+                    ));
                 }
             }
 
@@ -828,19 +1002,28 @@ async fn search_youtube_artists_direct(query: &str) -> Option<String> {
                         if let Some(t) = run0.get("text").and_then(|t| t.as_str()) {
                             name = t.to_string();
                         }
-                        if let Some(bid) = run0.pointer("/navigationEndpoint/browseEndpoint/browseId").and_then(|id| id.as_str()) {
+                        if let Some(bid) = run0
+                            .pointer("/navigationEndpoint/browseEndpoint/browseId")
+                            .and_then(|id| id.as_str())
+                        {
                             browse_id = bid.to_string();
                         }
                     }
                 }
                 if browse_id.is_empty() {
-                    if let Some(bid) = item.pointer("/navigationEndpoint/browseEndpoint/browseId").and_then(|id| id.as_str()) {
+                    if let Some(bid) = item
+                        .pointer("/navigationEndpoint/browseEndpoint/browseId")
+                        .and_then(|id| id.as_str())
+                    {
                         browse_id = bid.to_string();
                     }
                 }
 
                 if let Some(runs) = item.pointer("/subtitle/runs").and_then(|r| r.as_array()) {
-                    let sub: Vec<&str> = runs.iter().filter_map(|r| r.get("text").and_then(|t| t.as_str())).collect();
+                    let sub: Vec<&str> = runs
+                        .iter()
+                        .filter_map(|r| r.get("text").and_then(|t| t.as_str()))
+                        .collect();
                     if !sub.is_empty() {
                         subtitle = sub.concat();
                     }
@@ -853,7 +1036,13 @@ async fn search_youtube_artists_direct(query: &str) -> Option<String> {
                 let norm_name = name.trim().to_lowercase();
                 if !norm_name.is_empty() && !seen.contains(&norm_name) {
                     seen.insert(norm_name);
-                    items.push(format!("{}===={}===={}===={}", name.trim(), avatar.trim(), subtitle.trim(), browse_id.trim()));
+                    items.push(format!(
+                        "{}===={}===={}===={}",
+                        name.trim(),
+                        avatar.trim(),
+                        subtitle.trim(),
+                        browse_id.trim()
+                    ));
                 }
             }
 
@@ -892,7 +1081,10 @@ async fn search_youtube_artists(query: String) -> Result<String, String> {
     // Direct YouTube channel search fallback via HTTP
     let client = get_http_client();
     let encoded = urlencoding::encode(&q_trim);
-    let yt_url = format!("https://www.youtube.com/results?search_query={}&sp=EgIQAg%3D%3D", encoded);
+    let yt_url = format!(
+        "https://www.youtube.com/results?search_query={}&sp=EgIQAg%3D%3D",
+        encoded
+    );
     if let Ok(resp) = client.get(&yt_url)
         .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
         .send()
@@ -988,7 +1180,9 @@ async fn fetch_artist_browse_details(browse_id: &str) -> Option<(String, String,
         .await
         .ok()?;
 
-    if !res.status().is_success() { return None; }
+    if !res.status().is_success() {
+        return None;
+    }
     let json: serde_json::Value = res.json().await.ok()?;
 
     let mut avatar = String::new();
@@ -1013,12 +1207,18 @@ async fn fetch_artist_browse_details(browse_id: &str) -> Option<(String, String,
 
                 if let Some(flex_cols) = item.get("flexColumns").and_then(|f| f.as_array()) {
                     if let Some(col0) = flex_cols.first() {
-                        if let Some(runs) = col0.pointer("/musicResponsiveListItemFlexColumnRenderer/text/runs").and_then(|r| r.as_array()) {
+                        if let Some(runs) = col0
+                            .pointer("/musicResponsiveListItemFlexColumnRenderer/text/runs")
+                            .and_then(|r| r.as_array())
+                        {
                             if let Some(run0) = runs.first() {
                                 if let Some(t) = run0.get("text").and_then(|t| t.as_str()) {
                                     title = t.to_string();
                                 }
-                                if let Some(v_id) = run0.pointer("/navigationEndpoint/watchEndpoint/videoId").and_then(|id| id.as_str()) {
+                                if let Some(v_id) = run0
+                                    .pointer("/navigationEndpoint/watchEndpoint/videoId")
+                                    .and_then(|id| id.as_str())
+                                {
                                     video_id = Some(v_id.to_string());
                                 }
                             }
@@ -1030,7 +1230,10 @@ async fn fetch_artist_browse_details(browse_id: &str) -> Option<(String, String,
                         }
                     }
                     if video_id.is_none() {
-                        if let Some(v_id) = item.pointer("/playlistItemData/videoId").and_then(|id| id.as_str()) {
+                        if let Some(v_id) = item
+                            .pointer("/playlistItemData/videoId")
+                            .and_then(|id| id.as_str())
+                        {
                             video_id = Some(v_id.to_string());
                         }
                     }
@@ -1040,7 +1243,10 @@ async fn fetch_artist_browse_details(browse_id: &str) -> Option<(String, String,
                         }
                     }
                     if let Some(col1) = flex_cols.get(1) {
-                        if let Some(runs) = col1.pointer("/musicResponsiveListItemFlexColumnRenderer/text/runs").and_then(|r| r.as_array()) {
+                        if let Some(runs) = col1
+                            .pointer("/musicResponsiveListItemFlexColumnRenderer/text/runs")
+                            .and_then(|r| r.as_array())
+                        {
                             let mut artist_parts = Vec::new();
                             let mut found_separator = false;
                             for r in runs {
@@ -1051,7 +1257,12 @@ async fn fetch_artist_browse_details(browse_id: &str) -> Option<(String, String,
                                     } else if !found_separator && !t.is_empty() {
                                         artist_parts.push(t);
                                     }
-                                    if trimmed.contains(':') && (trimmed.len() == 4 || trimmed.len() == 5 || trimmed.len() == 7 || trimmed.len() == 8) {
+                                    if trimmed.contains(':')
+                                        && (trimmed.len() == 4
+                                            || trimmed.len() == 5
+                                            || trimmed.len() == 7
+                                            || trimmed.len() == 8)
+                                    {
                                         duration = trimmed.to_string();
                                     }
                                 }
@@ -1064,7 +1275,10 @@ async fn fetch_artist_browse_details(browse_id: &str) -> Option<(String, String,
                 }
                 if let Some(vid) = video_id {
                     if !title.is_empty() && !vid.is_empty() && vid != "NA" {
-                        tracks.push(format!("{}===={}===={}===={}", title, uploader, duration, vid));
+                        tracks.push(format!(
+                            "{}===={}===={}===={}",
+                            title, uploader, duration, vid
+                        ));
                     }
                 }
             }
@@ -1079,14 +1293,18 @@ async fn fetch_artist_browse_details(browse_id: &str) -> Option<(String, String,
     }
 
     extract_tracks_from_shelf(&json, &mut tracks);
-    if banner.is_empty() { banner = avatar.clone(); }
+    if banner.is_empty() {
+        banner = avatar.clone();
+    }
 
     Some((avatar, banner, tracks))
 }
 
 fn track_matches_artist(title: &str, artist: &str, target_artist: &str) -> bool {
     let target = target_artist.trim().to_lowercase();
-    if target.is_empty() { return false; }
+    if target.is_empty() {
+        return false;
+    }
 
     let art = artist.trim().to_lowercase();
     if art == target || art.contains(&target) || (target.contains(&art) && art.len() >= 3) {
@@ -1094,16 +1312,31 @@ fn track_matches_artist(title: &str, artist: &str, target_artist: &str) -> bool 
     }
 
     for part in art.split([',', ';', '&', '/']).map(|s| s.trim()) {
-        let p_clean = part.replace("feat.", "").replace("ft.", "").replace(" - topic", "").trim().to_string();
-        if p_clean == target || p_clean.contains(&target) || (target.contains(&p_clean) && p_clean.len() >= 3) {
+        let p_clean = part
+            .replace("feat.", "")
+            .replace("ft.", "")
+            .replace(" - topic", "")
+            .trim()
+            .to_string();
+        if p_clean == target
+            || p_clean.contains(&target)
+            || (target.contains(&p_clean) && p_clean.len() >= 3)
+        {
             return true;
         }
     }
 
     let title_clean = title.trim();
-    if let Some((first, _)) = title_clean.split_once('-').or_else(|| title_clean.split_once('–')).or_else(|| title_clean.split_once('|')) {
+    if let Some((first, _)) = title_clean
+        .split_once('-')
+        .or_else(|| title_clean.split_once('–'))
+        .or_else(|| title_clean.split_once('|'))
+    {
         let candidate_art = first.trim().to_lowercase();
-        if candidate_art == target || candidate_art.contains(&target) || (target.contains(&candidate_art) && candidate_art.len() >= 3) {
+        if candidate_art == target
+            || candidate_art.contains(&target)
+            || (target.contains(&candidate_art) && candidate_art.len() >= 3)
+        {
             return true;
         }
     }
@@ -1126,24 +1359,45 @@ async fn get_artist_page_details(artist_name: String) -> Result<String, String> 
 
     // 1. Search for artist in YouTube Music
     if let Some(artists_raw) = search_youtube_artists_direct(&name_trim).await {
-        let lines: Vec<&str> = artists_raw.trim().split('\n').filter(|l| !l.is_empty()).collect();
+        let lines: Vec<&str> = artists_raw
+            .trim()
+            .split('\n')
+            .filter(|l| !l.is_empty())
+            .collect();
         let target_lower = name_trim.to_lowercase();
-        let matched_line = lines.iter().find(|l| {
-            let n = l.split("====").next().unwrap_or("").trim().to_lowercase();
-            n == target_lower || n.contains(&target_lower) || target_lower.contains(&n)
-        }).or_else(|| lines.first());
+        let matched_line = lines
+            .iter()
+            .find(|l| {
+                let n = l.split("====").next().unwrap_or("").trim().to_lowercase();
+                n == target_lower || n.contains(&target_lower) || target_lower.contains(&n)
+            })
+            .or_else(|| lines.first());
 
         if let Some(line) = matched_line {
             let parts: Vec<&str> = line.split("====").collect();
-            if let Some(n) = parts.first() { if !n.trim().is_empty() { canonical_name = n.trim().to_string(); } }
-            if let Some(a) = parts.get(1) { if !a.trim().is_empty() { avatar = a.trim().to_string(); } }
-            if let Some(bid) = parts.get(3) { if !bid.trim().is_empty() { browse_id = bid.trim().to_string(); } }
+            if let Some(n) = parts.first() {
+                if !n.trim().is_empty() {
+                    canonical_name = n.trim().to_string();
+                }
+            }
+            if let Some(a) = parts.get(1) {
+                if !a.trim().is_empty() {
+                    avatar = a.trim().to_string();
+                }
+            }
+            if let Some(bid) = parts.get(3) {
+                if !bid.trim().is_empty() {
+                    browse_id = bid.trim().to_string();
+                }
+            }
         }
     }
 
     // 2. If browse_id is available, fetch exact artist browse discography
     if !browse_id.is_empty() {
-        if let Some((b_header_img, b_banner, b_tracks)) = fetch_artist_browse_details(&browse_id).await {
+        if let Some((b_header_img, b_banner, b_tracks)) =
+            fetch_artist_browse_details(&browse_id).await
+        {
             if !b_banner.is_empty() {
                 banner = b_banner;
             } else if !b_header_img.is_empty() {
@@ -1165,7 +1419,10 @@ async fn get_artist_page_details(artist_name: String) -> Result<String, String> 
                             if uploader.is_empty() {
                                 uploader = canonical_name.clone();
                             }
-                            tracks.push(format!("{}===={}===={}===={}", title, uploader, duration, vid));
+                            tracks.push(format!(
+                                "{}===={}===={}===={}",
+                                title, uploader, duration, vid
+                            ));
                         }
                     }
                 }
@@ -1176,7 +1433,8 @@ async fn get_artist_page_details(artist_name: String) -> Result<String, String> 
     // 3. Supplement or populate with direct YouTube Music song search for the artist
     if tracks.len() < 25 {
         if let Some(songs_raw) = search_youtube_direct(&canonical_name).await {
-            let mut seen_ids: std::collections::HashSet<String> = tracks.iter()
+            let mut seen_ids: std::collections::HashSet<String> = tracks
+                .iter()
                 .filter_map(|t| t.split("====").nth(3).map(|s| s.trim().to_string()))
                 .collect();
 
@@ -1186,11 +1444,15 @@ async fn get_artist_page_details(artist_name: String) -> Result<String, String> 
                     let title = parts[0].trim();
                     let uploader = parts[1].trim();
                     let vid = parts[3].trim();
-                    if !seen_ids.contains(vid) && !vid.is_empty() && vid != "NA"
-                        && (track_matches_artist(title, uploader, &canonical_name) || tracks.is_empty()) {
-                            seen_ids.insert(vid.to_string());
-                            tracks.push(line.to_string());
-                        }
+                    if !seen_ids.contains(vid)
+                        && !vid.is_empty()
+                        && vid != "NA"
+                        && (track_matches_artist(title, uploader, &canonical_name)
+                            || tracks.is_empty())
+                    {
+                        seen_ids.insert(vid.to_string());
+                        tracks.push(line.to_string());
+                    }
                 }
             }
         }
@@ -1206,11 +1468,15 @@ async fn get_artist_page_details(artist_name: String) -> Result<String, String> 
                     let title = parts[0].trim();
                     let uploader = parts[1].trim();
                     let vid = parts[3].trim();
-                    if !seen_ids.contains(vid) && !vid.is_empty() && vid != "NA"
-                        && (track_matches_artist(title, uploader, &canonical_name) || tracks.is_empty()) {
-                            seen_ids.insert(vid.to_string());
-                            tracks.push(line.to_string());
-                        }
+                    if !seen_ids.contains(vid)
+                        && !vid.is_empty()
+                        && vid != "NA"
+                        && (track_matches_artist(title, uploader, &canonical_name)
+                            || tracks.is_empty())
+                    {
+                        seen_ids.insert(vid.to_string());
+                        tracks.push(line.to_string());
+                    }
                 }
             }
         }
@@ -1218,7 +1484,8 @@ async fn get_artist_page_details(artist_name: String) -> Result<String, String> 
 
     // 5. Final fallback to ytsearch if direct was blocked or empty
     if tracks.is_empty() {
-        if let Ok(fallback_raw) = search_youtube(format!("{} official songs", canonical_name)).await {
+        if let Ok(fallback_raw) = search_youtube(format!("{} official songs", canonical_name)).await
+        {
             for line in fallback_raw.trim().split('\n') {
                 let parts: Vec<&str> = line.split("====").collect();
                 if parts.len() >= 4 {
@@ -1245,10 +1512,15 @@ async fn get_artist_page_details(artist_name: String) -> Result<String, String> 
         }
     }
 
-    if banner.is_empty() { banner = avatar.clone(); }
+    if banner.is_empty() {
+        banner = avatar.clone();
+    }
 
     let mut result_lines = Vec::new();
-    result_lines.push(format!("ARTIST_INFO===={}===={}===={}", canonical_name, avatar, banner));
+    result_lines.push(format!(
+        "ARTIST_INFO===={}===={}===={}",
+        canonical_name, avatar, banner
+    ));
     result_lines.extend(tracks);
 
     Ok(result_lines.join("\n"))
@@ -1257,9 +1529,9 @@ async fn get_artist_page_details(artist_name: String) -> Result<String, String> 
 #[tauri::command]
 async fn search_youtube(query: String) -> Result<String, String> {
     let q_trim = query.trim().to_string();
-    let is_url = q_trim.starts_with("http://") 
-        || q_trim.starts_with("https://") 
-        || q_trim.contains("youtube.com") 
+    let is_url = q_trim.starts_with("http://")
+        || q_trim.starts_with("https://")
+        || q_trim.contains("youtube.com")
         || q_trim.contains("youtu.be");
 
     if !is_url {
@@ -1286,11 +1558,13 @@ async fn search_youtube(query: String) -> Result<String, String> {
     cmd.args([
         &search_arg,
         "--flat-playlist",
-        "--print", "%(title)s====%(uploader)s====%(duration_string)s====%(id)s",
+        "--print",
+        "%(title)s====%(uploader)s====%(duration_string)s====%(id)s",
         "--no-warnings",
         "--no-check-certificates",
         "--geo-bypass",
-        "--socket-timeout", "15",
+        "--socket-timeout",
+        "15",
     ]);
     if let Some(proxy_str) = get_proxy_url() {
         cmd.args(["--proxy", &proxy_str]);
@@ -1305,7 +1579,11 @@ async fn search_youtube(query: String) -> Result<String, String> {
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
     if stdout.trim().is_empty() {
         let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-        return Err(if stderr.trim().is_empty() { "No results found".to_string() } else { stderr });
+        return Err(if stderr.trim().is_empty() {
+            "No results found".to_string()
+        } else {
+            stderr
+        });
     }
     Ok(stdout)
 }
@@ -1346,13 +1624,19 @@ async fn import_youtube_playlist(url: String) -> Result<String, String> {
 
     let out = match tokio::time::timeout(std::time::Duration::from_secs(45), cmd.output()).await {
         Ok(res) => res.map_err(|e| format!("yt-dlp failed: {}", e))?,
-        Err(_) => return Err("Playlist import timed out - check the URL and your connection".to_string()),
+        Err(_) => {
+            return Err("Playlist import timed out - check the URL and your connection".to_string())
+        }
     };
 
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
     if stdout.trim().is_empty() {
         let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-        return Err(if stderr.trim().is_empty() { "No tracks found. Is this a public playlist?".to_string() } else { stderr });
+        return Err(if stderr.trim().is_empty() {
+            "No tracks found. Is this a public playlist?".to_string()
+        } else {
+            stderr
+        });
     }
     Ok(stdout)
 }
@@ -1436,7 +1720,11 @@ async fn import_csv_playlist(csv_content: String) -> Result<String, String> {
         // 1. Exact priority checks for Track Name / Title
         for (i, h) in normalized_headers.iter().enumerate() {
             match h.as_str() {
-                "track name" | "track title" | "song title" | "song name" | "master_metadata_track_name" => {
+                "track name"
+                | "track title"
+                | "song title"
+                | "song name"
+                | "master_metadata_track_name" => {
                     title_idx = Some(i);
                     break;
                 }
@@ -1453,7 +1741,9 @@ async fn import_csv_playlist(csv_content: String) -> Result<String, String> {
         }
         if title_idx.is_none() {
             for (i, h) in normalized_headers.iter().enumerate() {
-                if (h.contains("track") || (h.contains("title") && !h.contains("album"))) && !h.contains("artist") {
+                if (h.contains("track") || (h.contains("title") && !h.contains("album")))
+                    && !h.contains("artist")
+                {
                     title_idx = Some(i);
                     break;
                 }
@@ -1463,7 +1753,13 @@ async fn import_csv_playlist(csv_content: String) -> Result<String, String> {
         // 2. Exact priority checks for Artist Name
         for (i, h) in normalized_headers.iter().enumerate() {
             match h.as_str() {
-                "artist name(s)" | "artist name" | "artist(s)" | "artists" | "artist" | "track artist" | "master_metadata_album_artist_name" => {
+                "artist name(s)"
+                | "artist name"
+                | "artist(s)"
+                | "artists"
+                | "artist"
+                | "track artist"
+                | "master_metadata_album_artist_name" => {
                     artist_idx = Some(i);
                     break;
                 }
@@ -1472,7 +1768,11 @@ async fn import_csv_playlist(csv_content: String) -> Result<String, String> {
         }
         if artist_idx.is_none() {
             for (i, h) in normalized_headers.iter().enumerate() {
-                if h.contains("artist") || h.contains("performer") || h.contains("creator") || h.contains("author") {
+                if h.contains("artist")
+                    || h.contains("performer")
+                    || h.contains("creator")
+                    || h.contains("author")
+                {
                     artist_idx = Some(i);
                     break;
                 }
@@ -1508,8 +1808,14 @@ async fn import_csv_playlist(csv_content: String) -> Result<String, String> {
 
         let mut count = 0usize;
         for row in rows.iter().skip(data_start) {
-            let title = row.get(final_title_idx).map(|s| s.trim().trim_matches('"').trim()).unwrap_or("");
-            let artist = row.get(final_artist_idx).map(|s| s.trim().trim_matches('"').trim()).unwrap_or("");
+            let title = row
+                .get(final_title_idx)
+                .map(|s| s.trim().trim_matches('"').trim())
+                .unwrap_or("");
+            let artist = row
+                .get(final_artist_idx)
+                .map(|s| s.trim().trim_matches('"').trim())
+                .unwrap_or("");
 
             if title.is_empty() && artist.is_empty() {
                 continue;
@@ -1523,7 +1829,9 @@ async fn import_csv_playlist(csv_content: String) -> Result<String, String> {
         }
 
         if count == 0 {
-            return Err("No tracks found in CSV. Make sure this is a valid playlist CSV file.".to_string());
+            return Err(
+                "No tracks found in CSV. Make sure this is a valid playlist CSV file.".to_string(),
+            );
         }
 
         Ok(output)
@@ -1538,7 +1846,10 @@ static CACHE_ENABLED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicB
 async fn set_cache_enabled(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
     CACHE_ENABLED.store(enabled, std::sync::atomic::Ordering::SeqCst);
     if !enabled {
-        PREFETCH_CACHE.write().unwrap_or_else(|p| p.into_inner()).clear();
+        PREFETCH_CACHE
+            .write()
+            .unwrap_or_else(|p| p.into_inner())
+            .clear();
         let _ = cache::clear_app_cache(app).await;
     }
     Ok(())
@@ -1551,28 +1862,63 @@ fn get_cache_enabled() -> bool {
 
 #[tauri::command]
 async fn prefetch_track(url: String) -> Result<(), String> {
-    if !CACHE_ENABLED.load(std::sync::atomic::Ordering::SeqCst) { return Ok(()); }
-    if url.starts_with("local://") { return Ok(()); }
-    if PREFETCH_CACHE.read().unwrap_or_else(|p| p.into_inner()).contains_key(&url) { return Ok(()); }
+    if !CACHE_ENABLED.load(std::sync::atomic::Ordering::SeqCst) {
+        return Ok(());
+    }
+    if url.starts_with("local://") {
+        return Ok(());
+    }
+    if PREFETCH_CACHE
+        .read()
+        .unwrap_or_else(|p| p.into_inner())
+        .contains_key(&url)
+    {
+        return Ok(());
+    }
     let cache = Arc::clone(&PREFETCH_CACHE);
     tokio::spawn(async move {
         let permit = prefetch_semaphore().acquire().await.ok();
-        if !CACHE_ENABLED.load(std::sync::atomic::Ordering::SeqCst) { return; }
-        if cache.read().unwrap_or_else(|p| p.into_inner()).contains_key(&url) { return; }
+        if !CACHE_ENABLED.load(std::sync::atomic::Ordering::SeqCst) {
+            return;
+        }
+        if cache
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            .contains_key(&url)
+        {
+            return;
+        }
         if let Some(stream_url) = extract_stream_url_async(url.clone(), None).await {
-            if !CACHE_ENABLED.load(std::sync::atomic::Ordering::SeqCst) { return; }
+            if !CACHE_ENABLED.load(std::sync::atomic::Ordering::SeqCst) {
+                return;
+            }
             let mut c = cache.write().unwrap_or_else(|p| p.into_inner());
             let now = std::time::Instant::now();
             c.retain(|_, v| now.duration_since(v.ts) < std::time::Duration::from_secs(4 * 3600));
-            if c.len() >= 200 { c.retain(|_, v| std::time::Instant::now().duration_since(v.ts) < std::time::Duration::from_secs(3600)); }
-            c.insert(url, CacheEntry { url: stream_url, ts: now });
+            if c.len() >= 200 {
+                c.retain(|_, v| {
+                    std::time::Instant::now().duration_since(v.ts)
+                        < std::time::Duration::from_secs(3600)
+                });
+            }
+            c.insert(
+                url,
+                CacheEntry {
+                    url: stream_url,
+                    ts: now,
+                },
+            );
         }
         drop(permit);
     });
     Ok(())
 }
 
-fn build_af_string(loudnorm_on: bool, skip_sil: bool, (b, m, t): (f64, f64, f64)) -> Option<String> {
+fn build_af_string(
+    loudnorm_on: bool,
+    skip_sil: bool,
+    (b, m, t): (f64, f64, f64),
+) -> Option<String> {
     let eq_active = !(b == 0.0 && m == 0.0 && t == 0.0);
     let mut parts: Vec<String> = Vec::new();
 
@@ -1639,15 +1985,22 @@ fn mpv_af_flag() -> Option<String> {
 fn ensure_mpv_running() -> bool {
     let mut guard = mpv_process().lock().unwrap_or_else(|p| p.into_inner());
 
-    let alive = guard.as_mut().map(|c| c.try_wait().ok() == Some(None)).unwrap_or(false);
-    if alive && wait_for_socket(200) { return true; }
+    let alive = guard
+        .as_mut()
+        .map(|c| c.try_wait().ok() == Some(None))
+        .unwrap_or(false);
+    if alive && wait_for_socket(200) {
+        return true;
+    }
 
     if let Some(mut old_child) = guard.take() {
         let _ = old_child.kill();
         let _ = old_child.wait();
     }
     #[cfg(unix)]
-    { let _ = std::fs::remove_file(socket_path()); }
+    {
+        let _ = std::fs::remove_file(socket_path());
+    }
 
     let mut args: Vec<String> = vec![
         "--no-video".into(),
@@ -1683,27 +2036,32 @@ fn ensure_mpv_running() -> bool {
     if let Some(proxy_str) = get_proxy_url() {
         args.push(format!("--http-proxy={}", proxy_str));
     }
-    if let Some(af) = mpv_af_flag() { args.push(af); }
+    if let Some(af) = mpv_af_flag() {
+        args.push(af);
+    }
 
     match Command::new(bin_mpv()).args(&args).no_window().spawn() {
-        Ok(child) => { *guard = Some(child); }
+        Ok(child) => {
+            *guard = Some(child);
+        }
         Err(_) => return false,
     }
-    drop(guard); 
+    drop(guard);
     wait_for_socket(4000)
 }
 
 fn switch_track_ipc(url: &str) -> Result<(), String> {
     {
-        let mut state = current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
+        let mut state = current_playback_state()
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
         state.position = 0.0;
         state.duration = 0.0;
         state.playing = false;
         state.eof_reached = false;
     }
     let cmd = serde_json::json!({"command": ["loadfile", url, "replace"]}).to_string();
-    send_ipc_command_with_retry(&cmd, 3)
-        .map_err(|e| format!("loadfile failed: {}", e))?;
+    send_ipc_command_with_retry(&cmd, 3).map_err(|e| format!("loadfile failed: {}", e))?;
     Ok(())
 }
 
@@ -1711,7 +2069,11 @@ static LOG_PATH: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::
 static APP_CACHE_DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
 
 fn init_log_path(app: &tauri::AppHandle) {
-    if let Ok(dir) = app.path().app_log_dir().or_else(|_| app.path().app_data_dir()) {
+    if let Ok(dir) = app
+        .path()
+        .app_log_dir()
+        .or_else(|_| app.path().app_data_dir())
+    {
         let _ = std::fs::create_dir_all(&dir);
         let _ = LOG_PATH.set(dir.join("veluna_debug.log"));
     }
@@ -1721,15 +2083,28 @@ fn init_cache_dir(app: &tauri::AppHandle) {
     let dir = app.path().app_cache_dir().ok().or_else(|| {
         #[cfg(target_os = "linux")]
         {
-            std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join(".cache").join("com.veluna.player"))
+            std::env::var("HOME").ok().map(|h| {
+                std::path::PathBuf::from(h)
+                    .join(".cache")
+                    .join("com.veluna.player")
+            })
         }
         #[cfg(target_os = "windows")]
         {
-            std::env::var("LOCALAPPDATA").ok().map(|l| std::path::PathBuf::from(l).join("com.veluna.player").join("cache"))
+            std::env::var("LOCALAPPDATA").ok().map(|l| {
+                std::path::PathBuf::from(l)
+                    .join("com.veluna.player")
+                    .join("cache")
+            })
         }
         #[cfg(target_os = "macos")]
         {
-            std::env::var("HOME").ok().map(|h| std::path::PathBuf::from(h).join("Library").join("Caches").join("com.veluna.player"))
+            std::env::var("HOME").ok().map(|h| {
+                std::path::PathBuf::from(h)
+                    .join("Library")
+                    .join("Caches")
+                    .join("com.veluna.player")
+            })
         }
     });
 
@@ -1766,12 +2141,18 @@ fn log_debug(msg: &str) {
             .open(log_path)
         {
             use std::io::Write;
-            let _ = writeln!(file, "[{}] {}", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(), msg);
+            let _ = writeln!(
+                file,
+                "[{}] {}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs(),
+                msg
+            );
         }
     }
 }
-
-
 
 fn extract_video_id(url: &str) -> Option<String> {
     if url.len() == 11 && !url.contains('/') && !url.contains('?') && !url.contains('&') {
@@ -1781,32 +2162,54 @@ fn extract_video_id(url: &str) -> Option<String> {
         let rest = &url[pos + 2..];
         let end = rest.find('&').unwrap_or(rest.len());
         let id = &rest[..end];
-        if id.len() == 11 { return Some(id.to_string()); }
+        if id.len() == 11 {
+            return Some(id.to_string());
+        }
     }
     if let Some(pos) = url.find("youtu.be/") {
         let rest = &url[pos + 9..];
-        let end = rest.find('?').or_else(|| rest.find('&')).unwrap_or(rest.len());
+        let end = rest
+            .find('?')
+            .or_else(|| rest.find('&'))
+            .unwrap_or(rest.len());
         let id = &rest[..end];
-        if id.len() == 11 { return Some(id.to_string()); }
+        if id.len() == 11 {
+            return Some(id.to_string());
+        }
     }
     if let Some(pos) = url.find("/shorts/") {
         let rest = &url[pos + 8..];
-        let end = rest.find('?').or_else(|| rest.find('&')).or_else(|| rest.find('/')).unwrap_or(rest.len());
+        let end = rest
+            .find('?')
+            .or_else(|| rest.find('&'))
+            .or_else(|| rest.find('/'))
+            .unwrap_or(rest.len());
         let id = &rest[..end];
-        if id.len() == 11 { return Some(id.to_string()); }
+        if id.len() == 11 {
+            return Some(id.to_string());
+        }
     }
     if let Some(pos) = url.find("/embed/") {
         let rest = &url[pos + 7..];
-        let end = rest.find('?').or_else(|| rest.find('&')).or_else(|| rest.find('/')).unwrap_or(rest.len());
+        let end = rest
+            .find('?')
+            .or_else(|| rest.find('&'))
+            .or_else(|| rest.find('/'))
+            .unwrap_or(rest.len());
         let id = &rest[..end];
-        if id.len() == 11 { return Some(id.to_string()); }
+        if id.len() == 11 {
+            return Some(id.to_string());
+        }
     }
     None
 }
 
 async fn extract_stream_url_direct_innertube(url: &str) -> Option<String> {
     let video_id = extract_video_id(url)?;
-    log_debug(&format!("Attempting direct Innertube fast-path for videoId: {}", video_id));
+    log_debug(&format!(
+        "Attempting direct Innertube fast-path for videoId: {}",
+        video_id
+    ));
 
     let client = get_http_client();
     let body = serde_json::json!({
@@ -1833,9 +2236,13 @@ async fn extract_stream_url_direct_innertube(url: &str) -> Option<String> {
         "racyCheckOk": true
     });
 
-    let res = client.post("https://www.youtube.com/youtubei/v1/player?prettyPrint=false")
+    let res = client
+        .post("https://www.youtube.com/youtubei/v1/player?prettyPrint=false")
         .header("Content-Type", "application/json")
-        .header("User-Agent", "com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip")
+        .header(
+            "User-Agent",
+            "com.google.android.youtube/21.26.364 (Linux; U; Android 11) gzip",
+        )
         .header("X-YouTube-Client-Name", "3")
         .header("X-YouTube-Client-Version", "21.26.364")
         .header("Origin", "https://www.youtube.com")
@@ -1845,7 +2252,10 @@ async fn extract_stream_url_direct_innertube(url: &str) -> Option<String> {
         .ok()?;
 
     if !res.status().is_success() {
-        log_debug(&format!("Direct Innertube responded with non-200 status: {}", res.status()));
+        log_debug(&format!(
+            "Direct Innertube responded with non-200 status: {}",
+            res.status()
+        ));
         return None;
     }
 
@@ -1857,7 +2267,10 @@ async fn extract_stream_url_direct_innertube(url: &str) -> Option<String> {
         for f in formats {
             if let Some(url_str) = f.get("url").and_then(|u| u.as_str()) {
                 if !url_str.is_empty() && url_str.starts_with("http") {
-                    log_debug(&format!("Direct Innertube resolved progressive format itag {}", f.get("itag").unwrap_or(&serde_json::Value::Null)));
+                    log_debug(&format!(
+                        "Direct Innertube resolved progressive format itag {}",
+                        f.get("itag").unwrap_or(&serde_json::Value::Null)
+                    ));
                     return Some(url_str.to_string());
                 }
             }
@@ -1865,13 +2278,19 @@ async fn extract_stream_url_direct_innertube(url: &str) -> Option<String> {
     }
 
     // Check adaptive formats
-    if let Some(adaptive) = streaming_data.get("adaptiveFormats").and_then(|a| a.as_array()) {
+    if let Some(adaptive) = streaming_data
+        .get("adaptiveFormats")
+        .and_then(|a| a.as_array())
+    {
         for f in adaptive {
             let mime = f.get("mimeType").and_then(|m| m.as_str()).unwrap_or("");
             if mime.starts_with("audio/") {
                 if let Some(url_str) = f.get("url").and_then(|u| u.as_str()) {
                     if !url_str.is_empty() && url_str.starts_with("http") {
-                        log_debug(&format!("Direct Innertube resolved adaptive audio format itag {}", f.get("itag").unwrap_or(&serde_json::Value::Null)));
+                        log_debug(&format!(
+                            "Direct Innertube resolved adaptive audio format itag {}",
+                            f.get("itag").unwrap_or(&serde_json::Value::Null)
+                        ));
                         return Some(url_str.to_string());
                     }
                 }
@@ -1880,7 +2299,10 @@ async fn extract_stream_url_direct_innertube(url: &str) -> Option<String> {
         for f in adaptive {
             if let Some(url_str) = f.get("url").and_then(|u| u.as_str()) {
                 if !url_str.is_empty() && url_str.starts_with("http") {
-                    log_debug(&format!("Direct Innertube resolved adaptive format itag {}", f.get("itag").unwrap_or(&serde_json::Value::Null)));
+                    log_debug(&format!(
+                        "Direct Innertube resolved adaptive format itag {}",
+                        f.get("itag").unwrap_or(&serde_json::Value::Null)
+                    ));
                     return Some(url_str.to_string());
                 }
             }
@@ -1892,7 +2314,10 @@ async fn extract_stream_url_direct_innertube(url: &str) -> Option<String> {
 }
 
 async fn extract_stream_url_async(youtube_url: String, my_id: Option<u64>) -> Option<String> {
-    log_debug(&format!("extract_stream_url_async started for URL: {}, my_id: {:?}", youtube_url, my_id));
+    log_debug(&format!(
+        "extract_stream_url_async started for URL: {}, my_id: {:?}",
+        youtube_url, my_id
+    ));
 
     if let Some(id) = my_id {
         if PLAY_COUNTER.load(std::sync::atomic::Ordering::SeqCst) != id {
@@ -1904,7 +2329,9 @@ async fn extract_stream_url_async(youtube_url: String, my_id: Option<u64>) -> Op
     // Custom Mirror instance fast-path if configured
     if let Some(custom_inst) = get_custom_instance() {
         if let Some(v_id) = extract_video_id(&youtube_url) {
-            if let Some(mirror_stream_url) = extract_stream_custom_instance(&v_id, &custom_inst).await {
+            if let Some(mirror_stream_url) =
+                extract_stream_custom_instance(&v_id, &custom_inst).await
+            {
                 if let Some(id) = my_id {
                     if PLAY_COUNTER.load(std::sync::atomic::Ordering::SeqCst) != id {
                         return None;
@@ -2098,12 +2525,16 @@ async fn play_audio(url: String) -> Result<(), String> {
         let cache = PREFETCH_CACHE.read().unwrap_or_else(|p| p.into_inner());
         cache.get(&safe_url).and_then(|entry| {
             let age = std::time::Instant::now().duration_since(entry.ts);
-            
+
             if age < std::time::Duration::from_secs(15 * 60)
                 && entry.url.starts_with("http")
                 && !entry.url.contains(".m3u8")
                 && !entry.url.contains("manifest.googlevideo.com")
-            { Some(entry.url.clone()) } else { None }
+            {
+                Some(entry.url.clone())
+            } else {
+                None
+            }
         })
     } else {
         None
@@ -2114,7 +2545,10 @@ async fn play_audio(url: String) -> Result<(), String> {
     }
 
     if PLAY_COUNTER.load(std::sync::atomic::Ordering::SeqCst) != my_id {
-        log_debug(&format!("Superseded during cache check. current PLAY_COUNTER: {}", PLAY_COUNTER.load(std::sync::atomic::Ordering::SeqCst)));
+        log_debug(&format!(
+            "Superseded during cache check. current PLAY_COUNTER: {}",
+            PLAY_COUNTER.load(std::sync::atomic::Ordering::SeqCst)
+        ));
         return Err("Superseded by newer play request".to_string());
     }
 
@@ -2122,23 +2556,38 @@ async fn play_audio(url: String) -> Result<(), String> {
         c
     } else if let Some(extracted) = extract_stream_url_async(safe_url.clone(), Some(my_id)).await {
         if PLAY_COUNTER.load(std::sync::atomic::Ordering::SeqCst) != my_id {
-            log_debug(&format!("Superseded after extraction. current PLAY_COUNTER: {}", PLAY_COUNTER.load(std::sync::atomic::Ordering::SeqCst)));
+            log_debug(&format!(
+                "Superseded after extraction. current PLAY_COUNTER: {}",
+                PLAY_COUNTER.load(std::sync::atomic::Ordering::SeqCst)
+            ));
             return Err("Superseded by newer play request".to_string());
         }
 
         if is_cache_on {
             let mut cache = PREFETCH_CACHE.write().unwrap_or_else(|p| p.into_inner());
             let now = std::time::Instant::now();
-            cache.insert(safe_url.clone(), CacheEntry { url: extracted.clone(), ts: now });
+            cache.insert(
+                safe_url.clone(),
+                CacheEntry {
+                    url: extracted.clone(),
+                    ts: now,
+                },
+            );
         }
 
         extracted
     } else {
-        log_debug(&format!("Track extraction failed - video is unavailable or deleted on YouTube: {}", safe_url));
+        log_debug(&format!(
+            "Track extraction failed - video is unavailable or deleted on YouTube: {}",
+            safe_url
+        ));
         return Err("Track is unavailable or cannot be streamed on YouTube".to_string());
     };
 
-    log_debug(&format!("Streaming URL to MPV: {}", truncate_str(&stream_url, 80)));
+    log_debug(&format!(
+        "Streaming URL to MPV: {}",
+        truncate_str(&stream_url, 80)
+    ));
 
     tokio::task::spawn_blocking(move || {
         if PLAY_COUNTER.load(std::sync::atomic::Ordering::SeqCst) != my_id {
@@ -2152,14 +2601,14 @@ async fn play_audio(url: String) -> Result<(), String> {
         }
 
         log_debug("Sending switch track command to mpv...");
-        
+
         if let Err(e) = switch_track_ipc(&stream_url) {
             log_debug(&format!("switch_track_ipc failed: {}", e));
             return Err(format!("IPC switch failed: {}", e));
         }
-        
+
         log_debug("Resuming playback...");
-        
+
         let _ = send_ipc_command_with_retry(r#"{"command": ["set_property", "pause", false]}"#, 3);
         log_debug("Play request successfully handled!");
         Ok(())
@@ -2180,7 +2629,7 @@ async fn play_local_file(path: String) -> Result<(), String> {
             return Err("mpv failed to start".to_string());
         }
         switch_track_ipc(&safe_path).map_err(|e| format!("IPC switch failed: {}", e))?;
-        
+
         std::thread::sleep(std::time::Duration::from_millis(80));
         let _ = send_ipc_command_with_retry(r#"{"command": ["set_property", "pause", false]}"#, 3);
         Ok(())
@@ -2208,7 +2657,9 @@ async fn resume_audio() -> Result<(), String> {
 
 #[tauri::command]
 async fn seek_audio(time: f64) -> Result<(), String> {
-    if !time.is_finite() { return Err("Invalid seek time".to_string()); }
+    if !time.is_finite() {
+        return Err("Invalid seek time".to_string());
+    }
     let t = safe_f64(time);
     tokio::task::spawn_blocking(move || {
         let cmd = format!(r#"{{"command": ["seek", {}, "absolute"]}}"#, t);
@@ -2284,21 +2735,27 @@ pub(crate) struct PlaybackState {
     pub(crate) eof_reached: bool,
 }
 
-static CURRENT_PLAYBACK_STATE: std::sync::OnceLock<Arc<Mutex<PlaybackState>>> = std::sync::OnceLock::new();
+static CURRENT_PLAYBACK_STATE: std::sync::OnceLock<Arc<Mutex<PlaybackState>>> =
+    std::sync::OnceLock::new();
 
 pub(crate) fn current_playback_state() -> &'static Arc<Mutex<PlaybackState>> {
-    CURRENT_PLAYBACK_STATE.get_or_init(|| Arc::new(Mutex::new(PlaybackState {
-        playing: false,
-        paused: true,
-        position: 0.0,
-        duration: 0.0,
-        eof_reached: false,
-    })))
+    CURRENT_PLAYBACK_STATE.get_or_init(|| {
+        Arc::new(Mutex::new(PlaybackState {
+            playing: false,
+            paused: true,
+            position: 0.0,
+            duration: 0.0,
+            eof_reached: false,
+        }))
+    })
 }
 
 #[tauri::command]
 async fn get_playback_state() -> Result<PlaybackState, String> {
-    Ok(current_playback_state().lock().unwrap_or_else(|p| p.into_inner()).clone())
+    Ok(current_playback_state()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .clone())
 }
 
 #[tauri::command]
@@ -2306,7 +2763,8 @@ async fn seek_to_start() -> Result<(), String> {
     tokio::task::spawn_blocking(|| {
         send_ipc_command_with_retry(r#"{"command": ["seek", 0, "absolute"]}"#, 3).map(|_| ())?;
         std::thread::sleep(std::time::Duration::from_millis(80));
-        send_ipc_command_with_retry(r#"{"command": ["set_property", "pause", false]}"#, 3).map(|_| ())
+        send_ipc_command_with_retry(r#"{"command": ["set_property", "pause", false]}"#, 3)
+            .map(|_| ())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -2350,7 +2808,6 @@ struct AudioInfo {
 
 #[tauri::command]
 async fn get_audio_info() -> Result<AudioInfo, String> {
-    
     tokio::task::spawn_blocking(|| {
         let queries: &[&str] = &[
             r#"{"command": ["get_property", "audio-codec-name"]}"#,
@@ -2360,28 +2817,37 @@ async fn get_audio_info() -> Result<AudioInfo, String> {
             r#"{"command": ["get_property", "file-format"]}"#,
             r#"{"command": ["get_property", "path"]}"#,
         ];
-        
+
         let responses = send_ipc_batch(queries);
 
         let raw = |i: usize| -> String {
-            responses.get(i).and_then(|r| r.as_ref().ok()).cloned().unwrap_or_default()
+            responses
+                .get(i)
+                .and_then(|r| r.as_ref().ok())
+                .cloned()
+                .unwrap_or_default()
         };
         let get_str = |i: usize| -> Option<String> {
-            serde_json::from_str::<Value>(&raw(i)).ok()
+            serde_json::from_str::<Value>(&raw(i))
+                .ok()
                 .and_then(|j| j["data"].as_str().map(|s| s.to_string()))
         };
         let get_f64_r = |i: usize| -> f64 {
-            serde_json::from_str::<Value>(&raw(i)).ok()
+            serde_json::from_str::<Value>(&raw(i))
+                .ok()
                 .and_then(|j| j["data"].as_f64())
                 .unwrap_or(0.0)
         };
 
-        let codec      = get_str(0).unwrap_or_else(|| "unknown".into());
-        let bitrate    = get_f64_r(1);
+        let codec = get_str(0).unwrap_or_else(|| "unknown".into());
+        let bitrate = get_f64_r(1);
         let samplerate = get_f64_r(2);
-        let channels   = serde_json::from_str::<Value>(&raw(3)).ok()
+        let channels = serde_json::from_str::<Value>(&raw(3))
+            .ok()
             .and_then(|j| {
-                if let Some(s) = j["data"].as_str() { return Some(s.to_string()); }
+                if let Some(s) = j["data"].as_str() {
+                    return Some(s.to_string());
+                }
                 j["data"].as_i64().map(|n| n.to_string())
             })
             .unwrap_or_else(|| "stereo".into());
@@ -2390,7 +2856,14 @@ async fn get_audio_info() -> Result<AudioInfo, String> {
             .unwrap_or_default();
         let url = get_str(5).unwrap_or_default();
 
-        Ok(AudioInfo { codec, bitrate, samplerate, channels, format, url })
+        Ok(AudioInfo {
+            codec,
+            bitrate,
+            samplerate,
+            channels,
+            format,
+            url,
+        })
     })
     .await
     .map_err(|e| e.to_string())?
@@ -2416,7 +2889,8 @@ struct ActiveDownload {
     cancelled: Arc<std::sync::atomic::AtomicBool>,
 }
 
-static ACTIVE_DOWNLOADS: std::sync::OnceLock<Arc<Mutex<HashMap<String, ActiveDownload>>>> = std::sync::OnceLock::new();
+static ACTIVE_DOWNLOADS: std::sync::OnceLock<Arc<Mutex<HashMap<String, ActiveDownload>>>> =
+    std::sync::OnceLock::new();
 fn active_downloads() -> &'static Arc<Mutex<HashMap<String, ActiveDownload>>> {
     ACTIVE_DOWNLOADS.get_or_init(|| Arc::new(Mutex::new(HashMap::new())))
 }
@@ -2438,22 +2912,22 @@ async fn download_song(
     embed_thumbnail: Option<bool>,
     path: String,
 ) -> Result<String, String> {
-    use std::process::{Command, Stdio};
     use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
 
     let resolved_path = expand_tilde(&path);
     let fmt = format.as_deref().unwrap_or("mp3");
     let do_embed = embed_thumbnail.unwrap_or(true);
     let audio_format = match fmt {
         "opus" => "opus",
-        "m4a"  => "m4a",
+        "m4a" => "m4a",
         "flac" => "flac",
-        _      => "mp3",
+        _ => "mp3",
     };
     let audio_quality = match quality.as_str() {
-        "Low"    => "9",
+        "Low" => "9",
         "Medium" => "4",
-        _        => "0",
+        _ => "0",
     };
     let sep = std::path::MAIN_SEPARATOR;
     let output_template = if resolved_path.ends_with('/') || resolved_path.ends_with('\\') {
@@ -2465,12 +2939,15 @@ async fn download_song(
     let mut args = vec![
         "--newline".to_string(),
         "--extract-audio".to_string(),
-        "--audio-format".to_string(), audio_format.to_string(),
-        "--audio-quality".to_string(), audio_quality.to_string(),
+        "--audio-format".to_string(),
+        audio_format.to_string(),
+        "--audio-quality".to_string(),
+        audio_quality.to_string(),
         "--add-metadata".to_string(),
         "--no-check-certificates".to_string(),
         "--no-warnings".to_string(),
-        "-o".to_string(), output_template.clone(),
+        "-o".to_string(),
+        output_template.clone(),
     ];
     if do_embed {
         args.push("--embed-thumbnail".to_string());
@@ -2500,11 +2977,14 @@ async fn download_song(
         let cancelled_clone = Arc::clone(&cancelled_arc);
         {
             let mut map = active_downloads().lock().unwrap_or_else(|p| p.into_inner());
-            map.insert(url_key.clone(), ActiveDownload {
-                child_id,
-                target_file: target_file_arc,
-                cancelled: cancelled_arc,
-            });
+            map.insert(
+                url_key.clone(),
+                ActiveDownload {
+                    child_id,
+                    target_file: target_file_arc,
+                    cancelled: cancelled_arc,
+                },
+            );
         }
 
         let stdout = child.stdout.take();
@@ -2517,7 +2997,9 @@ async fn download_song(
                 for line in reader.lines().map_while(Result::ok) {
                     let mut b = stderr_buf_clone.lock().unwrap_or_else(|p| p.into_inner());
                     if b.len() < 2048 {
-                        if !b.is_empty() { b.push('\n'); }
+                        if !b.is_empty() {
+                            b.push('\n');
+                        }
                         b.push_str(&line);
                     }
                 }
@@ -2544,12 +3026,15 @@ async fn download_song(
                             if let Ok(pct) = pct_str.parse::<f64>() {
                                 if (pct - last_percent).abs() >= 1.0 || pct >= 100.0 {
                                     last_percent = pct;
-                                    let _ = app_handle.emit("download_progress", &DownloadProgressPayload {
-                                        url: url_for_events.clone(),
-                                        percent: pct.clamp(0.0, 100.0),
-                                        status: "downloading".to_string(),
-                                        error: None,
-                                    });
+                                    let _ = app_handle.emit(
+                                        "download_progress",
+                                        &DownloadProgressPayload {
+                                            url: url_for_events.clone(),
+                                            percent: pct.clamp(0.0, 100.0),
+                                            status: "downloading".to_string(),
+                                            error: None,
+                                        },
+                                    );
                                 }
                             }
                         }
@@ -2570,24 +3055,34 @@ async fn download_song(
         }
 
         if status.success() {
-            let _ = app_handle.emit("download_progress", &DownloadProgressPayload {
-                url: url_for_events.clone(),
-                percent: 100.0,
-                status: "finished".to_string(),
-                error: None,
-            });
+            let _ = app_handle.emit(
+                "download_progress",
+                &DownloadProgressPayload {
+                    url: url_for_events.clone(),
+                    percent: 100.0,
+                    status: "finished".to_string(),
+                    error: None,
+                },
+            );
             Ok("Downloaded successfully".to_string())
         } else {
             let err_detail = {
                 let b = stderr_buf.lock().unwrap_or_else(|p| p.into_inner());
-                if b.trim().is_empty() { "Download failed".to_string() } else { b.trim().to_string() }
+                if b.trim().is_empty() {
+                    "Download failed".to_string()
+                } else {
+                    b.trim().to_string()
+                }
             };
-            let _ = app_handle.emit("download_progress", &DownloadProgressPayload {
-                url: url_for_events.clone(),
-                percent: 0.0,
-                status: "error".to_string(),
-                error: Some(err_detail.clone()),
-            });
+            let _ = app_handle.emit(
+                "download_progress",
+                &DownloadProgressPayload {
+                    url: url_for_events.clone(),
+                    percent: 0.0,
+                    status: "error".to_string(),
+                    error: Some(err_detail.clone()),
+                },
+            );
             Err(err_detail)
         }
     })
@@ -2603,7 +3098,8 @@ async fn cancel_download(app_handle: tauri::AppHandle, url: String) -> Result<()
     };
 
     if let Some(dl) = dl_opt {
-        dl.cancelled.store(true, std::sync::atomic::Ordering::SeqCst);
+        dl.cancelled
+            .store(true, std::sync::atomic::Ordering::SeqCst);
         #[cfg(unix)]
         {
             let _ = std::process::Command::new("kill")
@@ -2613,7 +3109,8 @@ async fn cancel_download(app_handle: tauri::AppHandle, url: String) -> Result<()
         #[cfg(windows)]
         {
             let _ = std::process::Command::new("taskkill")
-                .args(["/F", "/PID", &dl.child_id.to_string()])
+                .no_window()
+                .args(["/F", "/T", "/PID", &dl.child_id.to_string()])
                 .output();
         }
 
@@ -2627,12 +3124,15 @@ async fn cancel_download(app_handle: tauri::AppHandle, url: String) -> Result<()
             let _ = std::fs::remove_file(ytdl_path);
         }
 
-        let _ = app_handle.emit("download_progress", &DownloadProgressPayload {
-            url: url.clone(),
-            percent: 0.0,
-            status: "cancelled".to_string(),
-            error: None,
-        });
+        let _ = app_handle.emit(
+            "download_progress",
+            &DownloadProgressPayload {
+                url: url.clone(),
+                percent: 0.0,
+                status: "cancelled".to_string(),
+                error: None,
+            },
+        );
 
         Ok(())
     } else {
@@ -2676,14 +3176,14 @@ async fn batch_download(
 
             let result: Result<String, String> = tokio::task::spawn_blocking(move || {
                 let format = match q.as_str() {
-                    "Low"    => "worstaudio/worst",
+                    "Low" => "worstaudio/worst",
                     "Medium" => "bestaudio[abr<=160]/bestaudio/best",
-                    _        => "bestaudio/best",
+                    _ => "bestaudio/best",
                 };
                 let audio_quality = match q.as_str() {
-                    "Low"    => "9",
+                    "Low" => "9",
                     "Medium" => "4",
-                    _        => "0",
+                    _ => "0",
                 };
                 let sep = std::path::MAIN_SEPARATOR;
                 let tpl = if p.ends_with('/') || p.ends_with('\\') {
@@ -2693,9 +3193,22 @@ async fn batch_download(
                 };
                 let _ = std::fs::create_dir_all(std::path::Path::new(p.as_ref()));
                 let mut cmd = Command::new(bin_ytdlp());
-                cmd.args(["-f", format, "--extract-audio", "--audio-format", "mp3",
-                           "--audio-quality", audio_quality, "--embed-thumbnail", "--add-metadata",
-                           "--no-check-certificates", "--no-warnings", "-o", &tpl, &url_clone]);
+                cmd.args([
+                    "-f",
+                    format,
+                    "--extract-audio",
+                    "--audio-format",
+                    "mp3",
+                    "--audio-quality",
+                    audio_quality,
+                    "--embed-thumbnail",
+                    "--add-metadata",
+                    "--no-check-certificates",
+                    "--no-warnings",
+                    "-o",
+                    &tpl,
+                    &url_clone,
+                ]);
                 apply_proxy_to_cmd(&mut cmd);
                 let out = cmd
                     .no_window()
@@ -2711,12 +3224,19 @@ async fn batch_download(
             .unwrap_or_else(|e| Err(e.to_string()));
 
             let (success, error) = match &result {
-                Ok(_)  => (true, None),
+                Ok(_) => (true, None),
                 Err(e) => (false, Some(e.clone())),
             };
-            let _ = app.emit("batch_download_progress", &BatchProgress {
-                index: i, total, title: url, success, error,
-            });
+            let _ = app.emit(
+                "batch_download_progress",
+                &BatchProgress {
+                    index: i,
+                    total,
+                    title: url,
+                    success,
+                    error,
+                },
+            );
         });
     }
 
@@ -2738,7 +3258,12 @@ pub struct LocalTrack {
     pub has_cover: Option<bool>,
 }
 
-fn collect_local_tracks(dir: &std::path::Path, tracks: &mut Vec<LocalTrack>, extensions: &[&str], depth: usize) {
+fn collect_local_tracks(
+    dir: &std::path::Path,
+    tracks: &mut Vec<LocalTrack>,
+    extensions: &[&str],
+    depth: usize,
+) {
     if depth > 10 {
         return;
     }
@@ -2749,14 +3274,27 @@ fn collect_local_tracks(dir: &std::path::Path, tracks: &mut Vec<LocalTrack>, ext
                 if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
                     if extensions.contains(&ext.to_lowercase().as_str()) {
                         if let Some(meta) = metadata::probe_track_metadata(&p) {
-                            let _ = db::index_local_track_fts(&meta.title, &meta.artist, &meta.album, &meta.path);
+                            let _ = db::index_local_track_fts(
+                                &meta.title,
+                                &meta.artist,
+                                &meta.album,
+                                &meta.path,
+                            );
                             tracks.push(LocalTrack {
                                 title: meta.title,
                                 path: meta.path,
                                 size_bytes: meta.size_bytes,
                                 extension: meta.extension,
-                                artist: if meta.artist.is_empty() { None } else { Some(meta.artist) },
-                                album: if meta.album.is_empty() { None } else { Some(meta.album) },
+                                artist: if meta.artist.is_empty() {
+                                    None
+                                } else {
+                                    Some(meta.artist)
+                                },
+                                album: if meta.album.is_empty() {
+                                    None
+                                } else {
+                                    Some(meta.album)
+                                },
                                 duration: Some(meta.duration_str),
                                 duration_secs: Some(meta.duration_secs),
                                 bitrate: meta.bitrate,
@@ -2764,7 +3302,11 @@ fn collect_local_tracks(dir: &std::path::Path, tracks: &mut Vec<LocalTrack>, ext
                             });
                         } else {
                             tracks.push(LocalTrack {
-                                title: p.file_stem().and_then(|s| s.to_str()).unwrap_or("Unknown").to_string(),
+                                title: p
+                                    .file_stem()
+                                    .and_then(|s| s.to_str())
+                                    .unwrap_or("Unknown")
+                                    .to_string(),
                                 path: p.to_string_lossy().to_string(),
                                 size_bytes: entry.metadata().map(|m| m.len()).unwrap_or(0),
                                 extension: ext.to_lowercase(),
@@ -2788,7 +3330,7 @@ fn collect_local_tracks(dir: &std::path::Path, tracks: &mut Vec<LocalTrack>, ext
 #[tauri::command]
 async fn scan_downloads(path: String) -> Result<Vec<LocalTrack>, String> {
     tokio::task::spawn_blocking(move || {
-        let resolved   = expand_tilde(&path);
+        let resolved = expand_tilde(&path);
         let extensions = ["mp3", "flac", "wav", "ogg", "m4a", "aac", "opus", "wma"];
         let mut tracks: Vec<LocalTrack> = Vec::new();
         let target_path = std::path::Path::new(&resolved);
@@ -2820,15 +3362,21 @@ async fn delete_local_file(path: String) -> Result<(), String> {
 async fn rename_local_file(old_path: String, new_title: String) -> Result<String, String> {
     tokio::task::spawn_blocking(move || {
         let safe_old = sanitize_file_path(&old_path)?;
-        let parent   = safe_old.parent().ok_or("No parent directory")?;
-        let ext      = safe_old.extension().and_then(|e| e.to_str()).unwrap_or("mp3");
-        let safe_title: String = new_title.chars()
+        let parent = safe_old.parent().ok_or("No parent directory")?;
+        let ext = safe_old
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("mp3");
+        let safe_title: String = new_title
+            .chars()
             .map(|c| if "/\\:*?\"<>|".contains(c) { '_' } else { c })
             .collect();
         let mut new_path = parent.join(format!("{}.{}", safe_title, ext));
         let mut counter = 1;
         while new_path.exists() {
-            if let (Ok(new_canon), Ok(old_canon)) = (new_path.canonicalize(), safe_old.canonicalize()) {
+            if let (Ok(new_canon), Ok(old_canon)) =
+                (new_path.canonicalize(), safe_old.canonicalize())
+            {
                 if new_canon == old_canon {
                     break;
                 }
@@ -2903,7 +3451,9 @@ async fn open_in_file_manager(path: String) -> Result<(), String> {
         {
             let is_file = p.is_file();
             let target_dir = if is_file {
-                p.parent().map(|d| d.to_path_buf()).unwrap_or_else(|| p.to_path_buf())
+                p.parent()
+                    .map(|d| d.to_path_buf())
+                    .unwrap_or_else(|| p.to_path_buf())
             } else {
                 p.to_path_buf()
             };
@@ -3059,12 +3609,7 @@ async fn open_in_file_manager(path: String) -> Result<(), String> {
                         .args(["open", &dir_str])
                         .no_window()
                         .spawn()
-                        .or_else(|_| {
-                            Command::new("xdg-open")
-                                .arg(&dir_str)
-                                .no_window()
-                                .spawn()
-                        });
+                        .or_else(|_| Command::new("xdg-open").arg(&dir_str).no_window().spawn());
                 }
             }
         }
@@ -3076,12 +3621,19 @@ async fn open_in_file_manager(path: String) -> Result<(), String> {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-struct AudioMetadata { title: String, artist: String, album: String, duration: String, has_cover: bool }
+struct AudioMetadata {
+    title: String,
+    artist: String,
+    album: String,
+    duration: String,
+    has_cover: bool,
+}
 
 #[tauri::command]
 async fn get_audio_metadata(path: String) -> Result<AudioMetadata, String> {
     tokio::task::spawn_blocking(move || {
-        let p = sanitize_file_path(&path).unwrap_or_else(|_| std::path::PathBuf::from(expand_tilde(&path)));
+        let p = sanitize_file_path(&path)
+            .unwrap_or_else(|_| std::path::PathBuf::from(expand_tilde(&path)));
         if let Some(meta) = metadata::probe_track_metadata(&p) {
             return Ok(AudioMetadata {
                 title: meta.title,
@@ -3093,19 +3645,29 @@ async fn get_audio_metadata(path: String) -> Result<AudioMetadata, String> {
         }
         let p_str = p.to_string_lossy();
         let output = Command::new(bin_ffprobe())
-            .args(["-v", "quiet", "-print_format", "json", "-show_format", "-show_streams", p_str.as_ref()])
+            .args([
+                "-v",
+                "quiet",
+                "-print_format",
+                "json",
+                "-show_format",
+                "-show_streams",
+                p_str.as_ref(),
+            ])
             .no_window()
             .output()
             .map_err(|_| "ffprobe not found - install ffmpeg".to_string())?;
-        let json: Value = serde_json::from_str(
-            &String::from_utf8_lossy(&output.stdout)
-        ).unwrap_or(Value::Null);
+        let json: Value =
+            serde_json::from_str(&String::from_utf8_lossy(&output.stdout)).unwrap_or(Value::Null);
         let tags = &json["format"]["tags"];
         let duration_secs = json["format"]["duration"]
-            .as_str().and_then(|d| d.parse::<f64>().ok()).unwrap_or(0.0);
+            .as_str()
+            .and_then(|d| d.parse::<f64>().ok())
+            .unwrap_or(0.0);
         let mins = (duration_secs as u64) / 60;
         let secs = (duration_secs as u64) % 60;
-        let has_cover = json["streams"].as_array()
+        let has_cover = json["streams"]
+            .as_array()
             .map(|streams| {
                 streams.iter().any(|s| {
                     s["disposition"]["attached_pic"].as_i64() == Some(1)
@@ -3114,10 +3676,22 @@ async fn get_audio_metadata(path: String) -> Result<AudioMetadata, String> {
             })
             .unwrap_or(false);
         Ok(AudioMetadata {
-            title:    tags["title"].as_str().or_else(|| tags["TITLE"].as_str()).unwrap_or("").to_string(),
-            artist:   tags["artist"].as_str().or_else(|| tags["ARTIST"].as_str())
-                          .or_else(|| tags["album_artist"].as_str()).unwrap_or("").to_string(),
-            album:    tags["album"].as_str().or_else(|| tags["ALBUM"].as_str()).unwrap_or("").to_string(),
+            title: tags["title"]
+                .as_str()
+                .or_else(|| tags["TITLE"].as_str())
+                .unwrap_or("")
+                .to_string(),
+            artist: tags["artist"]
+                .as_str()
+                .or_else(|| tags["ARTIST"].as_str())
+                .or_else(|| tags["album_artist"].as_str())
+                .unwrap_or("")
+                .to_string(),
+            album: tags["album"]
+                .as_str()
+                .or_else(|| tags["ALBUM"].as_str())
+                .unwrap_or("")
+                .to_string(),
             duration: format!("{}:{:02}", mins, secs),
             has_cover,
         })
@@ -3137,7 +3711,17 @@ async fn get_audio_cover(path: String) -> Result<Option<String>, String> {
 
         // Fallback 1: Extract attached picture stream via ffmpeg on resolved path
         let output = Command::new(bin_ffmpeg())
-            .args(["-i", &resolved, "-map", "0:v:0", "-frames:v", "1", "-f", "image2pipe", "-"])
+            .args([
+                "-i",
+                &resolved,
+                "-map",
+                "0:v:0",
+                "-frames:v",
+                "1",
+                "-f",
+                "image2pipe",
+                "-",
+            ])
             .no_window()
             .output();
 
@@ -3167,7 +3751,11 @@ async fn get_audio_cover(path: String) -> Result<Option<String>, String> {
         if let Some(cover_path) = metadata::find_directory_cover(&p) {
             if let Ok(bytes) = std::fs::read(&cover_path) {
                 if !bytes.is_empty() {
-                    let ext = cover_path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+                    let ext = cover_path
+                        .extension()
+                        .and_then(|e| e.to_str())
+                        .unwrap_or("")
+                        .to_lowercase();
                     let mime = if ext == "png" {
                         "image/png"
                     } else if ext == "webp" {
@@ -3188,7 +3776,12 @@ async fn get_audio_cover(path: String) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
-async fn write_audio_metadata(path: String, title: String, artist: String, album: String) -> Result<(), String> {
+async fn write_audio_metadata(
+    path: String,
+    title: String,
+    artist: String,
+    album: String,
+) -> Result<(), String> {
     tokio::task::spawn_blocking(move || {
         let p = sanitize_file_path(&path)?;
         if metadata::write_track_tags(&p, Some(&title), Some(&artist), Some(&album)).is_ok() {
@@ -3196,33 +3789,35 @@ async fn write_audio_metadata(path: String, title: String, artist: String, album
             return Ok(());
         }
 
-        let ext = p
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("mp3");
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("mp3");
         let temp_path = p.with_extension(format!("tmp.edit.{}", ext));
         let path_str = p.to_string_lossy().to_string();
         let temp_str = temp_path.to_string_lossy().to_string();
-        
+
         let status = Command::new(bin_ffmpeg())
             .args([
                 "-y",
-                "-i", &path_str,
-                "-metadata", &format!("title={}", title),
-                "-metadata", &format!("artist={}", artist),
-                "-metadata", &format!("album={}", album),
-                "-codec", "copy",
-                &temp_str
+                "-i",
+                &path_str,
+                "-metadata",
+                &format!("title={}", title),
+                "-metadata",
+                &format!("artist={}", artist),
+                "-metadata",
+                &format!("album={}", album),
+                "-codec",
+                "copy",
+                &temp_str,
             ])
             .no_window()
             .status()
             .map_err(|e| format!("ffmpeg execution failed: {}", e))?;
-            
+
         if !status.success() {
             let _ = std::fs::remove_file(&temp_path);
             return Err("ffmpeg failed to write metadata".to_string());
         }
-        
+
         #[cfg(target_os = "windows")]
         let _ = std::fs::remove_file(&p);
 
@@ -3231,7 +3826,7 @@ async fn write_audio_metadata(path: String, title: String, artist: String, album
             return Err(format!("Failed to replace audio file: {}", e));
         }
         let _ = db::index_local_track_fts(&title, &artist, &album, &path);
-            
+
         Ok(())
     })
     .await
@@ -3273,23 +3868,40 @@ fn base64_encode(bytes: &[u8]) -> String {
 #[tauri::command]
 async fn get_waveform_thumbnail(path: String) -> Result<Vec<f32>, String> {
     tokio::task::spawn_blocking(move || {
-        let p = sanitize_file_path(&path).unwrap_or_else(|_| std::path::PathBuf::from(expand_tilde(&path)));
+        let p = sanitize_file_path(&path)
+            .unwrap_or_else(|_| std::path::PathBuf::from(expand_tilde(&path)));
         let p_str = p.to_string_lossy();
         let output = Command::new(bin_ffmpeg())
-            .args(["-i", p_str.as_ref(), "-ac", "1", "-ar", "500", "-f", "f32le", "-"])
+            .args([
+                "-i",
+                p_str.as_ref(),
+                "-ac",
+                "1",
+                "-ar",
+                "500",
+                "-f",
+                "f32le",
+                "-",
+            ])
             .no_window()
             .output()
             .map_err(|_| "ffmpeg not found".to_string())?;
-        if output.stdout.is_empty() { return Err("No audio data".to_string()); }
-        let samples: Vec<f32> = output.stdout.as_chunks::<4>().0.iter()
+        if output.stdout.is_empty() {
+            return Err("No audio data".to_string());
+        }
+        let samples: Vec<f32> = output
+            .stdout
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]).abs())
             .collect();
         let target = 200usize;
         let chunk_size = (samples.len() / target).max(1);
-        let envelope: Vec<f32> = samples.chunks(chunk_size).take(target)
-            .map(|chunk| {
-                (chunk.iter().map(|&x| x * x).sum::<f32>() / chunk.len() as f32).sqrt()
-            })
+        let envelope: Vec<f32> = samples
+            .chunks(chunk_size)
+            .take(target)
+            .map(|chunk| (chunk.iter().map(|&x| x * x).sum::<f32>() / chunk.len() as f32).sqrt())
             .collect();
         Ok(envelope)
     })
@@ -3297,7 +3909,12 @@ async fn get_waveform_thumbnail(path: String) -> Result<Vec<f32>, String> {
     .map_err(|e| e.to_string())?
 }
 
-fn collect_disk_usage(dir: &std::path::Path, extensions: &[&str], used_bytes: &mut u64, track_count: &mut usize) {
+fn collect_disk_usage(
+    dir: &std::path::Path,
+    extensions: &[&str],
+    used_bytes: &mut u64,
+    track_count: &mut usize,
+) {
     if let Ok(entries) = std::fs::read_dir(dir) {
         for entry in entries.flatten() {
             let p = entry.path();
@@ -3316,7 +3933,10 @@ fn collect_disk_usage(dir: &std::path::Path, extensions: &[&str], used_bytes: &m
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-struct DiskInfo { used_bytes: u64, track_count: usize }
+struct DiskInfo {
+    used_bytes: u64,
+    track_count: usize,
+}
 
 #[tauri::command]
 async fn get_disk_usage(path: String) -> Result<DiskInfo, String> {
@@ -3330,14 +3950,22 @@ async fn get_disk_usage(path: String) -> Result<DiskInfo, String> {
         let mut used_bytes = 0u64;
         let mut track_count = 0usize;
         collect_disk_usage(target_path, &extensions, &mut used_bytes, &mut track_count);
-        Ok(DiskInfo { used_bytes, track_count })
+        Ok(DiskInfo {
+            used_bytes,
+            track_count,
+        })
     })
     .await
     .map_err(|e| e.to_string())?
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
-struct TrackExport { title: String, artist: String, url: String, duration_secs: i64 }
+struct TrackExport {
+    title: String,
+    artist: String,
+    url: String,
+    duration_secs: i64,
+}
 
 #[tauri::command]
 async fn export_playlist_m3u(tracks: Vec<TrackExport>, path: String) -> Result<(), String> {
@@ -3349,8 +3977,10 @@ async fn export_playlist_m3u(tracks: Vec<TrackExport>, path: String) -> Result<(
         }
         let mut content = String::from("#EXTM3U\n");
         for t in &tracks {
-            content.push_str(&format!("#EXTINF:{},{} - {}\n{}\n",
-                t.duration_secs, t.artist, t.title, t.url));
+            content.push_str(&format!(
+                "#EXTINF:{},{} - {}\n{}\n",
+                t.duration_secs, t.artist, t.title, t.url
+            ));
         }
         std::fs::write(&resolved, content).map_err(|e| format!("Write failed: {}", e))
     })
@@ -3364,9 +3994,10 @@ async fn import_playlist_m3u(path: String) -> Result<Vec<String>, String> {
         let resolved = expand_tilde(&path);
         let p = std::path::Path::new(&resolved);
         let parent = p.parent().unwrap_or_else(|| std::path::Path::new("."));
-        let content = std::fs::read_to_string(&resolved)
-            .map_err(|e| format!("Read failed: {}", e))?;
-        let urls: Vec<String> = content.lines()
+        let content =
+            std::fs::read_to_string(&resolved).map_err(|e| format!("Read failed: {}", e))?;
+        let urls: Vec<String> = content
+            .lines()
             .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
             .map(|l| {
                 let trimmed = l.trim();
@@ -3404,7 +4035,10 @@ async fn normalize_file(path: String, output_path: String) -> Result<(), String>
 
         let is_same_file = in_path == out_path;
         let actual_target = if is_same_file {
-            let ext = in_path.extension().and_then(|e| e.to_str()).unwrap_or("mp3");
+            let ext = in_path
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("mp3");
             out_path.with_extension(format!("tmp.norm.{}", ext))
         } else {
             out_path.clone()
@@ -3414,8 +4048,16 @@ async fn normalize_file(path: String, output_path: String) -> Result<(), String>
         let target_str = actual_target.to_string_lossy().to_string();
 
         let out = Command::new(bin_ffmpeg())
-            .args(["-i", &in_str, "-af", "loudnorm=I=-16:TP=-1.5:LRA=11",
-                   "-ar", "44100", "-y", &target_str])
+            .args([
+                "-i",
+                &in_str,
+                "-af",
+                "loudnorm=I=-16:TP=-1.5:LRA=11",
+                "-ar",
+                "44100",
+                "-y",
+                &target_str,
+            ])
             .no_window()
             .output()
             .map_err(|_| "ffmpeg not found".to_string())?;
@@ -3446,18 +4088,25 @@ async fn normalize_file(path: String, output_path: String) -> Result<(), String>
 #[tauri::command]
 async fn set_sleep_timer(seconds: u64) -> Result<(), String> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(seconds);
-    let gen = { let mut g = SLEEP_TIMER_GEN.lock().unwrap_or_else(|p| p.into_inner()); *g += 1; *g };
+    let gen = {
+        let mut g = SLEEP_TIMER_GEN.lock().unwrap_or_else(|p| p.into_inner());
+        *g += 1;
+        *g
+    };
     *SLEEP_TIMER.lock().unwrap_or_else(|p| p.into_inner()) = Some((deadline, gen));
     tokio::spawn(async move {
         tokio::time::sleep(std::time::Duration::from_secs(seconds)).await;
         let cur_gen = *SLEEP_TIMER_GEN.lock().unwrap_or_else(|p| p.into_inner());
-        let fire = SLEEP_TIMER.lock().unwrap_or_else(|p| p.into_inner())
+        let fire = SLEEP_TIMER
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
             .map(|(d, g)| g == gen && g == cur_gen && d <= std::time::Instant::now())
             .unwrap_or(false);
         if fire {
             let _ = tokio::task::spawn_blocking(|| {
                 send_ipc_command_with_retry(r#"{"command": ["set_property", "pause", true]}"#, 2)
-            }).await;
+            })
+            .await;
             *SLEEP_TIMER.lock().unwrap_or_else(|p| p.into_inner()) = None;
         }
     });
@@ -3473,10 +4122,18 @@ async fn cancel_sleep_timer() -> Result<(), String> {
 
 #[tauri::command]
 async fn get_sleep_timer_remaining() -> Result<i64, String> {
-    let remaining = SLEEP_TIMER.lock().unwrap_or_else(|p| p.into_inner()).map(|(deadline, _)| {
-        let now = std::time::Instant::now();
-        if deadline > now { (deadline - now).as_secs() as i64 } else { 0 }
-    }).unwrap_or(-1);
+    let remaining = SLEEP_TIMER
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .map(|(deadline, _)| {
+            let now = std::time::Instant::now();
+            if deadline > now {
+                (deadline - now).as_secs() as i64
+            } else {
+                0
+            }
+        })
+        .unwrap_or(-1);
     Ok(remaining)
 }
 
@@ -3520,8 +4177,12 @@ fn send_ipc_batch(cmds: &[&str]) -> Vec<Result<String, String>> {
             Ok(s) => s,
             Err(e) => return vec![Err(format!("IPC connect failed: {}", e)); n],
         };
-        stream.set_read_timeout(Some(std::time::Duration::from_millis(800))).ok();
-        stream.set_write_timeout(Some(std::time::Duration::from_millis(400))).ok();
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_millis(800)))
+            .ok();
+        stream
+            .set_write_timeout(Some(std::time::Duration::from_millis(400)))
+            .ok();
 
         if let Ok(mut w) = stream.try_clone() {
             for cmd in cmds {
@@ -3541,18 +4202,24 @@ fn send_ipc_batch(cmds: &[&str]) -> Vec<Result<String, String>> {
         let mut lines_read = 0usize;
         while results.len() < n && lines_read < n * 12 {
             let mut line = String::new();
-            if reader.read_line(&mut line).is_err() || line.is_empty() { break; }
+            if reader.read_line(&mut line).is_err() || line.is_empty() {
+                break;
+            }
             lines_read += 1;
             let trimmed = line.trim();
             if let Ok(v) = serde_json::from_str::<Value>(trimmed) {
-                if !v["error"].is_null() { results.push(trimmed.to_string()); }
+                if !v["error"].is_null() {
+                    results.push(trimmed.to_string());
+                }
             }
         }
 
         let _ = stream.shutdown(std::net::Shutdown::Both);
 
         let mut out: Vec<Result<String, String>> = results.into_iter().map(Ok).collect();
-        while out.len() < n { out.push(Err("No response from mpv".to_string())); }
+        while out.len() < n {
+            out.push(Err("No response from mpv".to_string()));
+        }
         out
     }
 
@@ -3563,20 +4230,26 @@ fn send_ipc_batch(cmds: &[&str]) -> Vec<Result<String, String>> {
             Err(e) => return vec![Err(format!("IPC connect failed: {}", e)); n],
         };
 
-        let mut reader  = BufReader::new(&file);
+        let mut reader = BufReader::new(&file);
         let mut results = Vec::with_capacity(n);
-        let deadline    = std::time::Instant::now() + std::time::Duration::from_millis(800);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(800);
 
         for cmd in cmds {
             {
                 let mut w = &file;
-                if w.write_all(cmd.as_bytes()).is_err() || w.write_all(b"\n").is_err() { break; }
+                if w.write_all(cmd.as_bytes()).is_err() || w.write_all(b"\n").is_err() {
+                    break;
+                }
             }
             let mut found = false;
             for _ in 0..12 {
-                if std::time::Instant::now() > deadline { break; }
+                if std::time::Instant::now() > deadline {
+                    break;
+                }
                 let mut line = String::new();
-                if reader.read_line(&mut line).is_err() || line.is_empty() { break; }
+                if reader.read_line(&mut line).is_err() || line.is_empty() {
+                    break;
+                }
                 let trimmed = line.trim();
                 if let Ok(v) = serde_json::from_str::<Value>(trimmed) {
                     if !v["error"].is_null() {
@@ -3586,11 +4259,15 @@ fn send_ipc_batch(cmds: &[&str]) -> Vec<Result<String, String>> {
                     }
                 }
             }
-            if !found { break; }
+            if !found {
+                break;
+            }
         }
 
         let mut out: Vec<Result<String, String>> = results.into_iter().map(Ok).collect();
-        while out.len() < n { out.push(Err("No response from mpv".to_string())); }
+        while out.len() < n {
+            out.push(Err("No response from mpv".to_string()));
+        }
         out
     }
 }
@@ -3599,10 +4276,14 @@ pub(crate) fn send_ipc_fire_and_forget(cmd: &str) -> Result<(), String> {
     let sock = socket_path();
     #[cfg(unix)]
     {
-        let mut stream = UnixStream::connect(sock)
-            .map_err(|e| format!("IPC connect failed: {}", e))?;
-        stream.set_write_timeout(Some(std::time::Duration::from_millis(150))).ok();
-        stream.write_all(cmd.as_bytes()).map_err(|e| e.to_string())?;
+        let mut stream =
+            UnixStream::connect(sock).map_err(|e| format!("IPC connect failed: {}", e))?;
+        stream
+            .set_write_timeout(Some(std::time::Duration::from_millis(150)))
+            .ok();
+        stream
+            .write_all(cmd.as_bytes())
+            .map_err(|e| e.to_string())?;
         stream.write_all(b"\n").map_err(|e| e.to_string())?;
         stream.flush().map_err(|e| e.to_string())?;
         let _ = stream.shutdown(std::net::Shutdown::Write);
@@ -3610,7 +4291,8 @@ pub(crate) fn send_ipc_fire_and_forget(cmd: &str) -> Result<(), String> {
     }
     #[cfg(windows)]
     {
-        let mut file = OpenOptions::new().write(true)
+        let mut file = OpenOptions::new()
+            .write(true)
             .open(sock)
             .map_err(|e| format!("IPC connect failed: {}", e))?;
         file.write_all(cmd.as_bytes()).map_err(|e| e.to_string())?;
@@ -3647,11 +4329,14 @@ fn send_ipc_command(cmd: &str) -> Result<String, String> {
 
     #[cfg(unix)]
     {
-        let stream = UnixStream::connect(sock)
-            .map_err(|e| format!("IPC connect failed: {}", e))?;
-        stream.set_read_timeout(Some(std::time::Duration::from_millis(500))).map_err(|e| e.to_string())?;
-        stream.set_write_timeout(Some(std::time::Duration::from_millis(200))).map_err(|e| e.to_string())?;
-        
+        let stream = UnixStream::connect(sock).map_err(|e| format!("IPC connect failed: {}", e))?;
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_millis(500)))
+            .map_err(|e| e.to_string())?;
+        stream
+            .set_write_timeout(Some(std::time::Duration::from_millis(200)))
+            .map_err(|e| e.to_string())?;
+
         let cloned_stream = stream.try_clone().map_err(|e| e.to_string())?;
         let mut reader = BufReader::new(cloned_stream);
 
@@ -3664,8 +4349,13 @@ fn send_ipc_command(cmd: &str) -> Result<String, String> {
         let mut resp = Err("No response from mpv".to_string());
         for _ in 0..24 {
             let mut line = String::new();
-            if reader.read_line(&mut line).is_err() || line.is_empty() { break; }
-            if is_cmd_response(line.trim()) { resp = Ok(line); break; }
+            if reader.read_line(&mut line).is_err() || line.is_empty() {
+                break;
+            }
+            if is_cmd_response(line.trim()) {
+                resp = Ok(line);
+                break;
+            }
         }
         let _ = stream.shutdown(std::net::Shutdown::Both);
         resp
@@ -3673,7 +4363,9 @@ fn send_ipc_command(cmd: &str) -> Result<String, String> {
 
     #[cfg(windows)]
     {
-        let file = OpenOptions::new().read(true).write(true)
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
             .open(sock)
             .map_err(|e| format!("IPC connect failed: {}", e))?;
         {
@@ -3684,179 +4376,212 @@ fn send_ipc_command(cmd: &str) -> Result<String, String> {
         let mut reader = BufReader::new(&file);
         let deadline = std::time::Instant::now() + std::time::Duration::from_millis(600);
         for _ in 0..24 {
-            if std::time::Instant::now() > deadline { break; }
+            if std::time::Instant::now() > deadline {
+                break;
+            }
             let mut line = String::new();
-            if reader.read_line(&mut line).is_err() || line.is_empty() { break; }
-            if is_cmd_response(line.trim()) { return Ok(line); }
+            if reader.read_line(&mut line).is_err() || line.is_empty() {
+                break;
+            }
+            if is_cmd_response(line.trim()) {
+                return Ok(line);
+            }
         }
         Err("No response from mpv".to_string())
     }
 }
 
 fn start_mpv_event_listener(app_handle: tauri::AppHandle) {
-    std::thread::spawn(move || {
-        loop {
-            if !wait_for_socket(1000) {
-                std::thread::sleep(std::time::Duration::from_millis(500));
-                continue;
-            }
+    std::thread::spawn(move || loop {
+        if !wait_for_socket(1000) {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            continue;
+        }
 
-            let sock = socket_path();
-            #[cfg(unix)]
-            let stream_res = UnixStream::connect(sock);
-            #[cfg(windows)]
-            let stream_res = OpenOptions::new().read(true).write(true).open(sock);
+        let sock = socket_path();
+        #[cfg(unix)]
+        let stream_res = UnixStream::connect(sock);
+        #[cfg(windows)]
+        let stream_res = OpenOptions::new().read(true).write(true).open(sock);
 
-            match stream_res {
-                Ok(stream) => {
-                    let mut reader = BufReader::new(&stream);
-                    let mut writer = &stream;
+        match stream_res {
+            Ok(stream) => {
+                let mut reader = BufReader::new(&stream);
+                let mut writer = &stream;
 
-                    let obs_cmds = [
-                        r#"{"command": ["observe_property", 1, "time-pos"]}"#,
-                        r#"{"command": ["observe_property", 2, "pause"]}"#,
-                        r#"{"command": ["observe_property", 3, "duration"]}"#,
-                        r#"{"command": ["observe_property", 4, "eof-reached"]}"#,
-                        r#"{"command": ["observe_property", 5, "audio-codec-name"]}"#,
-                    ];
-                    for cmd in obs_cmds {
-                        let _ = writer.write_all(cmd.as_bytes());
-                        let _ = writer.write_all(b"\n");
-                    }
-                    let _ = writer.flush();
+                let obs_cmds = [
+                    r#"{"command": ["observe_property", 1, "time-pos"]}"#,
+                    r#"{"command": ["observe_property", 2, "pause"]}"#,
+                    r#"{"command": ["observe_property", 3, "duration"]}"#,
+                    r#"{"command": ["observe_property", 4, "eof-reached"]}"#,
+                    r#"{"command": ["observe_property", 5, "audio-codec-name"]}"#,
+                ];
+                for cmd in obs_cmds {
+                    let _ = writer.write_all(cmd.as_bytes());
+                    let _ = writer.write_all(b"\n");
+                }
+                let _ = writer.flush();
 
-                    let mut line = String::new();
-                    while reader.read_line(&mut line).is_ok() && !line.is_empty() {
-                        let trimmed = line.trim();
-                        if let Ok(v) = serde_json::from_str::<Value>(trimmed) {
-                            if let Some(event) = v["event"].as_str() {
-                                match event {
-                                    "property-change" => {
-                                        let name = v["name"].as_str().unwrap_or("");
-                                        let mut state = current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
-                                        let mut changed = false;
-                                        match name {
-                                            "audio-codec-name" => {
-                                                if let Some(codec) = v["data"].as_str() {
-                                                    let trimmed_c = codec.trim();
-                                                    if !trimmed_c.is_empty() && trimmed_c != "null" && trimmed_c != "none" {
-                                                        if !state.playing && !state.paused {
-                                                            state.playing = true;
-                                                            let _ = app_handle.emit("mpv_track_started", ());
-                                                        }
-                                                        changed = true;
-                                                    }
-                                                }
-                                            }
-                                            "time-pos" => {
-                                                if let Some(pos) = v["data"].as_f64() {
-                                                    let p = safe_f64(pos);
-                                                    state.position = p;
-                                                    if p > 0.01 && !state.playing && !state.paused {
+                let mut line = String::new();
+                while reader.read_line(&mut line).is_ok() && !line.is_empty() {
+                    let trimmed = line.trim();
+                    if let Ok(v) = serde_json::from_str::<Value>(trimmed) {
+                        if let Some(event) = v["event"].as_str() {
+                            match event {
+                                "property-change" => {
+                                    let name = v["name"].as_str().unwrap_or("");
+                                    let mut state = current_playback_state()
+                                        .lock()
+                                        .unwrap_or_else(|p| p.into_inner());
+                                    let mut changed = false;
+                                    match name {
+                                        "audio-codec-name" => {
+                                            if let Some(codec) = v["data"].as_str() {
+                                                let trimmed_c = codec.trim();
+                                                if !trimmed_c.is_empty()
+                                                    && trimmed_c != "null"
+                                                    && trimmed_c != "none"
+                                                {
+                                                    if !state.playing && !state.paused {
                                                         state.playing = true;
-                                                        let _ = app_handle.emit("mpv_track_started", ());
+                                                        let _ = app_handle
+                                                            .emit("mpv_track_started", ());
                                                     }
                                                     changed = true;
                                                 }
                                             }
-                                            "pause" => {
-                                                if let Some(paused) = v["data"].as_bool() {
-                                                    state.paused = paused;
-                                                    if paused {
-                                                        state.playing = false;
-                                                    } else if state.position > 0.05 {
-                                                        state.playing = true;
-                                                    }
-                                                    changed = true;
-                                                    mpris_notify();
-                                                }
-                                            }
-                                            "duration" => {
-                                                if let Some(dur) = v["data"].as_f64() {
-                                                    let d = safe_f64(dur);
-                                                    state.duration = d;
-                                                    changed = true;
-                                                    if d > 0.0 {
-                                                        let mut meta = mpris_meta().lock().unwrap_or_else(|p| p.into_inner());
-                                                        let dur_us = (d * 1_000_000.0) as i64;
-                                                        if meta.duration_us != dur_us {
-                                                            meta.duration_us = dur_us;
-                                                            drop(meta);
-                                                            mpris_notify();
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            "eof-reached" => {
-                                                if let Some(eof) = v["data"].as_bool() {
-                                                    state.eof_reached = eof;
-                                                    if eof {
-                                                        state.playing = false;
-                                                        let _ = app_handle.emit("mpv_track_end", ());
-                                                    }
-                                                    changed = true;
-                                                }
-                                            }
-                                            _ => {}
                                         }
-                                        if changed {
-                                            let s_clone = state.clone();
-                                            drop(state);
-                                            let _ = app_handle.emit("mpv_playback_state", &s_clone);
+                                        "time-pos" => {
+                                            if let Some(pos) = v["data"].as_f64() {
+                                                let p = safe_f64(pos);
+                                                state.position = p;
+                                                if p > 0.01 && !state.playing && !state.paused {
+                                                    state.playing = true;
+                                                    let _ =
+                                                        app_handle.emit("mpv_track_started", ());
+                                                }
+                                                changed = true;
+                                            }
                                         }
+                                        "pause" => {
+                                            if let Some(paused) = v["data"].as_bool() {
+                                                state.paused = paused;
+                                                if paused {
+                                                    state.playing = false;
+                                                } else if state.position > 0.05 {
+                                                    state.playing = true;
+                                                }
+                                                changed = true;
+                                                mpris_notify();
+                                            }
+                                        }
+                                        "duration" => {
+                                            if let Some(dur) = v["data"].as_f64() {
+                                                let d = safe_f64(dur);
+                                                state.duration = d;
+                                                changed = true;
+                                                if d > 0.0 {
+                                                    let mut meta = mpris_meta()
+                                                        .lock()
+                                                        .unwrap_or_else(|p| p.into_inner());
+                                                    let dur_us = (d * 1_000_000.0) as i64;
+                                                    if meta.duration_us != dur_us {
+                                                        meta.duration_us = dur_us;
+                                                        drop(meta);
+                                                        mpris_notify();
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        "eof-reached" => {
+                                            if let Some(eof) = v["data"].as_bool() {
+                                                state.eof_reached = eof;
+                                                if eof {
+                                                    state.playing = false;
+                                                    let _ = app_handle.emit("mpv_track_end", ());
+                                                }
+                                                changed = true;
+                                            }
+                                        }
+                                        _ => {}
                                     }
-                                    "end-file" => {
-                                        let reason = v["reason"].as_str().unwrap_or("");
-                                        if reason == "error" {
-                                            {
-                                                let mut state = current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
-                                                state.playing = false;
-                                            }
-                                            let _ = app_handle.emit("mpv_track_error", ());
-                                            let s_clone = current_playback_state().lock().unwrap_or_else(|p| p.into_inner()).clone();
-                                            let _ = app_handle.emit("mpv_playback_state", &s_clone);
-                                        } else if reason == "eof" {
-                                            {
-                                                let mut state = current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
-                                                state.eof_reached = true;
-                                                state.playing = false;
-                                            }
-                                            let _ = app_handle.emit("mpv_track_end", ());
-                                            let s_clone = current_playback_state().lock().unwrap_or_else(|p| p.into_inner()).clone();
-                                            let _ = app_handle.emit("mpv_playback_state", &s_clone);
-                                        }
-                                    }
-                                    "file-loaded" => {
-                                        {
-                                            let mut state = current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
-                                            if !state.paused {
-                                                state.playing = true;
-                                            }
-                                        }
-                                        let _ = app_handle.emit("mpv_track_started", ());
-                                        let s_clone = current_playback_state().lock().unwrap_or_else(|p| p.into_inner()).clone();
+                                    if changed {
+                                        let s_clone = state.clone();
+                                        drop(state);
                                         let _ = app_handle.emit("mpv_playback_state", &s_clone);
                                     }
-                                    "playback-restart" => {
+                                }
+                                "end-file" => {
+                                    let reason = v["reason"].as_str().unwrap_or("");
+                                    if reason == "error" {
                                         {
-                                            let mut state = current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
-                                            state.eof_reached = false;
-                                            state.position = 0.0;
+                                            let mut state = current_playback_state()
+                                                .lock()
+                                                .unwrap_or_else(|p| p.into_inner());
                                             state.playing = false;
                                         }
-                                        let s_clone = current_playback_state().lock().unwrap_or_else(|p| p.into_inner()).clone();
+                                        let _ = app_handle.emit("mpv_track_error", ());
+                                        let s_clone = current_playback_state()
+                                            .lock()
+                                            .unwrap_or_else(|p| p.into_inner())
+                                            .clone();
+                                        let _ = app_handle.emit("mpv_playback_state", &s_clone);
+                                    } else if reason == "eof" {
+                                        {
+                                            let mut state = current_playback_state()
+                                                .lock()
+                                                .unwrap_or_else(|p| p.into_inner());
+                                            state.eof_reached = true;
+                                            state.playing = false;
+                                        }
+                                        let _ = app_handle.emit("mpv_track_end", ());
+                                        let s_clone = current_playback_state()
+                                            .lock()
+                                            .unwrap_or_else(|p| p.into_inner())
+                                            .clone();
                                         let _ = app_handle.emit("mpv_playback_state", &s_clone);
                                     }
-                                    _ => {}
                                 }
+                                "file-loaded" => {
+                                    {
+                                        let mut state = current_playback_state()
+                                            .lock()
+                                            .unwrap_or_else(|p| p.into_inner());
+                                        if !state.paused {
+                                            state.playing = true;
+                                        }
+                                    }
+                                    let _ = app_handle.emit("mpv_track_started", ());
+                                    let s_clone = current_playback_state()
+                                        .lock()
+                                        .unwrap_or_else(|p| p.into_inner())
+                                        .clone();
+                                    let _ = app_handle.emit("mpv_playback_state", &s_clone);
+                                }
+                                "playback-restart" => {
+                                    {
+                                        let mut state = current_playback_state()
+                                            .lock()
+                                            .unwrap_or_else(|p| p.into_inner());
+                                        state.eof_reached = false;
+                                        state.position = 0.0;
+                                        state.playing = false;
+                                    }
+                                    let s_clone = current_playback_state()
+                                        .lock()
+                                        .unwrap_or_else(|p| p.into_inner())
+                                        .clone();
+                                    let _ = app_handle.emit("mpv_playback_state", &s_clone);
+                                }
+                                _ => {}
                             }
                         }
-                        line.clear();
                     }
+                    line.clear();
                 }
-                Err(_) => {
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-                }
+            }
+            Err(_) => {
+                std::thread::sleep(std::time::Duration::from_millis(500));
             }
         }
     });
@@ -3864,25 +4589,33 @@ fn start_mpv_event_listener(app_handle: tauri::AppHandle) {
 
 fn parse_f64_from_response(response: &str) -> Result<f64, String> {
     let json: Value = serde_json::from_str(response).map_err(|e| e.to_string())?;
-    if json["data"].is_null() { return Ok(0.0); }
-    json["data"].as_f64().ok_or_else(|| format!("Unexpected data type: {}", response))
+    if json["data"].is_null() {
+        return Ok(0.0);
+    }
+    json["data"]
+        .as_f64()
+        .ok_or_else(|| format!("Unexpected data type: {}", response))
 }
 
 fn parse_lrc_string(lrc_text: &str, duration: f64) -> Option<String> {
     let mut lines: Vec<serde_json::Value> = Vec::new();
     for line in lrc_text.lines() {
         let line = line.trim();
-        if line.is_empty() { continue; }
+        if line.is_empty() {
+            continue;
+        }
         if let Some(rest) = line.strip_prefix('[') {
             if let Some(end) = rest.find(']') {
                 let ts = &rest[..end];
-                let text = rest[end+1..].trim();
-                
+                let text = rest[end + 1..].trim();
+
                 let secs: f64 = if let Some(colon) = ts.find(':') {
                     let min_part = &ts[..colon];
-                    let sec_part = &ts[colon+1..];
+                    let sec_part = &ts[colon + 1..];
                     if !min_part.is_empty() && min_part.chars().all(|c| c.is_ascii_digit()) {
-                        if let (Ok(mins), Ok(s)) = (min_part.parse::<f64>(), sec_part.parse::<f64>()) {
+                        if let (Ok(mins), Ok(s)) =
+                            (min_part.parse::<f64>(), sec_part.parse::<f64>())
+                        {
                             mins * 60.0 + s
                         } else {
                             continue;
@@ -3890,7 +4623,9 @@ fn parse_lrc_string(lrc_text: &str, duration: f64) -> Option<String> {
                     } else {
                         continue;
                     }
-                } else { continue; };
+                } else {
+                    continue;
+                };
                 if !text.is_empty() {
                     lines.push(serde_json::json!({"time": secs, "text": text}));
                 }
@@ -3909,7 +4644,9 @@ fn parse_lrc_string(lrc_text: &str, duration: f64) -> Option<String> {
     if !plain_lines.is_empty() {
         let total = duration.max(1.0);
         let step = total / plain_lines.len().max(1) as f64;
-        let arr: Vec<serde_json::Value> = plain_lines.iter().enumerate()
+        let arr: Vec<serde_json::Value> = plain_lines
+            .iter()
+            .enumerate()
             .map(|(i, l)| serde_json::json!({"time": i as f64 * step, "text": *l}))
             .collect();
         return Some(serde_json::to_string(&arr).unwrap_or_default());
@@ -3918,7 +4655,13 @@ fn parse_lrc_string(lrc_text: &str, duration: f64) -> Option<String> {
 }
 
 #[tauri::command]
-async fn fetch_lyrics(title: String, artist: String, duration: f64, _album: Option<String>, source: Option<String>) -> Result<String, String> {
+async fn fetch_lyrics(
+    title: String,
+    artist: String,
+    duration: f64,
+    _album: Option<String>,
+    source: Option<String>,
+) -> Result<String, String> {
     // 0. Instant offline resolution from SQLite lyrics cache
     if let Ok(Some(cached)) = db::get_cached_lyrics(&title, &artist) {
         return Ok(cached);
@@ -3931,14 +4674,34 @@ async fn fetch_lyrics(title: String, artist: String, duration: f64, _album: Opti
     if src == "netease" {
         let q = format!("{} {}", title.trim(), artist.trim());
         let encoded_q = urlencoding::encode(&q);
-        let netease_search_url = format!("https://music.163.com/api/search/get/web?s={}&type=1&offset=0&total=true&limit=1", encoded_q);
-        if let Ok(resp) = client.get(&netease_search_url).header("User-Agent", "Mozilla/5.0").send().await {
+        let netease_search_url = format!(
+            "https://music.163.com/api/search/get/web?s={}&type=1&offset=0&total=true&limit=1",
+            encoded_q
+        );
+        if let Ok(resp) = client
+            .get(&netease_search_url)
+            .header("User-Agent", "Mozilla/5.0")
+            .send()
+            .await
+        {
             if let Ok(json) = resp.json::<serde_json::Value>().await {
-                if let Some(song_id) = json.pointer("/result/songs/0/id").and_then(|id| id.as_i64()) {
-                    let lyric_url = format!("https://music.163.com/api/song/lyric?id={}&lv=-1&kv=-1&tv=-1", song_id);
-                    if let Ok(l_resp) = client.get(&lyric_url).header("User-Agent", "Mozilla/5.0").send().await {
+                if let Some(song_id) = json
+                    .pointer("/result/songs/0/id")
+                    .and_then(|id| id.as_i64())
+                {
+                    let lyric_url = format!(
+                        "https://music.163.com/api/song/lyric?id={}&lv=-1&kv=-1&tv=-1",
+                        song_id
+                    );
+                    if let Ok(l_resp) = client
+                        .get(&lyric_url)
+                        .header("User-Agent", "Mozilla/5.0")
+                        .send()
+                        .await
+                    {
                         if let Ok(l_json) = l_resp.json::<serde_json::Value>().await {
-                            if let Some(lrc) = l_json.pointer("/lrc/lyric").and_then(|s| s.as_str()) {
+                            if let Some(lrc) = l_json.pointer("/lrc/lyric").and_then(|s| s.as_str())
+                            {
                                 if let Some(parsed) = parse_lrc_string(lrc, duration) {
                                     let _ = db::cache_lyrics(&title, &artist, &parsed);
                                     return Ok(parsed);
@@ -4012,8 +4775,8 @@ async fn fetch_lyrics(title: String, artist: String, duration: f64, _album: Opti
 async fn search_yt_music(query: String, search_type: String) -> Result<String, String> {
     let full_query = match search_type.as_str() {
         "artist" => format!("{} artist", query),
-        "album"  => format!("{} full album", query),
-        _        => query.clone(),
+        "album" => format!("{} full album", query),
+        _ => query.clone(),
     };
     let search_arg = format!("ytsearch15:{}", full_query);
     let mut cmd = tokio::process::Command::new(bin_ytdlp());
@@ -4021,10 +4784,12 @@ async fn search_yt_music(query: String, search_type: String) -> Result<String, S
     cmd.args([
         &search_arg,
         "--flat-playlist",
-        "--print", "%(title)s====%(uploader)s====%(id)s====%(thumbnails.0.url)s====%(view_count)s",
+        "--print",
+        "%(title)s====%(uploader)s====%(id)s====%(thumbnails.0.url)s====%(view_count)s",
         "--no-warnings",
         "--no-check-certificates",
-        "--socket-timeout", "8",
+        "--socket-timeout",
+        "8",
     ]);
     if let Some(proxy_str) = get_proxy_url() {
         cmd.args(["--proxy", &proxy_str]);
@@ -4037,33 +4802,49 @@ async fn search_yt_music(query: String, search_type: String) -> Result<String, S
     };
 
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-    if stdout.trim().is_empty() { return Err("No results".to_string()); }
+    if stdout.trim().is_empty() {
+        return Err("No results".to_string());
+    }
 
-    let items: Vec<serde_json::Value> = stdout.trim().lines().take(10).filter_map(|line| {
-        let parts: Vec<&str> = line.splitn(5, "====").collect();
-        if parts.len() < 3 { return None; }
-        let title     = parts[0].trim();
-        let uploader  = parts[1].trim();
-        let id        = parts[2].trim();
-        let thumb     = if parts.len() > 3 { parts[3].trim() } else {
-            &format!("https://i.ytimg.com/vi/{}/mqdefault.jpg", id)
-        };
-        let thumb = if thumb.starts_with("http") { thumb.to_string() }
-                    else { format!("https://i.ytimg.com/vi/{}/mqdefault.jpg", id) };
-        Some(serde_json::json!({
-            "title": title,
-            "uploader": uploader,
-            "id": id,
-            "thumbnail": thumb,
-            "url": format!("https://youtube.com/watch?v={}", id),
-        }))
-    }).collect();
+    let items: Vec<serde_json::Value> = stdout
+        .trim()
+        .lines()
+        .take(10)
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.splitn(5, "====").collect();
+            if parts.len() < 3 {
+                return None;
+            }
+            let title = parts[0].trim();
+            let uploader = parts[1].trim();
+            let id = parts[2].trim();
+            let thumb = if parts.len() > 3 {
+                parts[3].trim()
+            } else {
+                &format!("https://i.ytimg.com/vi/{}/mqdefault.jpg", id)
+            };
+            let thumb = if thumb.starts_with("http") {
+                thumb.to_string()
+            } else {
+                format!("https://i.ytimg.com/vi/{}/mqdefault.jpg", id)
+            };
+            Some(serde_json::json!({
+                "title": title,
+                "uploader": uploader,
+                "id": id,
+                "thumbnail": thumb,
+                "url": format!("https://youtube.com/watch?v={}", id),
+            }))
+        })
+        .collect();
 
     Ok(serde_json::to_string(&items).unwrap_or_default())
 }
 
 #[tauri::command]
-fn ping() -> String { "pong".to_string() }
+fn ping() -> String {
+    "pong".to_string()
+}
 
 #[tauri::command]
 fn get_app_version() -> String {
@@ -4101,7 +4882,9 @@ fn get_mpris_cover_cache_dir() -> std::path::PathBuf {
     }
     if let Ok(xdg) = std::env::var("XDG_CACHE_HOME") {
         if !xdg.is_empty() {
-            return std::path::PathBuf::from(xdg).join("com.veluna.player").join("mpris_covers");
+            return std::path::PathBuf::from(xdg)
+                .join("com.veluna.player")
+                .join("mpris_covers");
         }
     }
     let home = std::env::var("HOME")
@@ -4110,10 +4893,16 @@ fn get_mpris_cover_cache_dir() -> std::path::PathBuf {
     #[cfg(target_os = "windows")]
     {
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-            return std::path::PathBuf::from(local_app_data).join("com.veluna.player").join("cache").join("mpris_covers");
+            return std::path::PathBuf::from(local_app_data)
+                .join("com.veluna.player")
+                .join("cache")
+                .join("mpris_covers");
         }
     }
-    std::path::PathBuf::from(home).join(".cache").join("com.veluna.player").join("mpris_covers")
+    std::path::PathBuf::from(home)
+        .join(".cache")
+        .join("com.veluna.player")
+        .join("mpris_covers")
 }
 
 fn resolve_mpris_cover(cover_input: &str, track_url: Option<&str>) -> String {
@@ -4124,7 +4913,10 @@ fn resolve_mpris_cover(cover_input: &str, track_url: Option<&str>) -> String {
     let trimmed = cover_input.trim();
 
     // 1. If it's already an http(s) URL or file:// URI, it's valid for MPRIS clients
-    if trimmed.starts_with("http://") || trimmed.starts_with("https://") || trimmed.starts_with("file://") {
+    if trimmed.starts_with("http://")
+        || trimmed.starts_with("https://")
+        || trimmed.starts_with("file://")
+    {
         return trimmed.to_string();
     }
 
@@ -4175,8 +4967,14 @@ fn resolve_mpris_cover(cover_input: &str, track_url: Option<&str>) -> String {
                     if let Some(comma_pos) = uri.find(',') {
                         let meta_part = &uri[..comma_pos];
                         let b64 = &uri[comma_pos + 1..];
-                        let ext = if meta_part.contains("png") { "png" } else { "jpg" };
-                        if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(b64.trim()) {
+                        let ext = if meta_part.contains("png") {
+                            "png"
+                        } else {
+                            "jpg"
+                        };
+                        if let Ok(bytes) =
+                            base64::engine::general_purpose::STANDARD.decode(b64.trim())
+                        {
                             if !bytes.is_empty() {
                                 let _ = std::fs::create_dir_all(&cache_dir);
                                 let mut hasher = DefaultHasher::new();
@@ -4194,13 +4992,27 @@ fn resolve_mpris_cover(cover_input: &str, track_url: Option<&str>) -> String {
 
                 // Fallback: check attached picture stream via ffmpeg
                 let output = Command::new(bin_ffmpeg())
-                    .args(["-i", &resolved, "-map", "0:v:0", "-frames:v", "1", "-f", "image2pipe", "-"])
+                    .args([
+                        "-i",
+                        &resolved,
+                        "-map",
+                        "0:v:0",
+                        "-frames:v",
+                        "1",
+                        "-f",
+                        "image2pipe",
+                        "-",
+                    ])
                     .no_window()
                     .output();
                 if let Ok(out) = output {
                     if out.status.success() && !out.stdout.is_empty() {
                         let bytes = out.stdout;
-                        let ext = if bytes.starts_with(&[0x89, 0x50, 0x4e, 0x47]) { "png" } else { "jpg" };
+                        let ext = if bytes.starts_with(&[0x89, 0x50, 0x4e, 0x47]) {
+                            "png"
+                        } else {
+                            "jpg"
+                        };
                         let _ = std::fs::create_dir_all(&cache_dir);
                         let mut hasher = DefaultHasher::new();
                         bytes.hash(&mut hasher);
@@ -4279,7 +5091,10 @@ async fn set_mpris_metadata(
         }
 
         if final_duration_us <= 0 {
-            let cur_dur = current_playback_state().lock().unwrap_or_else(|p| p.into_inner()).duration;
+            let cur_dur = current_playback_state()
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .duration;
             if cur_dur > 0.0 {
                 final_duration_us = (cur_dur * 1_000_000.0) as i64;
             }
@@ -4289,7 +5104,8 @@ async fn set_mpris_metadata(
 
         {
             let mut meta = mpris_meta().lock().unwrap_or_else(|p| p.into_inner());
-            let is_same_track = meta.title == final_title && meta.artist == final_artist && !final_title.is_empty();
+            let is_same_track =
+                meta.title == final_title && meta.artist == final_artist && !final_title.is_empty();
             let seq = if is_same_track {
                 meta.track_seq
             } else {
@@ -4360,10 +5176,16 @@ fn start_mpris_server(app_handle: tauri::AppHandle) {
     let (tx, rx) = tokio::sync::watch::channel(());
     let _ = MPRIS_TX.set(tx);
     std::thread::spawn(move || {
-        let rt = tokio::runtime::Builder::new_current_thread()
+        let rt = match tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
-            .expect("tokio rt");
+        {
+            Ok(rt) => rt,
+            Err(e) => {
+                eprintln!("[veluna] Failed to build MPRIS tokio runtime: {}", e);
+                return;
+            }
+        };
         rt.block_on(async move {
             if let Err(e) = run_mpris_server(app_handle, rx).await {
                 eprintln!("[veluna] MPRIS server error: {}", e);
@@ -4377,8 +5199,8 @@ async fn run_mpris_server(
     app_handle: tauri::AppHandle,
     mut rx: tokio::sync::watch::Receiver<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    use zbus::{ConnectionBuilder, dbus_interface, InterfaceRef};
-    use zbus::zvariant::{Value as ZValue, OwnedValue, ObjectPath};
+    use zbus::zvariant::{ObjectPath, OwnedValue, Value as ZValue};
+    use zbus::{dbus_interface, ConnectionBuilder, InterfaceRef};
 
     struct MediaPlayer2 {
         app: tauri::AppHandle,
@@ -4387,15 +5209,25 @@ async fn run_mpris_server(
     #[dbus_interface(name = "org.mpris.MediaPlayer2")]
     impl MediaPlayer2 {
         #[dbus_interface(property)]
-        fn can_quit(&self) -> bool { true }
+        fn can_quit(&self) -> bool {
+            true
+        }
         #[dbus_interface(property)]
-        fn can_raise(&self) -> bool { true }
+        fn can_raise(&self) -> bool {
+            true
+        }
         #[dbus_interface(property)]
-        fn has_track_list(&self) -> bool { false }
+        fn has_track_list(&self) -> bool {
+            false
+        }
         #[dbus_interface(property)]
-        fn identity(&self) -> &str { "Veluna" }
+        fn identity(&self) -> &str {
+            "Veluna"
+        }
         #[dbus_interface(property)]
-        fn desktop_entry(&self) -> &str { "veluna" }
+        fn desktop_entry(&self) -> &str {
+            "veluna"
+        }
         #[dbus_interface(property)]
         fn supported_uri_schemes(&self) -> Vec<String> {
             vec!["file".into(), "http".into(), "https".into()]
@@ -4444,7 +5276,11 @@ async fn run_mpris_server(
         }
         #[dbus_interface(property)]
         fn loop_status(&self) -> String {
-            mpris_meta().lock().unwrap_or_else(|p| p.into_inner()).loop_status.clone()
+            mpris_meta()
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .loop_status
+                .clone()
         }
         #[dbus_interface(property)]
         fn set_loop_status(&self, status: String) {
@@ -4477,7 +5313,10 @@ async fn run_mpris_server(
         }
         #[dbus_interface(property)]
         fn shuffle(&self) -> bool {
-            mpris_meta().lock().unwrap_or_else(|p| p.into_inner()).shuffle
+            mpris_meta()
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .shuffle
         }
         #[dbus_interface(property)]
         fn set_shuffle(&self, shuffle: bool) {
@@ -4493,7 +5332,16 @@ async fn run_mpris_server(
         fn metadata(&self) -> HashMap<String, OwnedValue> {
             let (title, artist, album, album_artist, url, cover_url, duration_us, track_seq) = {
                 let m = mpris_meta().lock().unwrap_or_else(|p| p.into_inner());
-                (m.title.clone(), m.artist.clone(), m.album.clone(), m.album_artist.clone(), m.url.clone(), m.cover_url.clone(), m.duration_us, m.track_seq)
+                (
+                    m.title.clone(),
+                    m.artist.clone(),
+                    m.album.clone(),
+                    m.album_artist.clone(),
+                    m.url.clone(),
+                    m.cover_url.clone(),
+                    m.duration_us,
+                    m.track_seq,
+                )
             };
             let mut map: HashMap<String, OwnedValue> = HashMap::new();
             let track_path = if title.is_empty() {
@@ -4502,16 +5350,21 @@ async fn run_mpris_server(
                 format!("/org/veluna/track/t{}", track_seq)
             };
             if let Ok(op) = ObjectPath::try_from(track_path.as_str()) {
-                map.insert("mpris:trackid".into(),
-                    OwnedValue::from(ZValue::new(op)));
+                map.insert("mpris:trackid".into(), OwnedValue::from(ZValue::new(op)));
             }
-            map.insert("xesam:title".into(),
-                OwnedValue::from(ZValue::new(title.as_str())));
-            map.insert("xesam:artist".into(),
-                OwnedValue::from(ZValue::new(vec![artist.as_str()])));
+            map.insert(
+                "xesam:title".into(),
+                OwnedValue::from(ZValue::new(title.as_str())),
+            );
+            map.insert(
+                "xesam:artist".into(),
+                OwnedValue::from(ZValue::new(vec![artist.as_str()])),
+            );
             if !album.is_empty() {
-                map.insert("xesam:album".into(),
-                    OwnedValue::from(ZValue::new(album.as_str())));
+                map.insert(
+                    "xesam:album".into(),
+                    OwnedValue::from(ZValue::new(album.as_str())),
+                );
             }
             let resolved_album_artist = if !album_artist.is_empty() {
                 album_artist
@@ -4519,27 +5372,38 @@ async fn run_mpris_server(
                 artist.clone()
             };
             if !resolved_album_artist.is_empty() {
-                map.insert("xesam:albumArtist".into(),
-                    OwnedValue::from(ZValue::new(vec![resolved_album_artist.as_str()])));
+                map.insert(
+                    "xesam:albumArtist".into(),
+                    OwnedValue::from(ZValue::new(vec![resolved_album_artist.as_str()])),
+                );
             }
             if !url.is_empty() {
-                map.insert("xesam:url".into(),
-                    OwnedValue::from(ZValue::new(url.as_str())));
+                map.insert(
+                    "xesam:url".into(),
+                    OwnedValue::from(ZValue::new(url.as_str())),
+                );
             }
             if !cover_url.is_empty() {
-                map.insert("mpris:artUrl".into(),
-                    OwnedValue::from(ZValue::new(cover_url.as_str())));
+                map.insert(
+                    "mpris:artUrl".into(),
+                    OwnedValue::from(ZValue::new(cover_url.as_str())),
+                );
             }
             if duration_us > 0 {
-                map.insert("mpris:length".into(),
-                    OwnedValue::from(ZValue::new(duration_us)));
+                map.insert(
+                    "mpris:length".into(),
+                    OwnedValue::from(ZValue::new(duration_us)),
+                );
             }
             map
         }
 
         #[dbus_interface(property)]
         fn volume(&self) -> f64 {
-            mpris_meta().lock().unwrap_or_else(|p| p.into_inner()).volume
+            mpris_meta()
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .volume
         }
         #[dbus_interface(property)]
         fn set_volume(&self, volume: f64) {
@@ -4548,14 +5412,20 @@ async fn run_mpris_server(
                 let mut m = mpris_meta().lock().unwrap_or_else(|p| p.into_inner());
                 m.volume = v;
             }
-            let cmd = format!(r#"{{"command": ["set_property", "volume", {}]}}"#, (v * 100.0).clamp(0.0, 150.0));
+            let cmd = format!(
+                r#"{{"command": ["set_property", "volume", {}]}}"#,
+                (v * 100.0).clamp(0.0, 150.0)
+            );
             let _ = send_ipc_fire_and_forget(&cmd);
             let _ = self.app.emit("mpris_set_volume", v * 100.0);
             mpris_notify();
         }
         #[dbus_interface(property)]
         fn position(&self) -> i64 {
-            let p = current_playback_state().lock().unwrap_or_else(|p| p.into_inner()).position;
+            let p = current_playback_state()
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .position;
             if p.is_finite() && p >= 0.0 {
                 (p * 1_000_000.0) as i64
             } else {
@@ -4563,50 +5433,95 @@ async fn run_mpris_server(
             }
         }
         #[dbus_interface(property)]
-        fn minimum_rate(&self) -> f64 { 0.5 }
+        fn minimum_rate(&self) -> f64 {
+            0.5
+        }
         #[dbus_interface(property)]
-        fn maximum_rate(&self) -> f64 { 2.0 }
+        fn maximum_rate(&self) -> f64 {
+            2.0
+        }
         #[dbus_interface(property)]
-        fn can_go_next(&self) -> bool { true }
+        fn can_go_next(&self) -> bool {
+            true
+        }
         #[dbus_interface(property)]
-        fn can_go_previous(&self) -> bool { true }
+        fn can_go_previous(&self) -> bool {
+            true
+        }
         #[dbus_interface(property)]
-        fn can_play(&self) -> bool { true }
+        fn can_play(&self) -> bool {
+            true
+        }
         #[dbus_interface(property)]
-        fn can_pause(&self) -> bool { true }
+        fn can_pause(&self) -> bool {
+            true
+        }
         #[dbus_interface(property)]
-        fn can_seek(&self) -> bool { true }
+        fn can_seek(&self) -> bool {
+            true
+        }
         #[dbus_interface(property)]
-        fn can_control(&self) -> bool { true }
+        fn can_control(&self) -> bool {
+            true
+        }
 
-        fn next(&self)       { let _ = self.app.emit("mpris_next", ()); }
-        fn previous(&self)   { let _ = self.app.emit("mpris_prev", ()); }
-        fn play_pause(&self) { let _ = self.app.emit("mpris_play_pause", ()); }
-        fn play(&self)       { let _ = self.app.emit("mpris_play", ()); }
-        fn pause(&self)      { let _ = self.app.emit("mpris_pause", ()); }
-        fn stop(&self)       { let _ = self.app.emit("mpris_stop", ()); }
+        fn next(&self) {
+            let _ = self.app.emit("mpris_next", ());
+        }
+        fn previous(&self) {
+            let _ = self.app.emit("mpris_prev", ());
+        }
+        fn play_pause(&self) {
+            let _ = self.app.emit("mpris_play_pause", ());
+        }
+        fn play(&self) {
+            let _ = self.app.emit("mpris_play", ());
+        }
+        fn pause(&self) {
+            let _ = self.app.emit("mpris_pause", ());
+        }
+        fn stop(&self) {
+            let _ = self.app.emit("mpris_stop", ());
+        }
 
         #[dbus_interface(signal)]
         async fn seeked(signal_ctxt: &zbus::SignalContext<'_>, position: i64) -> zbus::Result<()>;
 
-        async fn seek(&self, #[zbus(signal_context)] ctxt: zbus::SignalContext<'_>, offset_us: i64) -> zbus::fdo::Result<()> {
+        async fn seek(
+            &self,
+            #[zbus(signal_context)] ctxt: zbus::SignalContext<'_>,
+            offset_us: i64,
+        ) -> zbus::fdo::Result<()> {
             let offset_secs = offset_us as f64 / 1_000_000.0;
             let cmd = format!(r#"{{"command": ["seek", {}, "relative"]}}"#, offset_secs);
             let _ = send_ipc_fire_and_forget(&cmd);
             let new_pos_us = {
-                let mut state = current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
+                let mut state = current_playback_state()
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner());
                 let dur = state.duration;
                 let mut new_pos = state.position + offset_secs;
-                if new_pos < 0.0 { new_pos = 0.0; }
-                if dur > 0.0 && new_pos > dur { new_pos = dur; }
+                if new_pos < 0.0 {
+                    new_pos = 0.0;
+                }
+                if dur > 0.0 && new_pos > dur {
+                    new_pos = dur;
+                }
                 state.position = new_pos;
                 (new_pos * 1_000_000.0) as i64
             };
-            let _ = self.app.emit("mpris_seeked", new_pos_us as f64 / 1_000_000.0);
+            let _ = self
+                .app
+                .emit("mpris_seeked", new_pos_us as f64 / 1_000_000.0);
             let _ = Self::seeked(&ctxt, new_pos_us).await;
             Ok(())
         }
-        async fn set_position(&self, #[zbus(signal_context)] ctxt: zbus::SignalContext<'_>, track_id: ObjectPath<'_>, position_us: i64) -> zbus::fdo::Result<()> {
+        async fn set_position(
+            &self,
+            #[zbus(signal_context)] ctxt: zbus::SignalContext<'_>,
+            track_id: ObjectPath<'_>,
+            position_us: i64,
+        ) -> zbus::fdo::Result<()> {
             let (cur_track_seq, max_dur_us) = {
                 let m = mpris_meta().lock().unwrap_or_else(|p| p.into_inner());
                 (m.track_seq, m.duration_us)
@@ -4630,7 +5545,9 @@ async fn run_mpris_server(
             let cmd = format!(r#"{{"command": ["seek", {}, "absolute"]}}"#, pos_secs);
             let _ = send_ipc_fire_and_forget(&cmd);
             {
-                let mut state = current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
+                let mut state = current_playback_state()
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner());
                 state.position = pos_secs;
             }
             let _ = self.app.emit("mpris_seeked", pos_secs);
@@ -4644,8 +5561,18 @@ async fn run_mpris_server(
 
     let conn = ConnectionBuilder::session()?
         .name("org.mpris.MediaPlayer2.veluna")?
-        .serve_at("/org/mpris/MediaPlayer2", MediaPlayer2 { app: app_handle.clone() })?
-        .serve_at("/org/mpris/MediaPlayer2", Player { app: app_handle.clone() })?
+        .serve_at(
+            "/org/mpris/MediaPlayer2",
+            MediaPlayer2 {
+                app: app_handle.clone(),
+            },
+        )?
+        .serve_at(
+            "/org/mpris/MediaPlayer2",
+            Player {
+                app: app_handle.clone(),
+            },
+        )?
         .build()
         .await?;
 
@@ -4657,7 +5584,7 @@ async fn run_mpris_server(
     loop {
         let _ = rx.changed().await;
         let iface = player_iface.get().await;
-        let ctxt  = player_iface.signal_context();
+        let ctxt = player_iface.signal_context();
         let _ = iface.playback_status_changed(ctxt).await;
         let _ = iface.metadata_changed(ctxt).await;
         let _ = iface.loop_status_changed(ctxt).await;
@@ -4682,16 +5609,24 @@ fn write_text_file(path: String, content: String) -> Result<(), String> {
     std::fs::write(&safe_path, content.as_bytes()).map_err(|e| format!("Write failed: {}", e))
 }
 
-static DISCORD_CLIENT: std::sync::OnceLock<Mutex<Option<DiscordIpcClient>>> = std::sync::OnceLock::new();
+static DISCORD_CLIENT: std::sync::OnceLock<Mutex<Option<DiscordIpcClient>>> =
+    std::sync::OnceLock::new();
 
 fn get_discord_client() -> &'static Mutex<Option<DiscordIpcClient>> {
     DISCORD_CLIENT.get_or_init(|| Mutex::new(None))
 }
 
 #[tauri::command]
-fn set_network_config(proxy_url: Option<String>, custom_instance: Option<String>) -> Result<(), String> {
-    let clean_proxy = proxy_url.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
-    let clean_inst = custom_instance.map(|s| s.trim().trim_end_matches('/').to_string()).filter(|s| !s.is_empty());
+fn set_network_config(
+    proxy_url: Option<String>,
+    custom_instance: Option<String>,
+) -> Result<(), String> {
+    let clean_proxy = proxy_url
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let clean_inst = custom_instance
+        .map(|s| s.trim().trim_end_matches('/').to_string())
+        .filter(|s| !s.is_empty());
     {
         let mut cfg = network_config().lock().unwrap_or_else(|p| p.into_inner());
         cfg.proxy_url = clean_proxy.clone();
@@ -4702,15 +5637,23 @@ fn set_network_config(proxy_url: Option<String>, custom_instance: Option<String>
         *guard = None;
     }
     let proxy_target = clean_proxy.as_deref().unwrap_or("");
-    let cmd = serde_json::json!({ "command": ["set_property", "http-proxy", proxy_target] }).to_string();
+    let cmd =
+        serde_json::json!({ "command": ["set_property", "http-proxy", proxy_target] }).to_string();
     let _ = send_ipc_command_with_retry(&cmd, 1);
     Ok(())
 }
 
 #[tauri::command]
-async fn test_network_connection(proxy_url: Option<String>, custom_instance: Option<String>) -> Result<String, String> {
-    let clean_proxy = proxy_url.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
-    let mut clean_inst = custom_instance.map(|s| s.trim().trim_end_matches('/').to_string()).filter(|s| !s.is_empty());
+async fn test_network_connection(
+    proxy_url: Option<String>,
+    custom_instance: Option<String>,
+) -> Result<String, String> {
+    let clean_proxy = proxy_url
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    let mut clean_inst = custom_instance
+        .map(|s| s.trim().trim_end_matches('/').to_string())
+        .filter(|s| !s.is_empty());
 
     let has_proxy = clean_proxy.is_some();
     let has_inst = clean_inst.is_some();
@@ -4729,30 +5672,44 @@ async fn test_network_connection(proxy_url: Option<String>, custom_instance: Opt
     let client = builder.build().map_err(|e| e.to_string())?;
 
     let test_url = clean_inst.unwrap_or_else(|| "https://www.youtube.com".to_string());
-    let res = client.get(&test_url).send().await.map_err(|e| format!("Connection failed: {}", e))?;
+    let res = client
+        .get(&test_url)
+        .send()
+        .await
+        .map_err(|e| format!("Connection failed: {}", e))?;
 
     if res.status().is_success() || res.status().is_redirection() {
         let status_code = res.status().as_u16();
         if has_proxy && has_inst {
-            Ok(format!("Proxy & Custom Mirror reachable (HTTP {})", status_code))
+            Ok(format!(
+                "Proxy & Custom Mirror reachable (HTTP {})",
+                status_code
+            ))
         } else if has_proxy {
-            Ok(format!("Proxy connected successfully (HTTP {})", status_code))
+            Ok(format!(
+                "Proxy connected successfully (HTTP {})",
+                status_code
+            ))
         } else if has_inst {
             Ok(format!("Custom Mirror reachable (HTTP {})", status_code))
         } else {
-            Ok(format!("Direct internet connection OK (HTTP {} - no proxy configured)", status_code))
+            Ok(format!(
+                "Direct internet connection OK (HTTP {} - no proxy configured)",
+                status_code
+            ))
         }
     } else {
         Err(format!("Server returned HTTP {}", res.status().as_u16()))
     }
 }
 
-static FOLDER_WATCHER: std::sync::OnceLock<Mutex<Option<notify::RecommendedWatcher>>> = std::sync::OnceLock::new();
+static FOLDER_WATCHER: std::sync::OnceLock<Mutex<Option<notify::RecommendedWatcher>>> =
+    std::sync::OnceLock::new();
 static WATCHED_FOLDER: std::sync::OnceLock<Mutex<Option<String>>> = std::sync::OnceLock::new();
 
 #[tauri::command]
 fn watch_download_folder(app: tauri::AppHandle, path: String) -> Result<(), String> {
-    use notify::{Watcher, RecursiveMode, Event, EventKind};
+    use notify::{Event, EventKind, RecursiveMode, Watcher};
 
     let resolved = expand_tilde(&path);
     let p = std::path::PathBuf::from(&resolved);
@@ -4760,17 +5717,25 @@ fn watch_download_folder(app: tauri::AppHandle, path: String) -> Result<(), Stri
         return Ok(());
     }
 
-    let mut cur_folder = WATCHED_FOLDER.get_or_init(|| Mutex::new(None)).lock().unwrap_or_else(|p| p.into_inner());
+    let mut cur_folder = WATCHED_FOLDER
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
     if cur_folder.as_deref() == Some(&resolved) {
         return Ok(());
     }
     *cur_folder = Some(resolved.clone());
 
     let app_clone = app.clone();
-    let mut watcher_lock = FOLDER_WATCHER.get_or_init(|| Mutex::new(None)).lock().unwrap_or_else(|p| p.into_inner());
+    let mut watcher_lock = FOLDER_WATCHER
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
     *watcher_lock = None;
 
-    let debounce_tx = Arc::new(Mutex::new(std::time::Instant::now() - std::time::Duration::from_secs(5)));
+    let debounce_tx = Arc::new(Mutex::new(
+        std::time::Instant::now() - std::time::Duration::from_secs(5),
+    ));
 
     let mut watcher = notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
         if let Ok(event) = res {
@@ -4778,7 +5743,10 @@ fn watch_download_folder(app: tauri::AppHandle, path: String) -> Result<(), Stri
                 EventKind::Create(_) | EventKind::Remove(_) | EventKind::Modify(_) => {
                     let is_audio = event.paths.iter().any(|p| {
                         if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
-                            matches!(ext.to_lowercase().as_str(), "mp3" | "flac" | "wav" | "m4a" | "ogg" | "opus" | "aac" | "m4b")
+                            matches!(
+                                ext.to_lowercase().as_str(),
+                                "mp3" | "flac" | "wav" | "m4a" | "ogg" | "opus" | "aac" | "m4b"
+                            )
                         } else {
                             false
                         }
@@ -4794,9 +5762,12 @@ fn watch_download_folder(app: tauri::AppHandle, path: String) -> Result<(), Stri
                 _ => {}
             }
         }
-    }).map_err(|e| e.to_string())?;
+    })
+    .map_err(|e| e.to_string())?;
 
-    watcher.watch(&p, RecursiveMode::Recursive).map_err(|e| e.to_string())?;
+    watcher
+        .watch(&p, RecursiveMode::Recursive)
+        .map_err(|e| e.to_string())?;
     *watcher_lock = Some(watcher);
     Ok(())
 }
@@ -4816,7 +5787,9 @@ fn update_discord_rpc(
     custom_button_url: Option<String>,
 ) {
     std::thread::spawn(move || {
-        let mut client_lock = get_discord_client().lock().unwrap_or_else(|p| p.into_inner());
+        let mut client_lock = get_discord_client()
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
         if client_lock.is_none() {
             let mut client = DiscordIpcClient::new("1517835351044001953");
             if client.connect().is_ok() {
@@ -4882,7 +5855,9 @@ fn update_discord_rpc(
                 l_trim.to_string()
             };
             let mut buttons = Vec::new();
-            if !safe_btn_label.is_empty() && (u_trim.starts_with("http://") || u_trim.starts_with("https://")) {
+            if !safe_btn_label.is_empty()
+                && (u_trim.starts_with("http://") || u_trim.starts_with("https://"))
+            {
                 buttons.push(activity::Button::new(&safe_btn_label, u_trim));
             }
             if buttons.is_empty() {
@@ -4893,7 +5868,10 @@ fn update_discord_rpc(
                 }
             }
             if buttons.len() < 2 {
-                buttons.push(activity::Button::new("Download Veluna", "https://github.com/rry0ku/veluna/releases/"));
+                buttons.push(activity::Button::new(
+                    "Download Veluna",
+                    "https://github.com/rry0ku/veluna/releases/",
+                ));
             }
             act = act.buttons(buttons);
 
@@ -4908,7 +5886,9 @@ fn update_discord_rpc(
 #[tauri::command]
 fn clear_discord_rpc() {
     std::thread::spawn(|| {
-        let mut client_lock = get_discord_client().lock().unwrap_or_else(|p| p.into_inner());
+        let mut client_lock = get_discord_client()
+            .lock()
+            .unwrap_or_else(|p| p.into_inner());
         if let Some(ref mut client) = *client_lock {
             if client.clear_activity().is_err() {
                 let _ = client.close();
@@ -4937,7 +5917,8 @@ fn silence_ayatana_warnings() {
         _log_level: i32,
         _message: *const c_char,
         _user_data: *mut c_void,
-    ) {}
+    ) {
+    }
 
     unsafe {
         let mask = 0xFFFFFFFCu32 as i32;
@@ -4990,7 +5971,12 @@ fn db_delete_playlist(id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn db_record_play_event(url: String, title: String, artist: String, secs: i64) -> Result<(), String> {
+fn db_record_play_event(
+    url: String,
+    title: String,
+    artist: String,
+    secs: i64,
+) -> Result<(), String> {
     db::record_play_event(&url, &title, &artist, secs)
 }
 
@@ -5038,7 +6024,8 @@ async fn download_stream_chunked(
         album,
         cover_url,
         lyrics_text,
-    ).await
+    )
+    .await
 }
 
 fn main() {
@@ -5050,7 +6037,7 @@ fn main() {
         }
         silence_ayatana_warnings();
     }
-    
+
     init_bin_paths();
 
     tauri::Builder::default()
@@ -5092,7 +6079,8 @@ fn main() {
                 #[cfg(target_os = "windows")]
                 {
                     if let Ok(hwnd) = window.hwnd() {
-                        let raw_hwnd: *mut std::ffi::c_void = unsafe { std::mem::transmute(hwnd.0) };
+                        let raw_hwnd: *mut std::ffi::c_void =
+                            unsafe { std::mem::transmute(hwnd.0) };
                         if let Err(e) = windows_smtc::init_windows_smtc(handle.clone(), raw_hwnd) {
                             eprintln!("[SMTC] Failed to initialize Windows SMTC: {}", e);
                         }
@@ -5102,19 +6090,21 @@ fn main() {
 
             let shortcuts = [
                 ("MediaPlayPause", "mpris_play_pause"),
-                ("MediaNextTrack",  "mpris_next"),
-                ("MediaPrevTrack",  "mpris_prev"),
+                ("MediaNextTrack", "mpris_next"),
+                ("MediaPrevTrack", "mpris_prev"),
             ];
 
             for (key, event) in shortcuts {
                 if let Ok(shortcut) = key.parse::<Shortcut>() {
                     let h = handle.clone();
                     let ev = event.to_string();
-                    let _ = app.global_shortcut().on_shortcut(shortcut, move |_app, _sc, event| {
-                        if event.state == ShortcutState::Pressed {
-                            let _ = h.emit(&ev, ());
-                        }
-                    });
+                    let _ = app
+                        .global_shortcut()
+                        .on_shortcut(shortcut, move |_app, _sc, event| {
+                            if event.state == ShortcutState::Pressed {
+                                let _ = h.emit(&ev, ());
+                            }
+                        });
                 }
             }
 
@@ -5201,31 +6191,34 @@ fn main() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app_handle, event| {
-            match event {
-                
-                tauri::RunEvent::WindowEvent {
-                    label,
-                    event: tauri::WindowEvent::CloseRequested { api, .. },
-                    ..
-                } if label == "main" => {
-                    let flag = app_handle.state::<tray::TrayFlag>();
-                    if tray::handle_close_requested(app_handle, &flag) {
-                        api.prevent_close();
-                    }
+        .run(|app_handle, event| match event {
+            tauri::RunEvent::WindowEvent {
+                label,
+                event: tauri::WindowEvent::CloseRequested { api, .. },
+                ..
+            } if label == "main" => {
+                let flag = app_handle.state::<tray::TrayFlag>();
+                if tray::handle_close_requested(app_handle, &flag) {
+                    api.prevent_close();
                 }
-                tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
-                    if let Some(mut child) = mpv_process().lock().unwrap_or_else(|p| p.into_inner()).take() {
-                        let _ = child.kill();
-                        let _ = child.wait();
-                    }
-                    #[cfg(unix)]
-                    { let _ = std::fs::remove_file(socket_path()); }
-                    #[cfg(target_os = "windows")]
-                    windows_smtc::shutdown_windows_smtc();
-                }
-                _ => {}
             }
+            tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+                if let Some(mut child) = mpv_process()
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner())
+                    .take()
+                {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                }
+                #[cfg(unix)]
+                {
+                    let _ = std::fs::remove_file(socket_path());
+                }
+                #[cfg(target_os = "windows")]
+                windows_smtc::shutdown_windows_smtc();
+            }
+            _ => {}
         });
 }
 
@@ -5250,7 +6243,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_import_csv_with_quotes_and_commas() {
-        let csv = "Track Name,Artist Name,Album\n\"Rock, Paper, Scissors\",The Band,\"Greatest, Hits\"\n";
+        let csv =
+            "Track Name,Artist Name,Album\n\"Rock, Paper, Scissors\",The Band,\"Greatest, Hits\"\n";
         let res = import_csv_playlist(csv.to_string()).await.unwrap();
         assert!(res.contains("Rock, Paper, Scissors====The Band"));
     }
@@ -5312,5 +6306,22 @@ Couldn't look you in the eye
         assert_eq!(truncate_str(ascii, 3), "abc");
         assert_eq!(truncate_str(ascii, 20), "abcdefghij");
     }
-}
 
+    #[test]
+    fn test_sanitize_file_path_security() {
+        assert!(sanitize_file_path("../relative/path.mp3").is_err());
+        assert!(sanitize_file_path("relative/path.mp3").is_err());
+        #[cfg(unix)]
+        {
+            assert!(sanitize_file_path("/tmp/../etc/passwd").is_err());
+        }
+    }
+
+    #[test]
+    fn test_safe_f64() {
+        assert_eq!(safe_f64(10.5), 10.5);
+        assert_eq!(safe_f64(f64::NAN), 0.0);
+        assert_eq!(safe_f64(f64::INFINITY), 0.0);
+        assert_eq!(safe_f64(f64::NEG_INFINITY), 0.0);
+    }
+}

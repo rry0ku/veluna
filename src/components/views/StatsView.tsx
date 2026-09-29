@@ -32,6 +32,19 @@ interface StatsViewProps {
   onArtistClick?: (artistName: string, avatarUrl?: string) => void;
 }
 
+function safeEventDate(raw?: string): Date {
+  if (!raw) return new Date();
+  const trimmed = raw.trim();
+  if (/^\d+$/.test(trimmed)) {
+    const num = Number(trimmed);
+    const ms = num < 1e11 ? num * 1000 : num;
+    const d = new Date(ms);
+    return isNaN(d.getTime()) ? new Date() : d;
+  }
+  const d = new Date(trimmed);
+  return isNaN(d.getTime()) ? new Date() : d;
+}
+
 export const StatsView: React.FC<StatsViewProps> = React.memo(({
   listenSecs,
   setListenSecs,
@@ -84,7 +97,7 @@ export const StatsView: React.FC<StatsViewProps> = React.memo(({
     let rangeTotalPlays = 0;
 
     listeningHistory.forEach(ev => {
-      const evTime = new Date(ev.playedAt).getTime();
+      const evTime = safeEventDate(ev.playedAt).getTime();
       if (evTime >= limitMs) {
         rangeCounts[ev.url] = (rangeCounts[ev.url] || 0) + 1;
         rangeTotalSecs += ev.secs;
@@ -233,10 +246,10 @@ export const StatsView: React.FC<StatsViewProps> = React.memo(({
     const limitDate = new Date();
     limitDate.setDate(limitDate.getDate() - 7);
     limitDate.setHours(0, 0, 0, 0);
-    return new Date(ev.playedAt).getTime() >= limitDate.getTime();
+    return safeEventDate(ev.playedAt).getTime() >= limitDate.getTime();
   });
   targetHistory.forEach(ev => {
-    const hr = new Date(ev.playedAt).getHours();
+    const hr = safeEventDate(ev.playedAt).getHours();
     hourCounts[hr]++;
   });
   const maxHour = hourCounts.reduce((maxIdx, val, idx, arr) => val > arr[maxIdx] ? idx : maxIdx, 0);

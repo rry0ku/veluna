@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Playlist, Track } from '../types';
 import { loadLS, saveLS } from '../utils';
-import { dbSavePlaylist, dbDeletePlaylist } from '../services/db';
+import { dbSavePlaylist, dbDeletePlaylist, dbGetPlaylists } from '../services/db';
 
 export function usePlaylists(showToast?: (msg: string) => void) {
   const [playlists, setPlaylistsState] = useState<Playlist[]>(() =>
@@ -23,6 +23,25 @@ export function usePlaylists(showToast?: (msg: string) => void) {
   const [renameDescVal, setRenameDescVal] = useState('');
 
   const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<Track | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    dbGetPlaylists().then(dbPls => {
+      if (!active || !dbPls || dbPls.length === 0) return;
+      setPlaylistsState(prev => {
+        const hasCustom = prev.some(p => p.id !== 'p1' || p.tracks.length > 0);
+        if (!hasCustom) {
+          return dbPls;
+        }
+        const existingIds = new Set(prev.map(p => p.id));
+        const toAdd = dbPls.filter(p => !existingIds.has(p.id));
+        return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+      });
+    }).catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     saveLS('vg_playlists', playlists);

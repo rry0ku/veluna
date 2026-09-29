@@ -433,17 +433,11 @@ export function useAudioPlayer({
     }
     const track = currentTrackRef.current;
     const repeat = repeatModeRef.current;
-
-    if (repeat === 'off') {
-      setIsPlayingSync(false);
-      invoke('pause_audio').catch(() => {});
-      return;
-    }
-
     const isLocal = track?.url?.startsWith('local://') || currentLocalPathRef.current !== null;
 
-    if (isLocal) {
-      if (repeat === 'one' && track) {
+    // 1. Repeat single track
+    if (repeat === 'one' && track) {
+      if (isLocal) {
         const list = localTracksListRef.current;
         const idx = localTrackIndexRef.current;
         if (list[idx]) {
@@ -451,83 +445,101 @@ export function useAudioPlayer({
         } else if (list[0]) {
           handlePlayLocalTrack(list[0], list, 0);
         }
-        setTimeout(() => { endDetectedRef.current = false; }, 1500);
-        return;
+      } else {
+        handlePlayTrack(track, true);
       }
-
-      if (repeat === 'all') {
-        const list = localTracksListRef.current;
-        const idx = localTrackIndexRef.current;
-        if (list.length > 1) {
-          let nextIdx: number;
-          if (shuffle) {
-            do { nextIdx = Math.floor(Math.random() * list.length); } while (nextIdx === idx && list.length > 1);
-          } else {
-            nextIdx = idx + 1;
-          }
-          if (nextIdx < list.length) {
-            localTrackIndexRef.current = nextIdx;
-            setTimeout(() => handlePlayLocalTrack(list[nextIdx], list, nextIdx), 0);
-            return;
-          } else {
-            localTrackIndexRef.current = 0;
-            setTimeout(() => handlePlayLocalTrack(list[0], list, 0), 0);
-            return;
-          }
-        } else if (list.length === 1) {
-          handlePlayLocalTrack(list[0], list, 0);
-          return;
-        }
-      }
-
-      setIsPlayingSync(false);
-      return;
-    }
-
-    if (repeat === 'one' && track) {
-      handlePlayTrack(track, true);
       setTimeout(() => { endDetectedRef.current = false; }, 1500);
       return;
     }
 
-    if (repeat === 'all') {
-      const q = queueRef.current;
-      if (q.length > 0) {
-        const [next, ...rest] = q;
-        queueRef.current = rest;
-        setQueue(rest);
-        setTimeout(() => handlePlayTrack(next, true), 0);
-        return;
-      }
+    // 2. Play next track from Queue if items are queued
+    const q = queueRef.current;
+    if (q.length > 0) {
+      const [next, ...rest] = q;
+      queueRef.current = rest;
+      setQueue(rest);
+      setTimeout(() => handlePlayTrack(next, true), 0);
+      return;
+    }
 
-      const ctx = playlistContextRef.current;
-      if (ctx && ctx.tracks.length > 1) {
+    // 3. Local playlist context
+    if (isLocal) {
+      const list = localTracksListRef.current;
+      const idx = localTrackIndexRef.current;
+      if (list.length > 0) {
         let nextIdx: number;
         if (shuffle) {
-          do { nextIdx = Math.floor(Math.random() * ctx.tracks.length); }
-          while (nextIdx === ctx.index && ctx.tracks.length > 1);
+          do { nextIdx = Math.floor(Math.random() * list.length); } while (nextIdx === idx && list.length > 1);
         } else {
-          nextIdx = ctx.index + 1;
+          nextIdx = idx + 1;
         }
-        if (nextIdx < ctx.tracks.length) {
-          playlistContextRef.current = { ...ctx, index: nextIdx };
-          setTimeout(() => handlePlayTrack(ctx.tracks[nextIdx], true), 0);
+        if (nextIdx < list.length) {
+          localTrackIndexRef.current = nextIdx;
+          setTimeout(() => handlePlayLocalTrack(list[nextIdx], list, nextIdx), 0);
           return;
-        } else {
-          playlistContextRef.current = { ...ctx, index: 0 };
-          setTimeout(() => handlePlayTrack(ctx.tracks[0], true), 0);
+        } else if (repeat === 'all') {
+          localTrackIndexRef.current = 0;
+          setTimeout(() => handlePlayLocalTrack(list[0], list, 0), 0);
           return;
         }
       }
+      setIsPlayingSync(false);
+      return;
+    }
 
-      if (track) {
-        setTimeout(() => handlePlayTrack(track, true), 0);
+    // 4. Online playlist context
+    const ctx = playlistContextRef.current;
+    if (ctx && ctx.tracks.length > 0) {
+      let nextIdx: number;
+      if (shuffle) {
+        do { nextIdx = Math.floor(Math.random() * ctx.tracks.length); }
+        while (nextIdx === ctx.index && ctx.tracks.length > 1);
+      } else {
+        nextIdx = ctx.index + 1;
+      }
+      if (nextIdx < ctx.tracks.length) {
+        playlistContextRef.current = { ...ctx, index: nextIdx };
+        setTimeout(() => handlePlayTrack(ctx.tracks[nextIdx], true), 0);
+        return;
+      } else if (repeat === 'all') {
+        playlistContextRef.current = { ...ctx, index: 0 };
+        setTimeout(() => handlePlayTrack(ctx.tracks[0], true), 0);
         return;
       }
     }
 
+    // 5. Autoplay recommendation radio if enabled
+    if (autoplayEnabled && track) {
+      setIsLoadingTrack(true);
+      fetchAutoplayTracks(track).then((recs) => {
+        if (currentTrackRef.current?.url !== track.url) return;
+        if (recs.length > 0) {
+          const filteredRecs = recs.filter(r => r.url !== track.url && !playHistory.some(h => h.url === r.url));
+          const toAdd = (filteredRecs.length > 0 ? filteredRecs : recs).slice(0, 8);
+          if (toAdd.length > 0) {
+            const [next, ...rest] = toAdd;
+            queueRef.current = rest;
+            setQueue(rest);
+            showToast("Song Radio: Playing recommendations");
+            handlePlayTrack(next, true);
+            return;
+          }
+        }
+        setIsLoadingTrack(false);
+        setIsPlayingSync(false);
+      }).catch(() => {
+        if (currentTrackRef.current?.url === track.url) {
+          setIsLoadingTrack(false);
+          setIsPlayingSync(false);
+        }
+      });
+      return;
+    }
+
+    // 6. Natural end of playback
     setIsPlayingSync(false);
-  }, [handlePlayTrack, handlePlayLocalTrack, setIsPlayingSync, shuffle, setQueue]);
+    invoke('pause_audio').catch(() => {});
+  }, [handlePlayTrack, handlePlayLocalTrack, setIsPlayingSync, shuffle, setQueue, autoplayEnabled, fetchAutoplayTracks, playHistory, showToast]);
 
   const handleSkipForward = useCallback(async () => {
     const track = currentTrackRef.current;

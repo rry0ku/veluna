@@ -1,11 +1,11 @@
 #![cfg(target_os = "windows")]
 
+use souvlaki::{
+    MediaControlEvent, MediaControls, MediaMetadata, MediaPlayback, MediaPosition, PlatformConfig,
+    SeekDirection,
+};
 use std::sync::Mutex;
 use std::time::Duration;
-use souvlaki::{
-    MediaControlEvent, MediaControls, MediaMetadata, MediaPlayback, MediaPosition,
-    PlatformConfig, SeekDirection,
-};
 use tauri::{Emitter, Manager};
 
 static WINDOWS_SMTC: std::sync::OnceLock<Mutex<Option<MediaControls>>> = std::sync::OnceLock::new();
@@ -65,11 +65,17 @@ fn handle_smtc_event(app: &tauri::AppHandle, event: MediaControlEvent) {
             let cmd = format!(r#"{{"command": ["seek", {}, "relative"]}}"#, offset_secs);
             let _ = crate::send_ipc_fire_and_forget(&cmd);
             let new_pos = {
-                let mut state = crate::current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
+                let mut state = crate::current_playback_state()
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner());
                 let dur = state.duration;
                 let mut p = state.position + offset_secs;
-                if p < 0.0 { p = 0.0; }
-                if dur > 0.0 && p > dur { p = dur; }
+                if p < 0.0 {
+                    p = 0.0;
+                }
+                if dur > 0.0 && p > dur {
+                    p = dur;
+                }
                 state.position = p;
                 p
             };
@@ -84,11 +90,17 @@ fn handle_smtc_event(app: &tauri::AppHandle, event: MediaControlEvent) {
             let cmd = format!(r#"{{"command": ["seek", {}, "relative"]}}"#, offset_secs);
             let _ = crate::send_ipc_fire_and_forget(&cmd);
             let new_pos = {
-                let mut state = crate::current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
+                let mut state = crate::current_playback_state()
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner());
                 let dur = state.duration;
                 let mut p = state.position + offset_secs;
-                if p < 0.0 { p = 0.0; }
-                if dur > 0.0 && p > dur { p = dur; }
+                if p < 0.0 {
+                    p = 0.0;
+                }
+                if dur > 0.0 && p > dur {
+                    p = dur;
+                }
                 state.position = p;
                 p
             };
@@ -99,7 +111,9 @@ fn handle_smtc_event(app: &tauri::AppHandle, event: MediaControlEvent) {
             let cmd = format!(r#"{{"command": ["seek", {}, "absolute"]}}"#, pos_secs);
             let _ = crate::send_ipc_fire_and_forget(&cmd);
             {
-                let mut state = crate::current_playback_state().lock().unwrap_or_else(|p| p.into_inner());
+                let mut state = crate::current_playback_state()
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner());
                 state.position = pos_secs;
             }
             let _ = app.emit("mpris_seeked", pos_secs);
@@ -137,9 +151,21 @@ pub fn update_windows_smtc(meta: &crate::MprisMetadata) {
         None => return,
     };
 
-    let title = if meta.title.is_empty() { None } else { Some(meta.title.as_str()) };
-    let artist = if meta.artist.is_empty() { None } else { Some(meta.artist.as_str()) };
-    let album = if meta.album.is_empty() { None } else { Some(meta.album.as_str()) };
+    let title = if meta.title.is_empty() {
+        None
+    } else {
+        Some(meta.title.as_str())
+    };
+    let artist = if meta.artist.is_empty() {
+        None
+    } else {
+        Some(meta.artist.as_str())
+    };
+    let album = if meta.album.is_empty() {
+        None
+    } else {
+        Some(meta.album.as_str())
+    };
 
     let normalized_cover: Option<String> = if meta.cover_url.is_empty() {
         None
@@ -173,7 +199,10 @@ pub fn update_windows_smtc(meta: &crate::MprisMetadata) {
     };
 
     if let Err(e) = controls.set_metadata(media_meta) {
-        eprintln!("[SMTC] Failed to set metadata with cover: {:?}. Retrying without cover...", e);
+        eprintln!(
+            "[SMTC] Failed to set metadata with cover: {:?}. Retrying without cover...",
+            e
+        );
         let fallback_meta = MediaMetadata {
             title,
             artist,
@@ -184,7 +213,10 @@ pub fn update_windows_smtc(meta: &crate::MprisMetadata) {
         let _ = controls.set_metadata(fallback_meta);
     }
 
-    let cur_pos = crate::current_playback_state().lock().unwrap_or_else(|p| p.into_inner()).position;
+    let cur_pos = crate::current_playback_state()
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .position;
     let progress = Some(MediaPosition(Duration::from_secs_f64(cur_pos.max(0.0))));
 
     let playback = if meta.is_stopped {

@@ -59,7 +59,7 @@ fn get_db_path(app: &tauri::AppHandle) -> PathBuf {
         let _ = std::fs::create_dir_all(&app_dir);
         return app_dir.join("veluna.db");
     }
-    
+
     // Fallback: standard config directory
     if let Some(user_dir) = dirs_fallback() {
         let dir = user_dir.join(".config").join("veluna");
@@ -83,12 +83,14 @@ fn dirs_fallback() -> Option<PathBuf> {
 
 pub fn init_db(app: &tauri::AppHandle) -> Result<(), String> {
     let db_path = get_db_path(app);
-    let write_conn = Connection::open(&db_path).map_err(|e| format!("Failed to open SQLite DB: {}", e))?;
+    let write_conn =
+        Connection::open(&db_path).map_err(|e| format!("Failed to open SQLite DB: {}", e))?;
     let _ = write_conn.busy_timeout(std::time::Duration::from_millis(5000));
 
     // Performance and integrity pragmas
-    write_conn.execute_batch(
-        "
+    write_conn
+        .execute_batch(
+            "
         PRAGMA busy_timeout = 5000;
         PRAGMA journal_mode = WAL;
         PRAGMA synchronous = NORMAL;
@@ -149,19 +151,23 @@ pub fn init_db(app: &tauri::AppHandle) -> Result<(), String> {
             album,
             path
         );
-        "
-    ).map_err(|e| format!("Failed to initialize DB schema: {}", e))?;
+        ",
+        )
+        .map_err(|e| format!("Failed to initialize DB schema: {}", e))?;
 
-    let read_conn = Connection::open(&db_path).map_err(|e| format!("Failed to open read SQLite DB: {}", e))?;
+    let read_conn =
+        Connection::open(&db_path).map_err(|e| format!("Failed to open read SQLite DB: {}", e))?;
     let _ = read_conn.busy_timeout(std::time::Duration::from_millis(5000));
-    read_conn.execute_batch(
-        "
+    read_conn
+        .execute_batch(
+            "
         PRAGMA busy_timeout = 5000;
         PRAGMA journal_mode = WAL;
         PRAGMA synchronous = NORMAL;
         PRAGMA foreign_keys = ON;
-        "
-    ).map_err(|e| format!("Failed to configure read DB connection: {}", e))?;
+        ",
+        )
+        .map_err(|e| format!("Failed to configure read DB connection: {}", e))?;
 
     let _ = DB_WRITE_CONN.set(Mutex::new(write_conn));
     let _ = DB_READ_CONN.set(Mutex::new(read_conn));
@@ -200,7 +206,10 @@ pub fn save_playlist(p: DbPlaylist) -> Result<(), String> {
             params![p.id, p.name, p.description, p.custom_cover],
         )?;
 
-        tx.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?1", params![p.id])?;
+        tx.execute(
+            "DELETE FROM playlist_tracks WHERE playlist_id = ?1",
+            params![p.id],
+        )?;
 
         {
             let mut stmt = tx.prepare(
@@ -229,34 +238,40 @@ pub fn save_playlist(p: DbPlaylist) -> Result<(), String> {
 
 pub fn get_all_playlists() -> Result<Vec<DbPlaylist>, String> {
     with_db(|conn| {
-        let mut stmt = conn.prepare("SELECT id, name, description, custom_cover FROM playlists ORDER BY updated_at DESC")?;
-        let playlist_rows: Vec<(String, String, String, Option<String>)> = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, Option<String>>(3)?,
-            ))
-        })?.collect::<Result<Vec<_>, _>>()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, name, description, custom_cover FROM playlists ORDER BY updated_at DESC",
+        )?;
+        let playlist_rows: Vec<(String, String, String, Option<String>)> = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                ))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
 
         let mut playlists = Vec::new();
         let mut track_stmt = conn.prepare(
             "SELECT track_id, title, artist, duration, url, cover, media_type
-             FROM playlist_tracks WHERE playlist_id = ?1 ORDER BY position ASC"
+             FROM playlist_tracks WHERE playlist_id = ?1 ORDER BY position ASC",
         )?;
 
         for (id, name, description, custom_cover) in playlist_rows {
-            let tracks = track_stmt.query_map(params![id], |row| {
-                Ok(DbTrack {
-                    id: row.get(0)?,
-                    title: row.get(1)?,
-                    artist: row.get(2)?,
-                    duration: row.get(3)?,
-                    url: row.get(4)?,
-                    cover: row.get(5)?,
-                    media_type: row.get(6)?,
-                })
-            })?.collect::<Result<Vec<_>, _>>()?;
+            let tracks = track_stmt
+                .query_map(params![id], |row| {
+                    Ok(DbTrack {
+                        id: row.get(0)?,
+                        title: row.get(1)?,
+                        artist: row.get(2)?,
+                        duration: row.get(3)?,
+                        url: row.get(4)?,
+                        cover: row.get(5)?,
+                        media_type: row.get(6)?,
+                    })
+                })?
+                .collect::<Result<Vec<_>, _>>()?;
 
             playlists.push(DbPlaylist {
                 id,
@@ -273,7 +288,10 @@ pub fn get_all_playlists() -> Result<Vec<DbPlaylist>, String> {
 pub fn delete_playlist(id: &str) -> Result<(), String> {
     with_db_mut(|conn| {
         let tx = conn.transaction()?;
-        tx.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?1", params![id])?;
+        tx.execute(
+            "DELETE FROM playlist_tracks WHERE playlist_id = ?1",
+            params![id],
+        )?;
         tx.execute("DELETE FROM playlists WHERE id = ?1", params![id])?;
         tx.commit()?;
         Ok(())
@@ -314,7 +332,7 @@ pub fn get_listening_stats() -> Result<Vec<DbTrackStat>, String> {
     with_db(|conn| {
         let mut stmt = conn.prepare(
             "SELECT url, title, artist, play_count, total_secs, first_seen, last_played
-             FROM track_stats ORDER BY play_count DESC LIMIT 200"
+             FROM track_stats ORDER BY play_count DESC LIMIT 200",
         )?;
         let rows = stmt.query_map([], |row| {
             Ok(DbTrackStat {
@@ -360,7 +378,11 @@ pub fn clear_listening_stats() -> Result<(), String> {
 }
 
 pub fn make_lyrics_key(title: &str, artist: &str) -> String {
-    format!("{}::{}", title.trim().to_lowercase(), artist.trim().to_lowercase())
+    format!(
+        "{}::{}",
+        title.trim().to_lowercase(),
+        artist.trim().to_lowercase()
+    )
 }
 
 pub fn get_cached_lyrics(title: &str, artist: &str) -> Result<Option<String>, String> {
@@ -394,7 +416,13 @@ pub fn cache_lyrics(title: &str, artist: &str, lrc_json: &str) -> Result<(), Str
 pub fn search_library_fts(query: &str) -> Result<Vec<DbSearchResult>, String> {
     let sanitized: String = query
         .chars()
-        .map(|c| if c.is_alphanumeric() || c.is_whitespace() { c } else { ' ' })
+        .map(|c| {
+            if c.is_alphanumeric() || c.is_whitespace() {
+                c
+            } else {
+                ' '
+            }
+        })
         .collect();
 
     let tokens: Vec<&str> = sanitized.split_whitespace().collect();
@@ -424,7 +452,12 @@ pub fn search_library_fts(query: &str) -> Result<Vec<DbSearchResult>, String> {
     })
 }
 
-pub fn index_local_track_fts(title: &str, artist: &str, album: &str, path: &str) -> Result<(), String> {
+pub fn index_local_track_fts(
+    title: &str,
+    artist: &str,
+    album: &str,
+    path: &str,
+) -> Result<(), String> {
     with_db_mut(|conn| {
         let tx = conn.transaction()?;
         tx.execute("DELETE FROM library_fts WHERE path = ?1", params![path])?;
