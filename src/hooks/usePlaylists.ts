@@ -149,8 +149,6 @@ export function usePlaylists(showToast?: (msg: string) => void) {
     const inp = document.createElement('input');
     inp.type = 'file';
     inp.accept = 'image/*';
-    inp.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
-    document.body.appendChild(inp);
     inp.onchange = e => {
       const f = (e.target as HTMLInputElement).files?.[0];
       if (f) {
@@ -164,9 +162,7 @@ export function usePlaylists(showToast?: (msg: string) => void) {
         };
         r.readAsDataURL(f);
       }
-      inp.remove();
     };
-    inp.oncancel = () => inp.remove();
     inp.click();
   }, [setPlaylists, showToast]);
 

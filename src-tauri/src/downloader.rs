@@ -93,20 +93,43 @@ pub async fn download_audio_stream_chunked(
 
                 tasks.push(tokio::spawn(async move {
                     let range_header = format!("bytes={}-{}", start, end);
-                    let mut res = c
-                        .get(&s_url)
-                        .header("Range", range_header)
-                        .send()
-                        .await
-                        .map_err(|e| e.to_string())?;
-
-                    if res.status() != reqwest::StatusCode::PARTIAL_CONTENT {
-                        return Err(format!(
-                            "Expected 206 Partial Content, got HTTP {}",
-                            res.status()
-                        ));
+                    let mut res = None;
+                    let mut last_err = String::new();
+                    for attempt in 0..3 {
+                        if attempt > 0 {
+                            tokio::time::sleep(std::time::Duration::from_millis(
+                                500 * (1 << attempt),
+                            ))
+                            .await;
+                        }
+                        match c.get(&s_url).header("Range", &range_header).send().await {
+                            Ok(resp) if resp.status() == reqwest::StatusCode::PARTIAL_CONTENT => {
+                                res = Some(resp);
+                                break;
+                            }
+                            Ok(resp) => {
+                                last_err = format!(
+                                    "Expected 206 Partial Content, got HTTP {}",
+                                    resp.status()
+                                );
+                            }
+                            Err(e) => {
+                                last_err = e.to_string();
+                            }
+                        }
                     }
+                    let mut res = res.ok_or(last_err)?;
 
+                    #[cfg(windows)]
+                    let mut file = {
+                        use std::os::windows::fs::OpenOptionsExt;
+                        std::fs::OpenOptions::new()
+                            .write(true)
+                            .share_mode(7) // FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE
+                            .open(&p)
+                            .map_err(|e| e.to_string())?
+                    };
+                    #[cfg(not(windows))]
                     let mut file = File::options()
                         .write(true)
                         .open(&p)

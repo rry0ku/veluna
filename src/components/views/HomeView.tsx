@@ -19,13 +19,14 @@ import {
   BarChart2,
   WifiOff
 } from 'lucide-react';
-import { Track, Playlist, LocalTrack, CtxMenu, SettingsTab, FollowedArtist } from '../../types';
+import { Track, Playlist, LocalTrack, CtxMenu, SettingsTab, FollowedArtist, SearchSource, SearchDateFilter, NavView } from '../../types';
 import { GENRES, matchGenreTrack } from '../../constants';
 import { invoke } from '@tauri-apps/api/core';
 import { getTrackGradient, cleanArtist, globalArtistAvatarCache, getTrackCoverUrl, handleThumbnailError } from '../../utils';
 import { TrackRow, TrackRowSkeleton } from '../TrackRow';
 import { VirtualTrackList } from '../VirtualTrackList';
 import { BatchActionBar } from '../BatchActionBar';
+import { ThemedSelect } from '../ThemedSelect';
 import { useMultiSelect } from '../../hooks/useMultiSelect';
 
 interface HomeViewProps {
@@ -48,6 +49,10 @@ interface HomeViewProps {
   setTracks?: React.Dispatch<React.SetStateAction<Track[]>>;
   searchTab: 'music' | 'video';
   setSearchTab: (tab: 'music' | 'video') => void;
+  searchSource?: SearchSource;
+  setSearchSource?: (src: SearchSource) => void;
+  searchDateFilter?: SearchDateFilter;
+  setSearchDateFilter?: (f: SearchDateFilter) => void;
   quickPicks: Track[];
   setQuickPicks?: React.Dispatch<React.SetStateAction<Track[]>>;
   searchRef?: React.RefObject<HTMLInputElement | null>;
@@ -55,7 +60,7 @@ interface HomeViewProps {
   handlePlayTrack?: (track: Track, fromQueue?: boolean) => Promise<void>;
   resetSearch?: () => void;
   updateAvailable?: string | null;
-  setActiveNav: (nav: any) => void;
+  setActiveNav: (nav: NavView) => void;
   setSettingsTab?: (tab: SettingsTab) => void;
   isHydrated?: boolean;
   isOnline?: boolean;
@@ -444,6 +449,10 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
   setTracks,
   searchTab,
   setSearchTab,
+  searchSource = 'all',
+  setSearchSource,
+  searchDateFilter = 'all',
+  setSearchDateFilter,
   quickPicks,
   setQuickPicks,
   searchRef: customSearchRef,
@@ -2066,7 +2075,7 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                   >
                     {playlists.map(pl => {
                       const isLiked = pl.id === 'p1';
-                      const cover = isLiked ? null : ((pl as any).customCover || pl.tracks?.find(t => t.cover)?.cover || null);
+                      const cover = isLiked ? null : (pl.customCover || pl.tracks?.find(t => t.cover)?.cover || null);
                       return (
                         <div
                           key={pl.id}
@@ -2401,51 +2410,103 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                 )}
               </div>
 
-              {!isSearching && (ytMusicTracks.length > 0 || videoTracks.length > 0) && (
-                <div style={{display:'flex',alignItems:'center',gap:'8px',margin:'10px 0 16px'}}>
-                  <button
-                    onClick={() => setSearchTab('music')}
-                    style={{
-                      padding: '6px 16px',
-                      borderRadius: '9999px',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      border: searchTab === 'music' ? 'none' : '1px solid var(--v-bdr2)',
-                      background: searchTab === 'music' ? 'var(--v-accent)' : 'var(--v-bg2)',
-                      color: searchTab === 'music' ? '#0c0b0b' : '#8a807c',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      transition: 'all .15s ease'
-                    }}
-                  >
-                    <Music size={13} />
-                    <span>YT Music</span>
-                    {ytMusicTracks.length > 0 && <span style={{fontSize:'10.5px',opacity:0.8}}>({ytMusicTracks.length})</span>}
-                  </button>
-                  
-                  <button
-                    onClick={() => setSearchTab('video')}
-                    style={{
-                      padding: '6px 16px',
-                      borderRadius: '9999px',
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      border: searchTab === 'video' ? 'none' : '1px solid var(--v-bdr2)',
-                      background: searchTab === 'video' ? 'var(--v-accent)' : 'var(--v-bg2)',
-                      color: searchTab === 'video' ? '#0c0b0b' : '#8a807c',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      transition: 'all .15s ease'
-                    }}
-                  >
-                    <Play size={13} />
-                    <span>Videos</span>
-                    {videoTracks.length > 0 && <span style={{fontSize:'10.5px',opacity:0.8}}>({videoTracks.length})</span>}
-                  </button>
+              {!isSearching && (ytMusicTracks.length > 0 || videoTracks.length > 0 || searchSource === 'soundcloud') && (
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'8px',margin:'10px 0 16px'}}>
+                  <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                    <button
+                      onClick={() => {
+                        if (searchSource !== 'all') setSearchSource?.('all');
+                        setSearchTab('music');
+                      }}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: '9999px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        border: searchSource !== 'soundcloud' && searchTab === 'music' ? 'none' : '1px solid var(--v-bdr2)',
+                        background: searchSource !== 'soundcloud' && searchTab === 'music' ? 'var(--v-accent)' : 'var(--v-bg2)',
+                        color: searchSource !== 'soundcloud' && searchTab === 'music' ? '#0c0b0b' : '#8a807c',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        transition: 'all .15s ease'
+                      }}
+                    >
+                      <Music size={13} />
+                      <span>YT Music</span>
+                      {searchSource !== 'soundcloud' && ytMusicTracks.length > 0 && <span style={{fontSize:'10.5px',opacity:0.8}}>({ytMusicTracks.length})</span>}
+                    </button>
+                    
+                    <button
+                      onClick={() => {
+                        setSearchSource?.('soundcloud');
+                        setSearchTab('music');
+                        searchMusic();
+                      }}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: '9999px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        border: searchSource === 'soundcloud' ? 'none' : '1px solid var(--v-bdr2)',
+                        background: searchSource === 'soundcloud' ? 'var(--v-accent)' : 'var(--v-bg2)',
+                        color: searchSource === 'soundcloud' ? '#0c0b0b' : '#8a807c',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        transition: 'all .15s ease'
+                      }}
+                    >
+                      <span>SoundCloud</span>
+                      {searchSource === 'soundcloud' && ytMusicTracks.length > 0 && <span style={{fontSize:'10.5px',opacity:0.8}}>({ytMusicTracks.length})</span>}
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        if (searchSource !== 'all') setSearchSource?.('all');
+                        setSearchTab('video');
+                      }}
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: '9999px',
+                        fontSize: '12px',
+                        fontWeight: 700,
+                        cursor: 'pointer',
+                        border: searchTab === 'video' && searchSource !== 'soundcloud' ? 'none' : '1px solid var(--v-bdr2)',
+                        background: searchTab === 'video' && searchSource !== 'soundcloud' ? 'var(--v-accent)' : 'var(--v-bg2)',
+                        color: searchTab === 'video' && searchSource !== 'soundcloud' ? '#0c0b0b' : '#8a807c',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        transition: 'all .15s ease'
+                      }}
+                    >
+                      <Play size={13} />
+                      <span>Videos</span>
+                      {videoTracks.length > 0 && <span style={{fontSize:'10.5px',opacity:0.8}}>({videoTracks.length})</span>}
+                    </button>
+                  </div>
+
+                  {setSearchDateFilter && searchSource !== 'soundcloud' && (
+                    <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                      <span style={{fontSize:'11px',color:'#8a807c',fontWeight:600}}>Uploaded:</span>
+                      <ThemedSelect
+                        value={searchDateFilter ?? 'all'}
+                        onChange={v => setSearchDateFilter(v as SearchDateFilter)}
+                        compact
+                        minWidth="100px"
+                        options={[
+                          { value: 'all', label: 'Any time' },
+                          { value: 'today', label: 'Today' },
+                          { value: 'week', label: 'This week' },
+                          { value: 'month', label: 'This month' },
+                          { value: 'year', label: 'This year' },
+                        ]}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
 

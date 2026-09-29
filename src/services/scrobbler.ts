@@ -45,6 +45,12 @@ function signLastFmParams(params: Record<string, string>, apiSecret: string): st
   return md5(sigString);
 }
 
+function getErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === 'string') return err;
+  return fallback;
+}
+
 export async function getLastFmAuthToken(
   apiKey: string,
   apiSecret: string
@@ -70,8 +76,8 @@ export async function getLastFmAuthToken(
       return { success: true, token: data.token };
     }
     return { success: false, error: data.message || `Last.fm error ${data.error}` };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Network error connecting to Last.fm' };
+  } catch (err: unknown) {
+    return { success: false, error: getErrorMessage(err, 'Network error connecting to Last.fm') };
   }
 }
 
@@ -114,8 +120,8 @@ export async function createLastFmSession(
       success: false,
       error: data.message || 'Authorization not completed yet.',
     };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Network error connecting to Last.fm' };
+  } catch (err: unknown) {
+    return { success: false, error: getErrorMessage(err, 'Network error connecting to Last.fm') };
   }
 }
 
@@ -168,8 +174,8 @@ export async function validateLastFmCredentials(
     }
 
     return { valid: false, error: 'Failed to validate credentials' };
-  } catch (err: any) {
-    return { valid: false, error: err.message || 'Network error connecting to Last.fm' };
+  } catch (err: unknown) {
+    return { valid: false, error: getErrorMessage(err, 'Network error connecting to Last.fm') };
   }
 }
 
@@ -206,8 +212,8 @@ export async function validateLastFmSession(
       return { valid: true, username: data.user.name };
     }
     return { valid: false, error: 'Invalid Last.fm session' };
-  } catch (err: any) {
-    return { valid: false, error: err.message || 'Network error connecting to Last.fm' };
+  } catch (err: unknown) {
+    return { valid: false, error: getErrorMessage(err, 'Network error connecting to Last.fm') };
   }
 }
 
@@ -261,8 +267,8 @@ export async function submitLastFmNowPlaying(
       return { success: false, error: data.message || `Last.fm error code ${data.error}` };
     }
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Network error' };
+  } catch (err: unknown) {
+    return { success: false, error: getErrorMessage(err, 'Network error') };
   }
 }
 
@@ -320,7 +326,7 @@ export async function submitLastFmScrobble(
       return { success: false, error: data.message || `Last.fm error code ${data.error}` };
     }
     return { success: true };
-  } catch (err: any) {
-    return { success: false, error: err.message || 'Network error' };
+  } catch (err: unknown) {
+    return { success: false, error: getErrorMessage(err, 'Network error') };
   }
 }

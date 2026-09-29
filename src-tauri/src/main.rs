@@ -374,10 +374,12 @@ fn sanitize_file_path(path: &str) -> Result<std::path::PathBuf, String> {
             }
         }
     }
-    if expanded.contains("..") {
+    let p = std::path::Path::new(&expanded);
+    if p.components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
         return Err("Path traversal not allowed".to_string());
     }
-    let p = std::path::Path::new(&expanded);
     if !p.is_absolute() {
         return Err(format!(
             "Path must be absolute: {}",
@@ -1484,7 +1486,8 @@ async fn get_artist_page_details(artist_name: String) -> Result<String, String> 
 
     // 5. Final fallback to ytsearch if direct was blocked or empty
     if tracks.is_empty() {
-        if let Ok(fallback_raw) = search_youtube(format!("{} official songs", canonical_name)).await
+        if let Ok(fallback_raw) =
+            search_youtube(format!("{} official songs", canonical_name), None).await
         {
             for line in fallback_raw.trim().split('\n') {
                 let parts: Vec<&str> = line.split("====").collect();
@@ -1527,14 +1530,14 @@ async fn get_artist_page_details(artist_name: String) -> Result<String, String> 
 }
 
 #[tauri::command]
-async fn search_youtube(query: String) -> Result<String, String> {
+async fn search_youtube(query: String, date_filter: Option<String>) -> Result<String, String> {
     let q_trim = query.trim().to_string();
     let is_url = q_trim.starts_with("http://")
         || q_trim.starts_with("https://")
         || q_trim.contains("youtube.com")
         || q_trim.contains("youtu.be");
 
-    if !is_url {
+    if !is_url && date_filter.is_none() {
         // 1. Custom Mirror search if configured
         if let Some(custom_inst) = get_custom_instance() {
             if let Some(custom_results) = search_custom_instance(&q_trim, &custom_inst).await {
@@ -1555,11 +1558,71 @@ async fn search_youtube(query: String) -> Result<String, String> {
     };
     let mut cmd = tokio::process::Command::new(bin_ytdlp());
     cmd.kill_on_drop(true);
+    let mut args = vec![
+        search_arg,
+        "--print".to_string(),
+        "%(title)s====%(uploader)s====%(duration_string)s====%(id)s".to_string(),
+        "--no-warnings".to_string(),
+        "--no-check-certificates".to_string(),
+        "--geo-bypass".to_string(),
+        "--socket-timeout".to_string(),
+        "15".to_string(),
+    ];
+
+    if let Some(df) = date_filter.as_deref() {
+        match df {
+            "today" | "day" => args.extend(["--dateafter".to_string(), "now-1day".to_string()]),
+            "week" => args.extend(["--dateafter".to_string(), "now-1week".to_string()]),
+            "month" => args.extend(["--dateafter".to_string(), "now-1month".to_string()]),
+            "year" => args.extend(["--dateafter".to_string(), "now-1year".to_string()]),
+            _ => args.push("--flat-playlist".to_string()),
+        }
+    } else {
+        args.push("--flat-playlist".to_string());
+    }
+
+    cmd.args(&args);
+    if let Some(proxy_str) = get_proxy_url() {
+        cmd.args(["--proxy", &proxy_str]);
+    }
+    cmd.no_window();
+
+    let out = match tokio::time::timeout(std::time::Duration::from_secs(35), cmd.output()).await {
+        Ok(res) => res.map_err(|e| format!("yt-dlp failed: {}", e))?,
+        Err(_) => return Err("Search timed out - check your connection".to_string()),
+    };
+
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    if stdout.trim().is_empty() {
+        return Err("No results found".to_string());
+    }
+
+    Ok(stdout)
+}
+
+#[tauri::command]
+async fn search_soundcloud(query: String) -> Result<String, String> {
+    let q_trim = query.trim().to_string();
+    if q_trim.is_empty() {
+        return Ok(String::new());
+    }
+
+    let search_arg = if q_trim.starts_with("http://")
+        || q_trim.starts_with("https://")
+        || q_trim.contains("soundcloud.com")
+    {
+        q_trim
+    } else {
+        format!("scsearch25:{}", q_trim)
+    };
+
+    let mut cmd = tokio::process::Command::new(bin_ytdlp());
+    cmd.kill_on_drop(true);
     cmd.args([
         &search_arg,
         "--flat-playlist",
         "--print",
-        "%(title)s====%(uploader)s====%(duration_string)s====%(id)s",
+        "%(title)s====%(uploader)s====%(duration_string)s====%(webpage_url,url)s====%(thumbnail)s",
         "--no-warnings",
         "--no-check-certificates",
         "--geo-bypass",
@@ -1572,8 +1635,8 @@ async fn search_youtube(query: String) -> Result<String, String> {
     cmd.no_window();
 
     let out = match tokio::time::timeout(std::time::Duration::from_secs(35), cmd.output()).await {
-        Ok(res) => res.map_err(|e| format!("yt-dlp failed: {}", e))?,
-        Err(_) => return Err("Search timed out - check your connection".to_string()),
+        Ok(res) => res.map_err(|e| format!("SoundCloud search failed: {}", e))?,
+        Err(_) => return Err("SoundCloud search timed out".to_string()),
     };
 
     let stdout = String::from_utf8_lossy(&out.stdout).to_string();
@@ -2357,15 +2420,16 @@ async fn extract_stream_url_async(youtube_url: String, my_id: Option<u64>) -> Op
         use std::process::{Command, Stdio};
         use std::io::Read;
 
+        let is_sc = youtube_url.contains("soundcloud.com");
         let mut children: Vec<(std::process::Child, &'static str)> = Vec::new();
 
-        // Primary Tier 1: single-request extraction with android client & player_skip
+        // Primary Tier 1: single-request extraction
         let mut cmd = Command::new(bin_ytdlp());
         cmd.env("PYTHONHASHSEED", "0");
         cmd.env("PYTHONDONTWRITEBYTECODE", "1");
         cmd.env("PYTHONNOUSERSITE", "1");
         cmd.no_window();
-        cmd.args([
+        let mut cmd_args = vec![
             "--no-config",
             "--no-warnings", "--no-playlist", "--no-check-certificates",
             "--socket-timeout", "4", "--retries", "0",
@@ -2373,16 +2437,23 @@ async fn extract_stream_url_async(youtube_url: String, my_id: Option<u64>) -> Op
             "--no-check-formats",
             "--geo-bypass",
             "-g",
-            "--extractor-args", "youtube:player_client=android;player_skip=webpage,configs,translated_subs,dash,hls,js,initial_data",
-            "-f", "ba/b/bestaudio/best/18/22",
-            "--", &youtube_url
-        ]);
+        ];
+        if is_sc {
+            cmd_args.extend(["-f", "bestaudio/best"]);
+        } else {
+            cmd_args.extend([
+                "--extractor-args", "youtube:player_client=android;player_skip=webpage,configs,translated_subs,dash,hls,js,initial_data",
+                "-f", "ba/b/bestaudio/best/18/22",
+            ]);
+        }
+        cmd_args.extend(["--", &youtube_url]);
+        cmd.args(&cmd_args);
         apply_proxy_to_cmd(&mut cmd);
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
         cmd.stdin(Stdio::null());
 
-        log_debug("Spawning primary client (android)...");
+        log_debug("Spawning primary client...");
         if let Ok(child) = cmd.spawn() {
             children.push((child, "primary"));
         }
@@ -2393,15 +2464,15 @@ async fn extract_stream_url_async(youtube_url: String, my_id: Option<u64>) -> Op
         let mut spawned_tier2 = false;
 
         while start_time.elapsed() < timeout && resolved_url.is_none() && (!children.is_empty() || !spawned_tier2) {
-            // Tier 2 Fallback: if Tier 1 hasn't resolved within 750ms, spawn Android / iOS fallback
+            // Tier 2 Fallback: if Tier 1 hasn't resolved within 750ms, spawn fallback
             if !spawned_tier2 && (start_time.elapsed() >= std::time::Duration::from_millis(750) || children.is_empty()) {
-                log_debug("Spawning tier2 client fallback (android,ios,mweb)...");
+                log_debug("Spawning tier2 client fallback...");
                 let mut cmd2 = Command::new(bin_ytdlp());
                 cmd2.env("PYTHONHASHSEED", "0");
                 cmd2.env("PYTHONDONTWRITEBYTECODE", "1");
                 cmd2.env("PYTHONNOUSERSITE", "1");
                 cmd2.no_window();
-                cmd2.args([
+                let mut cmd2_args = vec![
                     "--no-config",
                     "--no-warnings", "--no-playlist", "--no-check-certificates",
                     "--socket-timeout", "4", "--retries", "0",
@@ -2409,10 +2480,17 @@ async fn extract_stream_url_async(youtube_url: String, my_id: Option<u64>) -> Op
                     "--no-check-formats",
                     "--geo-bypass",
                     "-g",
-                    "--extractor-args", "youtube:player_client=android,ios,mweb;player_skip=webpage,configs,translated_subs,dash,hls,js,initial_data",
-                    "-f", "ba/b/bestaudio/best/18/22",
-                    "--", &youtube_url
-                ]);
+                ];
+                if is_sc {
+                    cmd2_args.extend(["-f", "bestaudio/best"]);
+                } else {
+                    cmd2_args.extend([
+                        "--extractor-args", "youtube:player_client=android,ios,mweb;player_skip=webpage,configs,translated_subs,dash,hls,js,initial_data",
+                        "-f", "ba/b/bestaudio/best/18/22",
+                    ]);
+                }
+                cmd2_args.extend(["--", &youtube_url]);
+                cmd2.args(&cmd2_args);
                 apply_proxy_to_cmd(&mut cmd2);
                 cmd2.stdout(Stdio::piped());
                 cmd2.stderr(Stdio::piped());
@@ -2903,6 +2981,23 @@ struct DownloadProgressPayload {
     error: Option<String>,
 }
 
+pub fn resolve_naming_template(naming_template: Option<&str>) -> &'static str {
+    let tpl = naming_template.unwrap_or("").trim().to_lowercase();
+    match tpl.as_str() {
+        "{artist} - {title}" | "standard" => "%(artist,uploader)s - %(title)s.%(ext)s",
+        "{artist}/{album}/{title}" | "album_folder" => {
+            "%(artist,uploader)s/%(album,title)s/%(title)s.%(ext)s"
+        }
+        "{album}/{track_num} - {title}" => {
+            "%(album,title)s/%(track_number,playlist_index)02d - %(title)s.%(ext)s"
+        }
+        "{artist}/{title}" | "artist_folder" => "%(artist,uploader)s/%(title)s.%(ext)s",
+        "{title}" | "title_only" => "%(title)s.%(ext)s",
+        _ => "%(artist,uploader)s - %(title)s.%(ext)s",
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 async fn download_song(
     app_handle: tauri::AppHandle,
@@ -2911,29 +3006,46 @@ async fn download_song(
     format: Option<String>,
     embed_thumbnail: Option<bool>,
     path: String,
+    cookie_browser: Option<String>,
+    sponsorblock: Option<bool>,
+    split_chapters: Option<bool>,
+    download_section: Option<String>,
+    naming_template: Option<String>,
+    square_thumbnail: Option<bool>,
+    duplicate_detect: Option<bool>,
 ) -> Result<String, String> {
     use std::io::{BufRead, BufReader};
     use std::process::{Command, Stdio};
 
     let resolved_path = expand_tilde(&path);
+    let _ = std::fs::create_dir_all(&resolved_path);
     let fmt = format.as_deref().unwrap_or("mp3");
     let do_embed = embed_thumbnail.unwrap_or(true);
+    let is_copy = fmt == "copy";
+
     let audio_format = match fmt {
         "opus" => "opus",
-        "m4a" => "m4a",
+        "m4a" | "aac" => "m4a",
         "flac" => "flac",
+        "wav" => "wav",
+        "copy" => "copy",
         _ => "mp3",
     };
     let audio_quality = match quality.as_str() {
-        "Low" => "9",
-        "Medium" => "4",
+        "Low" | "128k" => "9",
+        "Medium" | "192k" => "4",
+        "256k" => "1",
+        "High" | "320k" => "0",
         _ => "0",
     };
+
     let sep = std::path::MAIN_SEPARATOR;
+    let ytdl_pattern = resolve_naming_template(naming_template.as_deref());
+
     let output_template = if resolved_path.ends_with('/') || resolved_path.ends_with('\\') {
-        format!("{}%(title)s.%(ext)s", resolved_path)
+        format!("{}{}", resolved_path, ytdl_pattern)
     } else {
-        format!("{}{}%(title)s.%(ext)s", resolved_path, sep)
+        format!("{}{}{}", resolved_path, sep, ytdl_pattern)
     };
 
     let mut args = vec![
@@ -2941,17 +3053,77 @@ async fn download_song(
         "--extract-audio".to_string(),
         "--audio-format".to_string(),
         audio_format.to_string(),
-        "--audio-quality".to_string(),
-        audio_quality.to_string(),
+    ];
+
+    if !is_copy {
+        args.extend(["--audio-quality".to_string(), audio_quality.to_string()]);
+    }
+
+    args.extend([
+        "--retries".to_string(),
+        "5".to_string(),
+        "--fragment-retries".to_string(),
+        "10".to_string(),
+        "--retry-sleep".to_string(),
+        "exp=1:20".to_string(),
         "--add-metadata".to_string(),
         "--no-check-certificates".to_string(),
         "--no-warnings".to_string(),
         "-o".to_string(),
         output_template.clone(),
-    ];
+    ]);
+
+    // Download archive strictly in the unified cache directory
+    if duplicate_detect.unwrap_or(true) {
+        if let Some(archive_dir) = APP_CACHE_DIR.get() {
+            let archive_path = archive_dir.join("download_archive.txt");
+            args.push("--download-archive".to_string());
+            args.push(archive_path.to_string_lossy().to_string());
+        }
+    }
+
     if do_embed {
         args.push("--embed-thumbnail".to_string());
+        if square_thumbnail.unwrap_or(false) {
+            args.push("--convert-thumbnails".to_string());
+            args.push("png".to_string());
+            args.push("--ppa".to_string());
+            args.push(
+                "ThumbnailsConvertor+ffmpeg_o:-vf crop=min(iw\\,ih):min(iw\\,ih)".to_string(),
+            );
+        }
     }
+
+    if let Some(ref browser) = cookie_browser {
+        let b = browser.trim().to_lowercase();
+        if b != "none" && !b.is_empty() {
+            args.push("--cookies-from-browser".to_string());
+            args.push(b);
+        }
+    }
+
+    if sponsorblock.unwrap_or(false) {
+        args.push("--sponsorblock-remove".to_string());
+        args.push("music_offtopic,intro,outro,selfpromo,sponsor".to_string());
+    }
+
+    if split_chapters.unwrap_or(false) {
+        args.push("--split-chapters".to_string());
+    }
+
+    if let Some(ref section) = download_section {
+        let s = section.trim();
+        if !s.is_empty() {
+            let formatted_sec = if s.starts_with('*') {
+                s.to_string()
+            } else {
+                format!("*{}", s)
+            };
+            args.push("--download-sections".to_string());
+            args.push(formatted_sec);
+        }
+    }
+
     if let Some(proxy_str) = get_proxy_url() {
         args.push("--proxy".to_string());
         args.push(proxy_str);
@@ -2991,7 +3163,7 @@ async fn download_song(
         let stderr = child.stderr.take();
         let stderr_buf = Arc::new(Mutex::new(String::new()));
         let stderr_buf_clone = Arc::clone(&stderr_buf);
-        if let Some(err_stream) = stderr {
+        let stderr_handle = stderr.map(|err_stream| {
             std::thread::spawn(move || {
                 let reader = BufReader::new(err_stream);
                 for line in reader.lines().map_while(Result::ok) {
@@ -3003,14 +3175,18 @@ async fn download_song(
                         b.push_str(&line);
                     }
                 }
-            });
-        }
+            })
+        });
 
         let mut last_percent = 0.0;
+        let mut already_archived = false;
 
         if let Some(out) = stdout {
             let reader = BufReader::new(out);
             for line in reader.lines().map_while(Result::ok) {
+                if line.contains("has already been recorded in the archive") {
+                    already_archived = true;
+                }
                 if line.contains("[download] Destination:") {
                     if let Some(dest) = line.split("[download] Destination:").nth(1) {
                         let path = std::path::PathBuf::from(dest.trim());
@@ -3044,6 +3220,9 @@ async fn download_song(
         }
 
         let status = child.wait().map_err(|e| e.to_string())?;
+        if let Some(h) = stderr_handle {
+            let _ = h.join();
+        }
 
         {
             let mut map = active_downloads().lock().unwrap_or_else(|p| p.into_inner());
@@ -3055,16 +3234,27 @@ async fn download_song(
         }
 
         if status.success() {
+            let (status_str, return_msg) = if already_archived {
+                (
+                    "completed".to_string(),
+                    "Already in download archive (skipped)".to_string(),
+                )
+            } else {
+                (
+                    "finished".to_string(),
+                    "Downloaded successfully".to_string(),
+                )
+            };
             let _ = app_handle.emit(
                 "download_progress",
                 &DownloadProgressPayload {
                     url: url_for_events.clone(),
                     percent: 100.0,
-                    status: "finished".to_string(),
+                    status: status_str,
                     error: None,
                 },
             );
-            Ok("Downloaded successfully".to_string())
+            Ok(return_msg)
         } else {
             let err_detail = {
                 let b = stderr_buf.lock().unwrap_or_else(|p| p.into_inner());
@@ -3140,6 +3330,53 @@ async fn cancel_download(app_handle: tauri::AppHandle, url: String) -> Result<()
     }
 }
 
+#[tauri::command]
+async fn get_ytdlp_version() -> Result<String, String> {
+    let mut cmd = tokio::process::Command::new(bin_ytdlp());
+    cmd.arg("--version");
+    cmd.no_window();
+    let out = tokio::time::timeout(std::time::Duration::from_secs(5), cmd.output())
+        .await
+        .map_err(|_| "yt-dlp version check timed out".to_string())?
+        .map_err(|e| format!("Failed to run yt-dlp: {}", e))?;
+    let ver = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if ver.is_empty() {
+        Ok("Unknown".to_string())
+    } else {
+        Ok(ver)
+    }
+}
+
+#[tauri::command]
+async fn update_ytdlp() -> Result<String, String> {
+    let mut cmd = tokio::process::Command::new(bin_ytdlp());
+    cmd.arg("-U");
+    cmd.no_window();
+    let out = tokio::time::timeout(std::time::Duration::from_secs(60), cmd.output())
+        .await
+        .map_err(|_| "yt-dlp update timed out (check internet connection)".to_string())?
+        .map_err(|e| format!("Failed to run yt-dlp update: {}", e))?;
+    let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+    let combined = format!("{}\n{}", stdout, stderr).trim().to_string();
+    if combined.is_empty() {
+        Ok("yt-dlp update executed successfully".to_string())
+    } else {
+        Ok(combined)
+    }
+}
+
+#[tauri::command]
+async fn clear_download_archive() -> Result<String, String> {
+    if let Some(archive_dir) = APP_CACHE_DIR.get() {
+        let p = archive_dir.join("download_archive.txt");
+        if p.exists() {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+    Ok("Download archive cleared".to_string())
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 struct BatchProgress {
     index: usize,
@@ -3205,10 +3442,20 @@ async fn batch_download(
                     "--add-metadata",
                     "--no-check-certificates",
                     "--no-warnings",
+                    "--retries",
+                    "5",
+                    "--fragment-retries",
+                    "10",
+                    "--retry-sleep",
+                    "exp=1:20",
                     "-o",
                     &tpl,
-                    &url_clone,
                 ]);
+                if let Some(archive_dir) = APP_CACHE_DIR.get() {
+                    let archive_path = archive_dir.join("download_archive.txt");
+                    cmd.args(["--download-archive", &archive_path.to_string_lossy()]);
+                }
+                cmd.arg(&url_clone);
                 apply_proxy_to_cmd(&mut cmd);
                 let out = cmd
                     .no_window()
@@ -5981,6 +6228,11 @@ fn db_record_play_event(
 }
 
 #[tauri::command]
+fn db_update_listening_time(url: String, secs: i64) -> Result<(), String> {
+    db::update_track_listen_time(&url, secs)
+}
+
+#[tauri::command]
 fn db_get_listening_stats() -> Result<Vec<db::DbTrackStat>, String> {
     db::get_listening_stats()
 }
@@ -6123,6 +6375,7 @@ fn main() {
             db_get_playlists,
             db_delete_playlist,
             db_record_play_event,
+            db_update_listening_time,
             db_get_listening_stats,
             db_get_listening_history,
             db_clear_listening_stats,
@@ -6188,6 +6441,10 @@ fn main() {
             watch_download_folder,
             set_network_config,
             test_network_connection,
+            search_soundcloud,
+            get_ytdlp_version,
+            update_ytdlp,
+            clear_download_archive,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -6293,6 +6550,12 @@ Couldn't look you in the eye
             let res_file = sanitize_file_path("file:///tmp/test.mp3");
             assert!(res_file.is_ok());
             assert_eq!(res_file.unwrap(), std::path::PathBuf::from("/tmp/test.mp3"));
+
+            let res_disc = sanitize_file_path("/tmp/Pink Floyd (Disc 1..2)/track.mp3");
+            assert!(res_disc.is_ok());
+
+            let res_dots = sanitize_file_path("/tmp/Rock... Pop/song.mp3");
+            assert!(res_dots.is_ok());
         }
     }
 
@@ -6323,5 +6586,53 @@ Couldn't look you in the eye
         assert_eq!(safe_f64(f64::NAN), 0.0);
         assert_eq!(safe_f64(f64::INFINITY), 0.0);
         assert_eq!(safe_f64(f64::NEG_INFINITY), 0.0);
+    }
+
+    #[test]
+    fn test_resolve_naming_template() {
+        assert_eq!(
+            resolve_naming_template(None),
+            "%(artist,uploader)s - %(title)s.%(ext)s"
+        );
+        assert_eq!(
+            resolve_naming_template(Some("standard")),
+            "%(artist,uploader)s - %(title)s.%(ext)s"
+        );
+        assert_eq!(
+            resolve_naming_template(Some("{artist} - {title}")),
+            "%(artist,uploader)s - %(title)s.%(ext)s"
+        );
+        assert_eq!(
+            resolve_naming_template(Some("{Artist} - {Title}")),
+            "%(artist,uploader)s - %(title)s.%(ext)s"
+        );
+        assert_eq!(
+            resolve_naming_template(Some("album_folder")),
+            "%(artist,uploader)s/%(album,title)s/%(title)s.%(ext)s"
+        );
+        assert_eq!(
+            resolve_naming_template(Some("{artist}/{album}/{title}")),
+            "%(artist,uploader)s/%(album,title)s/%(title)s.%(ext)s"
+        );
+        assert_eq!(
+            resolve_naming_template(Some("artist_folder")),
+            "%(artist,uploader)s/%(title)s.%(ext)s"
+        );
+        assert_eq!(
+            resolve_naming_template(Some("{artist}/{title}")),
+            "%(artist,uploader)s/%(title)s.%(ext)s"
+        );
+        assert_eq!(
+            resolve_naming_template(Some("title_only")),
+            "%(title)s.%(ext)s"
+        );
+        assert_eq!(
+            resolve_naming_template(Some("{title}")),
+            "%(title)s.%(ext)s"
+        );
+        assert_eq!(
+            resolve_naming_template(Some("custom_unknown")),
+            "%(artist,uploader)s - %(title)s.%(ext)s"
+        );
     }
 }

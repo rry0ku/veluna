@@ -14,12 +14,12 @@ import {
   Mic2,
   History,
 } from 'lucide-react';
-import { Playlist, CtxMenu, SettingsTab } from '../../types';
+import { Playlist, CtxMenu, SettingsTab, NavView } from '../../types';
 
 interface SidebarProps {
   activeNav: string;
-  setActiveNav?: (nav: any) => void;
-  navigateTo?: (nav: string) => void;
+  setActiveNav?: (nav: NavView) => void;
+  navigateTo?: (nav: NavView) => void;
   performanceMode: boolean;
   setSettingsTab?: (tab: SettingsTab) => void;
   isQueueOpen: boolean;
@@ -62,7 +62,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   handleImportPlaylistM3u,
 }) => {
   const navigateTo = setActiveNav || customNavigateTo || (() => {});
-  const getPlaylistCover = customGetPlaylistCover || ((p: Playlist) => p.id === 'p1' ? null : ((p as any).customCover || p.tracks.find(t => t.cover)?.cover || null));
+  const getPlaylistCover = customGetPlaylistCover || ((p: Playlist) => p.id === 'p1' ? null : (p.customCover || p.tracks.find(t => t.cover)?.cover || null));
   const [sidebarPlaylistsExpanded, setSidebarPlaylistsExpanded] = useState(true);
   const [isPlaylistMenuOpen, setIsPlaylistMenuOpen] = useState(false);
   const playlistMenuRef = useRef<HTMLDivElement>(null);
@@ -83,7 +83,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
       {performanceMode && (
         <div
           className="v-sidebar-eco"
-          onClick={() => { navigateTo('settings'); setSettingsTab?.('appearance'); }}
+          onClick={() => { navigateTo('settings'); setSettingsTab?.('general'); }}
           title="Low-Spec Mode active: Click to view in Settings"
           style={{
             display: "flex",
@@ -141,7 +141,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
           <span className="v-nav-label">History</span>
         </button>
 
-        <button onClick={() => { navigateTo('settings'); setSettingsTab?.('playback'); }} title="Settings"
+        <button onClick={() => { navigateTo('settings'); setSettingsTab?.('general'); }} title="Settings"
           className={`v-nav-btn${activeNav==='settings'?' v-nav-btn--active':''}`}>
           <span className="v-nav-icon"><Settings size={18} style={activeNav==='settings'?{color:'#c8c4c0'}:{color:'#4a4644'}} /></span>
           <span className="v-nav-label">Settings</span>

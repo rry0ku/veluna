@@ -176,7 +176,9 @@ fn scan_directory(
                     .file_name()
                     .and_then(|n| n.to_str())
                     .map(|n| {
-                        n.ends_with(".db")
+                        n == "download_archive.txt"
+                            || n.ends_with("_archive.txt")
+                            || n.ends_with(".db")
                             || n.ends_with(".sqlite")
                             || n.ends_with(".sqlite3")
                             || n.ends_with(".sock")

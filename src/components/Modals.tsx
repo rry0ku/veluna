@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { PlusCircle, ChevronDown, FileOutput, Upload, X, CheckCircle2, Trash2, Minus } from 'lucide-react';
+import { PlusCircle, ChevronDown, FileOutput, Upload, X, CheckCircle2, Trash2, Minus, Scissors } from 'lucide-react';
 import { Track } from '../types';
 import { cleanArtist, parseTrackMeta } from '../utils';
 import { invoke } from '@tauri-apps/api/core';
@@ -1056,9 +1056,9 @@ export function YtImportModal({
       onSavePlaylist(playlistName, `Imported from YouTube: ${trimmed}`, tracks);
       setPhase('done');
       onClose();
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (abortRef.current) return;
-      const errMsg = typeof e === 'string' ? e : (e?.message || 'Import failed');
+      const errMsg = typeof e === 'string' ? e : (e instanceof Error ? e.message : 'Import failed');
       showToast(`Import failed: ${errMsg}`);
       setPhase('input');
     }
@@ -1676,6 +1676,153 @@ export function PlaylistDeleteConfirmModal({
             onMouseLeave={() => setBtnHovered(false)}
           >
             Yes, Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function ClipDownloadModal({
+  track,
+  onClose,
+  onDownload,
+  abLoop,
+}: {
+  track: Track;
+  onClose: () => void;
+  onDownload: (track: Track, section: string) => void;
+  abLoop?: { a: number | null; b: number | null } | null;
+}) {
+  const formatSec = (secs: number) => {
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${m}:${s < 10 ? '0' : ''}${s}`;
+  };
+
+  const initialStart = (abLoop?.a != null) ? formatSec(abLoop.a) : '0:00';
+  const initialEnd = (abLoop?.b != null) ? formatSec(abLoop.b) : (track.duration || '1:00');
+
+  const [startTime, setStartTime] = useState(initialStart);
+  const [endTime, setEndTime] = useState(initialEnd);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleConfirm = () => {
+    const s = startTime.trim();
+    const e = endTime.trim();
+    if (!s || !e) {
+      setError('Start and end times are required');
+      return;
+    }
+    const section = `*${s}-${e}`;
+    onDownload(track, section);
+    onClose();
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 99999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px', background: 'rgba(0, 0, 0, 0.85)' }} onClick={onClose}>
+      <div onClick={e => e.stopPropagation()} style={{ width: '420px', maxWidth: 'calc(100vw - 32px)', borderRadius: '14px', overflow: 'hidden', boxShadow: '0 24px 80px rgba(0, 0, 0, 0.95)', background: 'var(--v-bg2)', border: '1px solid var(--v-bdr2)', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--v-bdr2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Scissors size={18} style={{ color: 'var(--v-accent)' }} />
+            <h2 style={{ fontSize: '14px', fontWeight: 700, color: '#e2ddd9', margin: 0 }}>Clip &amp; Download Section</h2>
+          </div>
+          <button onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#8a817c', cursor: 'pointer', padding: '4px' }}>
+            <X size={16} />
+          </button>
+        </div>
+
+        <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ fontSize: '13px', color: '#c4bdb7' }}>
+            Download a specific segment of <strong>{track.title}</strong> ({track.artist}).
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div>
+              <label style={{ fontSize: '10px', color: '#8a817c', textTransform: 'uppercase', fontWeight: 700, display: 'block', marginBottom: '6px' }}>
+                Start Time (MM:SS)
+              </label>
+              <input
+                type="text"
+                value={startTime}
+                onChange={e => { setStartTime(e.target.value); setError(null); }}
+                placeholder="0:00"
+                style={{
+                  width: '100%',
+                  background: 'var(--v-bg3)',
+                  border: '1px solid var(--v-bdr2)',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  padding: '8px 10px',
+                  fontSize: '13px',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize: '10px', color: '#8a817c', textTransform: 'uppercase', fontWeight: 700, display: 'block', marginBottom: '6px' }}>
+                End Time (MM:SS)
+              </label>
+              <input
+                type="text"
+                value={endTime}
+                onChange={e => { setEndTime(e.target.value); setError(null); }}
+                placeholder="3:30"
+                style={{
+                  width: '100%',
+                  background: 'var(--v-bg3)',
+                  border: '1px solid var(--v-bdr2)',
+                  borderRadius: '8px',
+                  color: '#fff',
+                  padding: '8px 10px',
+                  fontSize: '13px',
+                  outline: 'none',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+          </div>
+
+          {error && (
+            <div style={{ color: '#ef4444', fontSize: '12px' }}>{error}</div>
+          )}
+
+          <div style={{ fontSize: '11px', color: '#8a817c' }}>
+            Tip: You can use MM:SS format (e.g. 01:15 to 02:45) or seconds (e.g. 75 to 165).
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', padding: '12px 20px', borderTop: '1px solid var(--v-bdr2)', background: 'rgba(255, 255, 255, 0.01)' }}>
+          <button
+            onClick={onClose}
+            style={{
+              padding: '7px 14px',
+              borderRadius: '8px',
+              border: '1px solid var(--v-bdr2)',
+              background: 'transparent',
+              color: '#8a817c',
+              fontSize: '12px',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            style={{
+              padding: '7px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              background: 'var(--v-accent)',
+              color: '#0c0b0b',
+              fontWeight: 700,
+              fontSize: '12px',
+              cursor: 'pointer'
+            }}
+          >
+            Download Section
           </button>
         </div>
       </div>

@@ -328,6 +328,20 @@ pub fn record_play_event(url: &str, title: &str, artist: &str, secs: i64) -> Res
     })
 }
 
+pub fn update_track_listen_time(url: &str, secs: i64) -> Result<(), String> {
+    let clean_url = url.trim();
+    if clean_url.is_empty() || secs <= 0 {
+        return Ok(());
+    }
+    with_db_mut(|conn| {
+        conn.execute(
+            "UPDATE track_stats SET total_secs = total_secs + ?1 WHERE url = ?2",
+            params![secs, clean_url],
+        )?;
+        Ok(())
+    })
+}
+
 pub fn get_listening_stats() -> Result<Vec<DbTrackStat>, String> {
     with_db(|conn| {
         let mut stmt = conn.prepare(

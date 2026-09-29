@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { ChevronLeft, Download, WifiOff } from 'lucide-react';
-import { Track, ActiveDownload } from '../../types';
+import { Track, ActiveDownload, NavView } from '../../types';
 
 interface TopBarProps {
   activeNav: string;
-  setActiveNav?: (nav: any) => void;
-  navigateTo?: (nav: any) => void;
+  setActiveNav?: (nav: NavView) => void;
+  navigateTo?: (nav: NavView) => void;
   openPlaylistId: string | null;
   setOpenPlaylistId: (id: string | null) => void;
   hasSearched: boolean;
@@ -13,7 +13,7 @@ interface TopBarProps {
   ytMusicTracks: Track[];
   videoTracks: Track[];
   isSearching: boolean;
-  navHistory: any[];
+  navHistory: NavView[];
   navigateBack?: () => void;
   resetSearch: () => void;
   activeDownloads?: ActiveDownload[];

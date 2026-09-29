@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Track, ListeningEvent, HistoryItem } from '../types';
 import { loadLS, saveLS } from '../utils';
-import { dbRecordPlayEvent, dbClearListeningStats } from '../services/db';
+import { dbRecordPlayEvent, dbUpdateListeningTime, dbClearListeningStats } from '../services/db';
 
 export function useListeningStats() {
   const [playCounts, setPlayCounts] = useState<Record<string, number>>(() => loadLS('vg_playCounts', {}));
@@ -70,7 +70,40 @@ export function useListeningStats() {
     saveLS('vg_playbackHistory', playbackHistory);
   }, [playbackHistory]);
 
+  const pendingSecsRef = useRef<{ url: string; secs: number }>({ url: '', secs: 0 });
+
+  const flushPendingListening = useCallback(() => {
+    const { url, secs } = pendingSecsRef.current;
+    if (!url || secs <= 0) return;
+    pendingSecsRef.current = { url: '', secs: 0 };
+
+    setListenSecs(prev => {
+      const next = { ...prev, [url]: (prev[url] || 0) + secs };
+      listenSecsRef.current = next;
+      return next;
+    });
+
+    setListeningHistory(prev => {
+      if (prev.length === 0) return prev;
+      const next = [...prev];
+      if (next[0] && next[0].url === url) {
+        next[0] = { ...next[0], secs: next[0].secs + secs };
+      }
+      return next;
+    });
+
+    dbUpdateListeningTime(url, secs);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      flushPendingListening();
+    };
+  }, [flushPendingListening]);
+
   const recordTrackPlay = useCallback((track: Track, fromQueue: boolean = false) => {
+    flushPendingListening();
+
     setPlayCounts(prev => {
       const n = { ...prev, [track.url]: (prev[track.url] || 0) + 1 };
       saveLS('vg_playCounts', n);
@@ -110,22 +143,20 @@ export function useListeningStats() {
     if (!fromQueue) {
       setPlayHistory(prev => [track, ...prev.filter(t => t.url !== track.url)].slice(0, 50));
     }
-  }, []);
+  }, [flushPendingListening]);
 
   const recordListeningStep = useCallback((url: string, step: number) => {
-    setListenSecs(prev => {
-      const next = { ...prev, [url]: (prev[url] || 0) + step };
-      listenSecsRef.current = next;
-      return next;
-    });
-    setListeningHistory(prev => {
-      if (prev.length === 0) return prev;
-      const next = [...prev];
-      next[0] = { ...next[0], secs: next[0].secs + step };
-      return next;
-    });
-    dbRecordPlayEvent({ id: 0, url, title: '', artist: '', duration: '', cover: '' }, step);
-  }, []);
+    if (!url || step <= 0) return;
+    if (pendingSecsRef.current.url && pendingSecsRef.current.url !== url) {
+      flushPendingListening();
+    }
+    pendingSecsRef.current.url = url;
+    pendingSecsRef.current.secs += step;
+
+    if (pendingSecsRef.current.secs >= 10) {
+      flushPendingListening();
+    }
+  }, [flushPendingListening]);
 
   const clearPlaybackHistory = useCallback(() => {
     setPlaybackHistory([]);

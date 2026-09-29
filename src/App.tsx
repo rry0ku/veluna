@@ -81,6 +81,7 @@ import {
   YtImportModal,
   MetadataEditModal,
   PlaylistDeleteConfirmModal,
+  ClipDownloadModal,
 } from './components/Modals';
 
 export function App() {
@@ -175,6 +176,10 @@ export function App() {
     searchError,
     searchTab,
     setSearchTab,
+    searchSource,
+    setSearchSource,
+    searchDateFilter,
+    setSearchDateFilter,
     ytMusicTracks,
     videoTracks,
     tracks,
@@ -201,6 +206,19 @@ export function App() {
   const [autoCheckUpdates, setAutoCheckUpdatesState] = useState<boolean>(() => loadLS('vg_autoCheckUpdates', true));
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [downloadPath, setDownloadPath] = useState<string>(() => loadLS('vg_dlPath', '~/Downloads'));
+  const [cookieBrowser, setCookieBrowserState] = useState<string>(() => loadLS('vg_cookieBrowser', 'none'));
+  const [sponsorblockEnabled, setSponsorblockEnabledState] = useState<boolean>(() => loadLS('vg_sponsorblock', false));
+  const [splitChaptersEnabled, setSplitChaptersEnabledState] = useState<boolean>(() => loadLS('vg_splitChapters', false));
+  const [downloadNamingPattern, setDownloadNamingPatternState] = useState<string>(() => {
+    const raw = loadLS<string>('vg_downloadNamingPattern', loadLS<string>('vg_dlNaming', '{artist} - {title}'));
+    if (raw === 'standard') return '{artist} - {title}';
+    if (raw === 'album_folder') return '{artist}/{album}/{title}';
+    if (raw === 'artist_folder') return '{artist}/{title}';
+    if (raw === 'title_only') return '{title}';
+    return raw || '{artist} - {title}';
+  });
+  const [squareThumbnailEnabled, setSquareThumbnailEnabledState] = useState<boolean>(() => loadLS('vg_squareThumb', false));
+  const [clipModalTrack, setClipModalTrack] = useState<Track | null>(null);
   const [backupPath, setBackupPathState] = useState<string>(() => loadLS('vg_backupPath', ''));
   const [trayEnabled, setTrayEnabled] = useState<boolean>(() => loadLS('vg_trayEnabled', false));
   const [discordRpcEnabled, setDiscordRpcEnabled] = useState<boolean>(() => loadLS('vg_discordRpcEnabled', true));
@@ -215,6 +233,16 @@ export function App() {
   const [autoplayEnabled, setAutoplayEnabled] = useState<boolean>(() => loadLS('vg_autoplay', true));
   const [appVersion, setAppVersion] = useState<string>('0.1.6');
   const [updateAvailable, setUpdateAvailable] = useState<string | null>(null);
+
+  const setCookieBrowser = useCallback((b: string) => { setCookieBrowserState(b); saveLS('vg_cookieBrowser', b); }, []);
+  const setSponsorblockEnabled = useCallback((v: boolean) => { setSponsorblockEnabledState(v); saveLS('vg_sponsorblock', v); }, []);
+  const setSplitChaptersEnabled = useCallback((v: boolean) => { setSplitChaptersEnabledState(v); saveLS('vg_splitChapters', v); }, []);
+  const setDownloadNamingPattern = useCallback((p: string) => {
+    setDownloadNamingPatternState(p);
+    saveLS('vg_downloadNamingPattern', p);
+    saveLS('vg_dlNaming', p);
+  }, []);
+  const setSquareThumbnailEnabled = useCallback((v: boolean) => { setSquareThumbnailEnabledState(v); saveLS('vg_squareThumb', v); }, []);
 
   const setCacheEnabled = useCallback((enabled: boolean) => {
     setCacheEnabledState(enabled);
@@ -587,7 +615,7 @@ export function App() {
           : 'home';
     return [initial];
   });
-  const [settingsTab, setSettingsTab] = useState<SettingsTab>('playback');
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('general');
 
   const setActiveNav = useCallback((nav: NavView) => {
     setActiveNavState(nav);
@@ -1367,12 +1395,12 @@ export function App() {
     showToast('Download cancelled');
   }, [showToast]);
 
-  const handleDownload = useCallback(async (track: Track) => {
+  const handleDownload = useCallback(async (track: Track, section?: string) => {
     if (downloadingTracks[track.url] !== undefined) {
       handleCancelDownload(track.url);
       return;
     }
-    if (duplicateDetect) {
+    if (duplicateDetect && !section) {
       try {
         const scanned: LocalTrack[] = await invoke('scan_downloads', { path: downloadPath });
         const existing = scanned.map(t => t.title.toLowerCase());
@@ -1404,25 +1432,40 @@ export function App() {
     }, 6500);
 
     try {
-      await invoke('download_song', {
+      const res = await invoke<string>('download_song', {
         url: track.url,
         quality: downloadQuality,
         format: downloadFormat,
         embedThumbnail,
         path: downloadPath,
+        cookieBrowser: cookieBrowser !== 'none' ? cookieBrowser : undefined,
+        sponsorblock: sponsorblockEnabled,
+        splitChapters: splitChaptersEnabled,
+        downloadSection: section,
+        namingTemplate: downloadNamingPattern,
+        squareThumbnail: squareThumbnailEnabled,
+        duplicateDetect,
       });
       setDownloadingTracks(p => ({ ...p, [track.url]: 100 }));
       setActiveDownloads(prev => prev.map(item => item.url === track.url ? { ...item, progress: 100, status: 'completed' } : item));
       setTimeout(() => setDownloadingTracks(p => { const n = { ...p }; delete n[track.url]; return n; }), 1200);
-      showToast(`Downloaded: ${track.title}`);
+      if (res && res.toLowerCase().includes('already')) {
+        showToast(`Already downloaded: ${track.title}`);
+      } else {
+        showToast(`Downloaded: ${track.title}${section ? ' (clipped)' : ''}`);
+      }
       setLocalRefreshNonce(n => n + 1);
-    } catch (e: any) {
-      const msg = typeof e === 'string' ? e : e?.message || '';
+    } catch (e: unknown) {
+      const msg = typeof e === 'string' ? e : (e instanceof Error ? e.message : '');
       if (!msg.includes('cancelled')) showToast(`Download failed: ${msg}`);
       setDownloadingTracks(p => { const n = { ...p }; delete n[track.url]; return n; });
       setActiveDownloads(prev => prev.map(item => item.url === track.url ? { ...item, status: 'error', error: msg } : item));
     }
-  }, [downloadingTracks, duplicateDetect, downloadPath, downloadQuality, downloadFormat, embedThumbnail, handleCancelDownload, showToast]);
+  }, [downloadingTracks, duplicateDetect, downloadPath, downloadQuality, downloadFormat, embedThumbnail, cookieBrowser, sponsorblockEnabled, splitChaptersEnabled, downloadNamingPattern, squareThumbnailEnabled, handleCancelDownload, showToast]);
+
+  const handleOpenClipDownload = useCallback((track: Track) => {
+    setClipModalTrack(track);
+  }, []);
 
   const handleDeleteLocalTrack = useCallback(async (t: LocalTrack) => {
     try {
@@ -1719,7 +1762,7 @@ export function App() {
           return;
         }
 
-        const ls = (k: string, v: any) => {
+        const ls = <T,>(k: string, v: T): T => {
           saveLS(k, v);
           return v;
         };
@@ -2035,6 +2078,10 @@ export function App() {
             searchError={searchError}
             searchTab={searchTab}
             setSearchTab={setSearchTab}
+            searchSource={searchSource}
+            setSearchSource={setSearchSource}
+            searchDateFilter={searchDateFilter}
+            setSearchDateFilter={setSearchDateFilter}
             tracks={tracks}
             ytMusicTracks={ytMusicTracks}
             videoTracks={videoTracks}
@@ -2268,6 +2315,16 @@ export function App() {
             setEmbedThumbnail={setEmbedThumbnailState}
             duplicateDetect={duplicateDetect}
             setDuplicateDetect={setDuplicateDetectState}
+            cookieBrowser={cookieBrowser}
+            setCookieBrowser={setCookieBrowser}
+            sponsorblockEnabled={sponsorblockEnabled}
+            setSponsorblockEnabled={setSponsorblockEnabled}
+            splitChaptersEnabled={splitChaptersEnabled}
+            setSplitChaptersEnabled={setSplitChaptersEnabled}
+            downloadNamingPattern={downloadNamingPattern}
+            setDownloadNamingPattern={setDownloadNamingPattern}
+            squareThumbnailEnabled={squareThumbnailEnabled}
+            setSquareThumbnailEnabled={setSquareThumbnailEnabled}
             onBackup={handleBackup}
             onRestore={handleRestore}
             onReset={() => setConfirmModal({
@@ -2432,6 +2489,7 @@ export function App() {
         handlePlayTrack={handlePlayTrack}
         handlePlayLocalTrack={handlePlayLocalTrack}
         handleDownload={handleDownload}
+        handleOpenClipDownload={handleOpenClipDownload}
         handleCancelDownload={handleCancelDownload}
         handleDeleteLocalTrack={handleDeleteLocalTrack}
         handleOpenInFileManager={handleOpenInFileManager}
@@ -2627,6 +2685,16 @@ export function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Clip & Download Modal */}
+      {clipModalTrack && (
+        <ClipDownloadModal
+          track={clipModalTrack}
+          onClose={() => setClipModalTrack(null)}
+          onDownload={(t, section) => handleDownload(t, section)}
+          abLoop={abLoop}
+        />
       )}
 
       {/* Rename Playlist Modal */}

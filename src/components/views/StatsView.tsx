@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { BarChart2, Clock, ListMusic, Music, Play } from 'lucide-react';
-import { Track, Playlist } from '../../types';
+import { Track, Playlist, NavView } from '../../types';
 import { GENRES, matchGenreTrack } from '../../constants';
 import { getTrackGradient, cleanArtist, saveLS, globalArtistAvatarCache } from '../../utils';
 
@@ -25,7 +25,7 @@ interface StatsViewProps {
   handlePlayInContext: (track: Track, list: Track[]) => void | Promise<void>;
   setSearchQuery: (q: string) => void;
   searchMusic: (override?: string) => Promise<void>;
-  setActiveNav: (nav: any) => void;
+  setActiveNav: (nav: NavView) => void;
   artistThumbs: Record<string, string>;
   setConfirmModal: (modal: { message: string; onConfirm: () => void } | null) => void;
   showToast: (msg: string) => void;

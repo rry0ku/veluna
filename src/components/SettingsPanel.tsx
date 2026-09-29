@@ -4,7 +4,7 @@ import {
   FolderDown, FolderOpen, Image, Zap, BarChart2, Globe,
   Upload, ArchiveRestore, Trash2,
   Download, GitBranch, Radio, CheckCircle2,
-  HardDrive, Maximize2, Palette
+  HardDrive, Maximize2, Palette, Cookie, Sliders, Music, Database
 } from 'lucide-react';
 import { SettingsTab, DiskInfo, CacheInfo } from '../types';
 import { loadLS, saveLS, lightenColor, validateSettingsChange, formatBytes } from '../utils';
@@ -91,6 +91,11 @@ export type SettingsPanelProps = {
   startupNav?: string; setStartupNav?: (v: string) => void;
   cacheEnabled?: boolean; setCacheEnabled?: (v: boolean) => void;
   uiScale?: number; setUiScale?: (v: number) => void;
+  cookieBrowser?: string; setCookieBrowser?: (b: string) => void;
+  sponsorblockEnabled?: boolean; setSponsorblockEnabled?: (v: boolean) => void;
+  splitChaptersEnabled?: boolean; setSplitChaptersEnabled?: (v: boolean) => void;
+  downloadNamingPattern?: string; setDownloadNamingPattern?: (p: string) => void;
+  squareThumbnailEnabled?: boolean; setSquareThumbnailEnabled?: (v: boolean) => void;
 };
 
 export const SettingsPanel = React.memo(function SettingsPanel({
@@ -99,6 +104,11 @@ export const SettingsPanel = React.memo(function SettingsPanel({
   downloadFormat, setDownloadFormat,
   embedThumbnail, setEmbedThumbnail,
   duplicateDetect, setDuplicateDetect,
+  cookieBrowser = 'none', setCookieBrowser,
+  sponsorblockEnabled = false, setSponsorblockEnabled,
+  splitChaptersEnabled = false, setSplitChaptersEnabled,
+  downloadNamingPattern = 'standard', setDownloadNamingPattern,
+  squareThumbnailEnabled = true, setSquareThumbnailEnabled,
   onBackup, onRestore, onReset,
   backupPath, setBackupPath,
   loudnormEnabled, setLoudnormEnabled,
@@ -131,7 +141,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
   cacheEnabled: propCacheEnabled, setCacheEnabled: propSetCacheEnabled,
   uiScale: propUiScale, setUiScale: propSetUiScale,
 }: SettingsPanelProps) {
-  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab || 'playback');
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab || 'general');
   const [lfmTesting, setLfmTesting] = useState(false);
   const [lfmAuthToken, setLfmAuthToken] = useState<string | null>(null);
 
@@ -216,7 +226,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
         customInstance: customInstance.trim() || null,
       });
       setTestConnStatus({ loading: false, ok: true, msg: res });
-    } catch (err: any) {
+    } catch (err: unknown) {
       setTestConnStatus({ loading: false, ok: false, msg: String(err) });
     }
   };
@@ -319,43 +329,93 @@ export const SettingsPanel = React.memo(function SettingsPanel({
     refreshCacheInfo();
   }, [downloadPath, activeTab]);
 
+  const [ytdlpVersion, setYtdlpVersion] = useState<string>('Checking...');
+  const [isUpdatingYtdlp, setIsUpdatingYtdlp] = useState(false);
+  const [isClearingArchive, setIsClearingArchive] = useState(false);
+
+  useEffect(() => {
+    invoke<string>('get_ytdlp_version')
+      .then(setYtdlpVersion)
+      .catch(() => setYtdlpVersion('Not detected'));
+  }, []);
+
+  const handleUpdateYtdlp = async () => {
+    setIsUpdatingYtdlp(true);
+    try {
+      const res = await invoke<string>('update_ytdlp');
+      showToast(res || 'yt-dlp updated successfully');
+      const ver = await invoke<string>('get_ytdlp_version');
+      setYtdlpVersion(ver);
+    } catch (e: unknown) {
+      const err = e instanceof Error ? e.message : String(e);
+      showToast(`yt-dlp update failed: ${err}`);
+    } finally {
+      setIsUpdatingYtdlp(false);
+    }
+  };
+
+  const handleClearArchive = async () => {
+    setIsClearingArchive(true);
+    try {
+      const res = await invoke<string>('clear_download_archive');
+      showToast(res || 'Download archive cleared');
+    } catch (e: unknown) {
+      const err = e instanceof Error ? e.message : String(e);
+      showToast(`Failed to clear archive: ${err}`);
+    } finally {
+      setIsClearingArchive(false);
+    }
+  };
+
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
-    { id: 'playback',     label: 'Playback',        icon: <Zap size={15} /> },
-    { id: 'appearance',   label: 'Appearance',      icon: <Palette size={15} /> },
-    { id: 'downloads',    label: 'Downloads',       icon: <FolderDown size={15} /> },
-    { id: 'integrations', label: 'Integrations',    icon: <Radio size={15} /> },
-    { id: 'network',      label: 'Network & Proxy', icon: <Globe size={15} /> },
-    { id: 'storage',      label: 'Storage & Backup',icon: <HardDrive size={15} /> },
-    { id: 'updates',      label: 'Updates',         icon: <ArrowUpCircle size={15} /> },
+    { id: 'general',      label: 'General',           icon: <Sliders size={15} /> },
+    { id: 'playback',     label: 'Playback & Audio',  icon: <Zap size={15} /> },
+    { id: 'appearance',   label: 'Appearance',        icon: <Palette size={15} /> },
+    { id: 'downloads',    label: 'Downloads',         icon: <FolderDown size={15} /> },
+    { id: 'storage',      label: 'Library & Storage', icon: <HardDrive size={15} /> },
+    { id: 'integrations', label: 'Integrations',      icon: <Radio size={15} /> },
+    { id: 'network',      label: 'Network & Proxy',   icon: <Globe size={15} /> },
+    { id: 'updates',      label: 'Updates',           icon: <ArrowUpCircle size={15} /> },
   ];
+
+  const matchesGeneral = showTab('general') && (
+    matchCard(["General", "Startup Behavior", "Default Startup View", "Startup View", "Home", "Downloads", "Offline", "Library", "Playlists", "Stats", "Settings", "Launch", startupNav]) ||
+    matchCard(["General", "System Integration", "System Tray", "Enable System Tray Icon", "Minimize to tray", "Close to tray", "Background", "Tray"]) ||
+    matchCard(["General", "Interface Scaling", "UI Scale", "Scale", "Zoom", "Page size", "Interface size", "Small", "Large", `${uiScale}`]) ||
+    matchCard(["General", "Performance & Graphics", "Low-Spec / Performance Mode", "Low-Spec Mode", "Performance Mode", "Eco Mode", "Performance", "Graphics", "GPU", "Battery", "Lag", "Speed", "Animations", "Blur", "Low power"])
+  );
 
   const matchesPlayback = showTab('playback') && (
     matchCard(["Playback", "Audio Processing", "Loudness Normalization", "Loudnorm", "EBU R128", "Volume Normalization", "Sound leveling", "Gain"]) ||
     matchCard(["Playback", "Audio Processing", "Skip Silence", "Silence Removal", "Remove silent gaps", "Silence"]) ||
     matchCard(["Playback", "Audio Processing", "Autoplay Recommendations", "Autoplay", "Continuous playback", "Queue similar", "Infinite music"]) ||
-    matchCard(["Playback", "Equalizer", "EQ", "Bass", "Mid", "Treble", "Flat", "Bass Boost", "Vocal", "Rock", "Electronic", "Presets", "dB", "60Hz", "1kHz", "16kHz", "Frequencies", "Sound tuning"])
+    matchCard(["Playback", "Equalizer", "EQ", "Bass", "Mid", "Treble", "Flat", "Bass Boost", "Vocal", "Rock", "Electronic", "Presets", "dB", "60Hz", "1kHz", "16kHz", "Frequencies", "Sound tuning"]) ||
+    matchCard(["Playback", "Audio", "Lyrics Provider", "Primary Source", "Lyrics", "lrclib", "Musixmatch", "NetEase", "Synced lyrics", "Richsync", "Subtitles", "Karaoke", lyricsSource])
   );
 
   const matchesAppearance = showTab('appearance') && (
     matchCard(["Appearance", "Application Theme", "Theme", "Dark mode", "Obsidian", "Midnight Navy", "Forest Emerald", "Cyberpunk", "Sunset Crimson", "Pure Black", "Custom Theme", "Hex", "Color picker", theme, customBgColor]) ||
-    matchCard(["Appearance", "Accent Color", "Accent", "Silver", "Indigo", "Emerald", "Magenta", "Orange", "Crimson", "Custom Hex", "Highlight color", accentColor]) ||
-    matchCard(["Appearance", "System Integration", "System Tray", "Enable System Tray Icon", "Minimize to tray", "Close to tray", "Background", "Tray"]) ||
-    matchCard(["Appearance", "Startup Behavior", "Default Startup View", "Startup View", "Home", "Downloads", "Offline", "Library", "Playlists", "Stats", "Settings", "Launch", startupNav]) ||
-    matchCard(["Appearance", "Interface Scaling", "UI Scale", "Scale", "Zoom", "Page size", "Interface size", "Small", "Large", `${uiScale}`]) ||
-    matchCard(["Appearance", "Performance & Graphics", "Low-Spec / Performance Mode", "Low-Spec Mode", "Performance Mode", "Eco Mode", "Performance", "Graphics", "GPU", "Battery", "Lag", "Speed", "Animations", "Blur", "Low power"])
+    matchCard(["Appearance", "Accent Color", "Accent", "Silver", "Indigo", "Emerald", "Magenta", "Orange", "Crimson", "Custom Hex", "Highlight color", accentColor])
   );
 
   const matchesDownloads = showTab('downloads') && (
     matchCard(["Downloads", "Audio Specifications", "Download Quality", "Audio Quality", "Bitrate", "High", "Medium", "Low", "320kbps", "128kbps", "Sound quality", downloadQuality]) ||
-    matchCard(["Downloads", "Audio Specifications", "Audio Format", "Format", "Codec", "MP3", "Opus", "M4A", "FLAC", "Lossless", "AAC", downloadFormat]) ||
-    matchCard(["Downloads", "Download Directory", "Download Folder", "Download Path", "Storage Location", "Save Location", "Folder", "Browse", "Offline tracks", "Folder watcher", "Auto watcher", "Auto scan", "Live sync", downloadPath]) ||
-    matchCard(["Downloads", "File Options", "Embed Artwork Thumbnail", "Thumbnail", "Album Cover", "Cover Art", "ID3 Tags", "Artwork"]) ||
-    matchCard(["Downloads", "File Options", "Smart Duplicate Detection", "Duplicate Detection", "Skip existing", "Duplicates", "Overwrite"])
+    matchCard(["Downloads", "Audio Specifications", "Audio Format", "Format", "Codec", "MP3", "Opus", "M4A", "FLAC", "Lossless", "AAC", "WAV", "Copy", downloadFormat]) ||
+    matchCard(["Downloads", "File Organization", "Naming Template", "Pattern", "Path structure", "Folder structure", "Save Location", "Download Directory", "Download Folder", "Download Path", "Storage Location", "Folder", "Browse", "Offline tracks", downloadNamingPattern, downloadPath]) ||
+    matchCard(["Downloads", "File Options", "Post-Processing", "Embed Artwork Thumbnail", "Thumbnail", "Album Cover", "Cover Art", "ID3 Tags", "Artwork", "Square Thumbnail", "Crop", "1:1", "SponsorBlock", "Clean audio", "Chapters", "Split", "Skip intros", "Full album"]) ||
+    matchCard(["Downloads", "Duplicate Detection", "Smart Duplicate Detection", "Skip existing", "Duplicates", "Overwrite", "Archive", "Download Archive", "Clear Archive"]) ||
+    matchCard(["Downloads", "Browser Cookies", "Cookie", "Bypass", "Age restriction", "Bot verification", "Chrome", "Firefox", "Brave", "Edge", "Chromium", "Opera", "Vivaldi", cookieBrowser])
+  );
+
+  const matchesStorage = showTab('storage') && (
+    matchCard(["Storage", "Library", "Local Music Library", "Download Directory", "Download Folder", "Download Path", "Storage Location", "Save Location", "Folder", "Browse", "Offline tracks", "Folder watcher", "Auto watcher", "Auto scan", "Live sync", downloadPath]) ||
+    matchCard(["Storage", "Cache Storage & Auto-Cleaner", "Cache", "Enable Caching & Stream Prefetch", "Prefetch", "Cache Size Limit", "Auto-Cleaner", "Clear Cache", "Disk Usage", "Temp Storage", cacheLimit, cacheInfo?.formatted_size || ""]) ||
+    matchCard(["Storage", "Backup & Restore", "Backup Location", "Backup", "Restore", "Download Directory", "veluna_backup.json", backupPath, downloadPath, "Save path", "Folder", "Create Backup", "Restore Backup", "JSON", "Export data", "Import data", "Save playlists", "Restore playlists", "Settings backup"]) ||
+    matchCard(["Storage", "Reset Veluna App", "Reset", "Clear data", "Factory reset", "Wipe database", "Delete all", "Danger zone", "Irreversible"])
   );
 
   const matchesIntegrations = showTab('integrations') && (
     matchCard(["Integrations", "Discord Integration", "Discord Rich Presence", "Discord RPC", "Discord", "Playing status", "Activity", "Now playing", "Time display", "Elapsed time", "Remaining time", "Album art", "Thumbnail", "Buttons", "Custom button", "Discord button", discordBtnLabel, discordBtnUrl]) ||
-    matchCard(["Integrations", "Lyrics Provider", "Primary Source", "Lyrics", "lrclib", "Musixmatch", "NetEase", "Synced lyrics", "Richsync", "Subtitles", "Karaoke", lyricsSource]) ||
     matchCard(["Integrations", "Last.fm Scrobbling", "Last.fm", "Lastfm", "Scrobbler", "Track scrobbling", "Session key", "API key", lastfmUsername])
   );
 
@@ -363,23 +423,17 @@ export const SettingsPanel = React.memo(function SettingsPanel({
     matchCard(["Network", "Network & Audio Proxy", "Proxy", "HTTP", "HTTPS", "SOCKS5", "socks", "Invidious", "Piped", "Audio Proxy", "Custom Mirror", "Mirror", "VPN", "Connection", "Endpoint", "Test Connection", networkProxy, customInstance])
   );
 
-  const matchesStorage = showTab('storage') && (
-    matchCard(["Storage", "Cache Storage & Auto-Cleaner", "Cache", "Enable Caching & Stream Prefetch", "Prefetch", "Cache Size Limit", "Auto-Cleaner", "Clear Cache", "Disk Usage", "Temp Storage", cacheLimit, cacheInfo?.formatted_size || ""]) ||
-    matchCard(["Storage", "Backup Location", "Download Directory", "veluna_backup.json", backupPath, downloadPath, "Save path", "Folder"]) ||
-    matchCard(["Storage", "Backup & Restore Actions", "Create Backup", "Restore Backup", "JSON", "Export data", "Import data", "Save playlists", "Restore playlists", "Settings backup"]) ||
-    matchCard(["Storage", "Reset Veluna App", "Reset", "Clear data", "Factory reset", "Wipe database", "Delete all", "Danger zone", "Irreversible"])
-  );
-
   const matchesUpdates = showTab('updates') && (
     matchCard(["Updates", "Check for new releases of Veluna", "Update available", "You're up to date", "Latest version", "GitHub", "Changelog", appVersion, updateAvailable || ""]) ||
-    matchCard(["Updates", "Check Automatically on Startup", "Manual Update Check", "Check Now", "Startup check", "Force update", "Releases"])
+    matchCard(["Updates", "Check Automatically on Startup", "Manual Update Check", "Check Now", "Startup check", "Force update", "Releases"]) ||
+    matchCard(["Updates", "yt-dlp", "Extractor", "Engine", "Audio Engine", "Update yt-dlp", "ytdlp", ytdlpVersion])
   );
 
-  const hasAnyMatches = !searchQuery.trim() || matchesPlayback || matchesAppearance || matchesDownloads || matchesIntegrations || matchesNetwork || matchesStorage || matchesUpdates;
+  const hasAnyMatches = !searchQuery.trim() || matchesGeneral || matchesPlayback || matchesAppearance || matchesDownloads || matchesIntegrations || matchesNetwork || matchesStorage || matchesUpdates;
 
   return (
     <div style={{flex:1,display:"flex",overflow:"hidden",background:"var(--v-bg0)"}}>
-      <div style={{width:"180px",flexShrink:0,background:"var(--v-bg0)",borderRight:"none",display:"flex",flexDirection:"column",padding:"16px 10px",gap:"4px"}}>
+      <div style={{width:"196px",flexShrink:0,background:"var(--v-bg0)",borderRight:"none",display:"flex",flexDirection:"column",padding:"16px 10px",gap:"4px"}}>
         <div style={{fontSize:"11px",fontWeight:800,letterSpacing:".18em",textTransform:"uppercase",color:"#76706c",padding:"4px 10px 14px"}}>Settings</div>
         
         <div style={{ padding: "0 2px 12px" }}>
@@ -482,12 +536,192 @@ export const SettingsPanel = React.memo(function SettingsPanel({
           </div>
         ) : (
           <>
+        {matchesGeneral && (
+          <div style={{display:"flex",flexDirection:"column",gap:"20px"}}>
+            {!searchQuery.trim() && (
+              <div>
+                <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.01em",color:"#e2ddd9",margin:"0 0 4px"}}>General</h2>
+                <p style={{fontSize:"13.5px",color:"#6f6966",margin:0}}>Startup behavior, window controls, and system preferences.</p>
+              </div>
+            )}
+
+            {(!searchQuery.trim() || matchCard(["General", "Appearance", "Startup Behavior", "Default Startup View", "Startup View", "Home", "Downloads", "Offline", "Library", "Playlists", "Stats", "Settings", "Launch", startupNav])) && (
+              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)"}}>
+                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)",borderTopLeftRadius:"11px",borderTopRightRadius:"11px"}}>
+                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",margin:0}}>Startup Behavior</h3>
+                </div>
+                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div>
+                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Default Startup View</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>Currently opens on {startupNav === 'home' ? 'Home' : startupNav === 'artists' ? 'Artists' : startupNav === 'downloads' ? 'Offline' : startupNav === 'stats' ? 'Stats' : startupNav === 'history' ? 'History' : (startupNav === 'library' || startupNav === 'playlists') ? 'Playlists' : startupNav === 'last' ? 'Last Opened View' : 'Settings'}</p>
+                  </div>
+                  <ThemedSelect
+                    value={startupNav === 'library' ? 'playlists' : startupNav}
+                    onChange={handleStartupNavChange}
+                    options={[
+                      { value: 'home', label: 'Home' },
+                      { value: 'artists', label: 'Artists' },
+                      { value: 'downloads', label: 'Offline' },
+                      { value: 'playlists', label: 'Playlists' },
+                      { value: 'stats', label: 'Stats' },
+                      { value: 'history', label: 'History' },
+                      { value: 'settings', label: 'Settings' },
+                      { value: 'last', label: 'Last Opened' },
+                    ]}
+                  />
+                </div>
+              </div>
+            )}
+
+            {(!searchQuery.trim() || matchCard(["General", "Appearance", "System Integration", "System Tray", "Enable System Tray Icon", "Minimize to tray", "Close to tray", "Background", "Tray"])) && (
+              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)"}}>
+                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)",borderTopLeftRadius:"11px",borderTopRightRadius:"11px"}}>
+                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",margin:0}}>System Integration</h3>
+                </div>
+                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div>
+                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Enable System Tray Icon</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{trayEnabled ? 'Active: window minimizes to system tray on close' : 'Disabled: close exits the app entirely'}</p>
+                  </div>
+                  <SettingsSwitch checked={trayEnabled} onChange={async () => {
+                    const next = !trayEnabled;
+                    try { await invoke('tray_set', { enabled: next }); setTrayEnabled(next); }
+                    catch (e) { showToast(`Tray unavailable: ${e}`); }
+                  }} />
+                </div>
+              </div>
+            )}
+
+            {(!searchQuery.trim() || matchCard(["General", "Appearance", "Interface Scaling", "UI Scale", "Scale", "Zoom", "Page size", "Interface size", "Small", "Large", `${uiScale}`])) && (
+              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)",overflow:"hidden"}}>
+                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                    <Maximize2 size={14} style={{color:"var(--v-accent)"}}/>
+                    <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",margin:0}}>Interface Scaling</h3>
+                  </div>
+                  {uiScale !== 0 && (
+                    <button
+                      onClick={() => handleUiScaleChange(0)}
+                      style={{
+                        fontSize:"11.5px",
+                        fontWeight:600,
+                        color:"#e2ddd9",
+                        background:"rgba(255,255,255,0.03)",
+                        border:"1px solid var(--v-bdr2)",
+                        borderRadius:"6px",
+                        padding:"3px 10px",
+                        cursor:"pointer",
+                        display:"flex",
+                        alignItems:"center",
+                        gap:"5px",
+                        transition:"all 0.15s ease"
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--v-bdr2)'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div>
+                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9",margin:0}}>UI Scale</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",margin:"4px 0 0 0"}}>
+                      {uiScale === 0 ? 'Default scale (100%)' : `${uiScale > 0 ? `+${uiScale}` : uiScale} (${100 + uiScale * 5}%)`}
+                    </p>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:"6px",background:"var(--v-bg2)",border:"1px solid var(--v-bdr2)",borderRadius:"10px",padding:"4px 6px"}}>
+                    <button
+                      onClick={() => handleUiScaleChange(uiScale - 1)}
+                      disabled={uiScale <= -5}
+                      style={{
+                        width:"28px",
+                        height:"28px",
+                        borderRadius:"7px",
+                        border:"1px solid var(--v-bdr)",
+                        background:"var(--v-bg3)",
+                        color: uiScale <= -5 ? "#5c5755" : "var(--v-fg)",
+                        cursor: uiScale <= -5 ? "not-allowed" : "pointer",
+                        display:"flex",
+                        alignItems:"center",
+                        justifyContent:"center",
+                        fontSize:"15px",
+                        fontWeight:700,
+                        transition:"all 0.15s",
+                      }}
+                      title="Decrease UI Scale (-5%)"
+                    >
+                      -
+                    </button>
+                    <span style={{
+                      minWidth:"34px",
+                      textAlign:"center",
+                      fontSize:"13px",
+                      fontWeight:700,
+                      color:"var(--v-accent)",
+                      fontFamily:"monospace"
+                    }}>
+                      {uiScale > 0 ? `+${uiScale}` : uiScale}
+                    </span>
+                    <button
+                      onClick={() => handleUiScaleChange(uiScale + 1)}
+                      disabled={uiScale >= 5}
+                      style={{
+                        width:"28px",
+                        height:"28px",
+                        borderRadius:"7px",
+                        border:"1px solid var(--v-bdr)",
+                        background:"var(--v-bg3)",
+                        color: uiScale >= 5 ? "#5c5755" : "var(--v-fg)",
+                        cursor: uiScale >= 5 ? "not-allowed" : "pointer",
+                        display:"flex",
+                        alignItems:"center",
+                        justifyContent:"center",
+                        fontSize:"15px",
+                        fontWeight:700,
+                        transition:"all 0.15s",
+                      }}
+                      title="Increase UI Scale (+5%)"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {(!searchQuery.trim() || matchCard(["General", "Appearance", "Performance & Graphics", "Low-Spec / Performance Mode", "Low-Spec Mode", "Performance Mode", "Eco Mode", "Performance", "Graphics", "GPU", "Battery", "Lag", "Speed", "Animations", "Blur", "Low power"])) && (
+              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)",overflow:"hidden"}}>
+                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)",display:"flex",alignItems:"center",gap:"8px"}}>
+                  <Zap size={14} style={{color:"var(--v-accent)"}}/>
+                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",margin:0}}>Performance & Graphics</h3>
+                </div>
+                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"16px"}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9",margin:0}}>Low-Spec / Performance Mode</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",margin:"4px 0 0 0",lineHeight:1.4}}>
+                      {performanceMode
+                        ? 'Active: GPU blur effects, heavy hover transitions, and continuous animations are disabled for maximum smoothness on older hardware.'
+                        : 'Disabled: full visual effects, fluid transitions, and standard animations are enabled.'}
+                    </p>
+                  </div>
+                  <SettingsSwitch checked={performanceMode} onChange={() => {
+                    const next = !performanceMode;
+                    setPerformanceMode(next);
+                    showToast(next ? 'Low-Spec Mode enabled' : 'Low-Spec Mode disabled');
+                  }} />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {matchesPlayback && (
           <div style={{display:"flex",flexDirection:"column",gap:"20px"}}>
             {!searchQuery.trim() && (
               <div>
-                <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.01em",color:"#e2ddd9",margin:"0 0 4px"}}>Playback</h2>
-                <p style={{fontSize:"13.5px",color:"#6f6966",margin:0}}>Configure the audio engine and playback behaviors.</p>
+                <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.01em",color:"#e2ddd9",margin:"0 0 4px"}}>Playback &amp; Audio</h2>
+                <p style={{fontSize:"13.5px",color:"#6f6966",margin:0}}>Configure audio processing, equalizer tuning, and lyrics sources.</p>
               </div>
             )}
 
@@ -660,6 +894,29 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                 </div>
               </div>
             )}
+
+            {(!searchQuery.trim() || matchCard(["Playback", "Audio", "Lyrics Provider", "Primary Source", "Lyrics", "lrclib", "Musixmatch", "NetEase", "Synced lyrics", "Richsync", "Subtitles", "Karaoke", lyricsSource])) && (
+              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)"}}>
+                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)",borderTopLeftRadius:"11px",borderTopRightRadius:"11px"}}>
+                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",margin:0,display:"flex",alignItems:"center",gap:"8px"}}><Music size={14} style={{color:"#8c8682"}} /> Lyrics Provider</h3>
+                </div>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px"}}>
+                  <div>
+                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Primary Source</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>
+                      {lyricsSource === 'musixmatch' ? 'Musixmatch: word-level richsync when available'
+                        : lyricsSource === 'netease' ? 'NetEase: great for Asian artists & translations'
+                        : 'lrclib: open, fast, fully synced and community-driven'}
+                    </p>
+                  </div>
+                  <ThemedSelect value={lyricsSource} onChange={setLyricsSource} options={[
+                    { value: 'lrclib', label: 'lrclib' },
+                    { value: 'musixmatch', label: 'Musixmatch' },
+                    { value: 'netease', label: 'NetEase' },
+                  ]} />
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -668,7 +925,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
             {!searchQuery.trim() && (
               <div>
                 <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.01em",color:"#e2ddd9",margin:"0 0 4px"}}>Appearance</h2>
-                <p style={{fontSize:"13.5px",color:"#6f6966",margin:0}}>Customize application themes, accent colors, interface scaling, and system integration.</p>
+                <p style={{fontSize:"13.5px",color:"#6f6966",margin:0}}>Customize interface themes, backgrounds, and accent colors.</p>
               </div>
             )}
 
@@ -960,175 +1217,6 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                 </div>
               </div>
             )}
-
-            {(!searchQuery.trim() || matchCard(["Appearance", "System Integration", "System Tray", "Enable System Tray Icon", "Minimize to tray", "Close to tray", "Background", "Tray"])) && (
-              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)",overflow:"hidden"}}>
-                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)"}}>
-                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",margin:0}}>System Integration</h3>
-                </div>
-                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                  <div>
-                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Enable System Tray Icon</p>
-                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{trayEnabled ? 'Active: window minimizes to system tray on close' : 'Disabled: close exits the app entirely'}</p>
-                  </div>
-                  <SettingsSwitch checked={trayEnabled} onChange={async () => {
-                    const next = !trayEnabled;
-                    try { await invoke('tray_set', { enabled: next }); setTrayEnabled(next); }
-                    catch (e) { showToast(`Tray unavailable: ${e}`); }
-                  }} />
-                </div>
-              </div>
-            )}
-
-            {(!searchQuery.trim() || matchCard(["Appearance", "Startup Behavior", "Default Startup View", "Startup View", "Home", "Downloads", "Offline", "Library", "Playlists", "Stats", "Settings", "Launch", startupNav])) && (
-              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)"}}>
-                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)",borderTopLeftRadius:"11px",borderTopRightRadius:"11px"}}>
-                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",margin:0}}>Startup Behavior</h3>
-                </div>
-                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                  <div>
-                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Default Startup View</p>
-                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>Currently opens on {startupNav === 'home' ? 'Home' : startupNav === 'artists' ? 'Artists' : startupNav === 'downloads' ? 'Offline' : startupNav === 'stats' ? 'Stats' : startupNav === 'history' ? 'History' : (startupNav === 'library' || startupNav === 'playlists') ? 'Playlists' : startupNav === 'last' ? 'Last Opened View' : 'Settings'}</p>
-                  </div>
-                  <ThemedSelect
-                    value={startupNav === 'library' ? 'playlists' : startupNav}
-                    onChange={handleStartupNavChange}
-                    options={[
-                      { value: 'home', label: 'Home' },
-                      { value: 'artists', label: 'Artists' },
-                      { value: 'downloads', label: 'Offline' },
-                      { value: 'playlists', label: 'Playlists' },
-                      { value: 'stats', label: 'Stats' },
-                      { value: 'history', label: 'History' },
-                      { value: 'settings', label: 'Settings' },
-                      { value: 'last', label: 'Last Opened' },
-                    ]}
-                  />
-                </div>
-              </div>
-            )}
-
-            {(!searchQuery.trim() || matchCard(["Appearance", "Interface Scaling", "UI Scale", "Scale", "Zoom", "Page size", "Interface size", "Small", "Large", `${uiScale}`])) && (
-              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)",overflow:"hidden"}}>
-                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
-                    <Maximize2 size={14} style={{color:"var(--v-accent)"}}/>
-                    <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",margin:0}}>Interface Scaling</h3>
-                  </div>
-                  {uiScale !== 0 && (
-                    <button
-                      onClick={() => handleUiScaleChange(0)}
-                      style={{
-                        fontSize:"11.5px",
-                        fontWeight:600,
-                        color:"#e2ddd9",
-                        background:"rgba(255,255,255,0.03)",
-                        border:"1px solid var(--v-bdr2)",
-                        borderRadius:"6px",
-                        padding:"3px 10px",
-                        cursor:"pointer",
-                        display:"flex",
-                        alignItems:"center",
-                        gap:"5px",
-                        transition:"all 0.15s ease"
-                      }}
-                      onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--v-bdr2)'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)'; }}
-                    >
-                      Reset
-                    </button>
-                  )}
-                </div>
-                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                  <div>
-                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9",margin:0}}>UI Scale</p>
-                    <p style={{fontSize:"12px",color:"#6f6966",margin:"4px 0 0 0"}}>
-                      {uiScale === 0 ? 'Default scale (100%)' : `${uiScale > 0 ? `+${uiScale}` : uiScale} (${100 + uiScale * 5}%)`}
-                    </p>
-                  </div>
-                  <div style={{display:"flex",alignItems:"center",gap:"6px",background:"var(--v-bg2)",border:"1px solid var(--v-bdr2)",borderRadius:"10px",padding:"4px 6px"}}>
-                    <button
-                      onClick={() => handleUiScaleChange(uiScale - 1)}
-                      disabled={uiScale <= -5}
-                      style={{
-                        width:"28px",
-                        height:"28px",
-                        borderRadius:"7px",
-                        border:"1px solid var(--v-bdr)",
-                        background:"var(--v-bg3)",
-                        color: uiScale <= -5 ? "#5c5755" : "var(--v-fg)",
-                        cursor: uiScale <= -5 ? "not-allowed" : "pointer",
-                        display:"flex",
-                        alignItems:"center",
-                        justifyContent:"center",
-                        fontSize:"15px",
-                        fontWeight:700,
-                        transition:"all 0.15s",
-                      }}
-                      title="Decrease UI Scale (-5%)"
-                    >
-                      -
-                    </button>
-                    <span style={{
-                      minWidth:"34px",
-                      textAlign:"center",
-                      fontSize:"13px",
-                      fontWeight:700,
-                      color:"var(--v-accent)",
-                      fontFamily:"monospace"
-                    }}>
-                      {uiScale > 0 ? `+${uiScale}` : uiScale}
-                    </span>
-                    <button
-                      onClick={() => handleUiScaleChange(uiScale + 1)}
-                      disabled={uiScale >= 5}
-                      style={{
-                        width:"28px",
-                        height:"28px",
-                        borderRadius:"7px",
-                        border:"1px solid var(--v-bdr)",
-                        background:"var(--v-bg3)",
-                        color: uiScale >= 5 ? "#5c5755" : "var(--v-fg)",
-                        cursor: uiScale >= 5 ? "not-allowed" : "pointer",
-                        display:"flex",
-                        alignItems:"center",
-                        justifyContent:"center",
-                        fontSize:"15px",
-                        fontWeight:700,
-                        transition:"all 0.15s",
-                      }}
-                      title="Increase UI Scale (+5%)"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {(!searchQuery.trim() || matchCard(["Appearance", "Performance & Graphics", "Low-Spec / Performance Mode", "Low-Spec Mode", "Performance Mode", "Eco Mode", "Performance", "Graphics", "GPU", "Battery", "Lag", "Speed", "Animations", "Blur", "Low power"])) && (
-              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)",overflow:"hidden"}}>
-                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)",display:"flex",alignItems:"center",gap:"8px"}}>
-                  <Zap size={14} style={{color:"var(--v-accent)"}}/>
-                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",margin:0}}>Performance & Graphics</h3>
-                </div>
-                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"16px"}}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9",margin:0}}>Low-Spec / Performance Mode</p>
-                    <p style={{fontSize:"12px",color:"#6f6966",margin:"4px 0 0 0",lineHeight:1.4}}>
-                      {performanceMode
-                        ? 'Active: GPU blur effects, heavy hover transitions, and continuous animations are disabled for maximum smoothness on older hardware.'
-                        : 'Disabled: full visual effects, fluid transitions, and standard animations are enabled.'}
-                    </p>
-                  </div>
-                  <SettingsSwitch checked={performanceMode} onChange={() => {
-                    const next = !performanceMode;
-                    setPerformanceMode(next);
-                    showToast(next ? 'Low-Spec Mode enabled' : 'Low-Spec Mode disabled');
-                  }} />
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -1137,7 +1225,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
             {!searchQuery.trim() && (
               <div>
                 <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.01em",color:"#e2ddd9",margin:"0 0 4px"}}>Downloads</h2>
-                <p style={{fontSize:"13.5px",color:"#6f6966",margin:0}}>Configure download quality, formats, and folders.</p>
+                <p style={{fontSize:"13.5px",color:"#6f6966",margin:0}}>Configure download quality, formats, folder structure, and post-processing.</p>
               </div>
             )}
 
@@ -1169,7 +1257,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                   <div>
                     <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Audio Format</p>
                     <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>
-                      {downloadFormat === 'opus' ? 'Best compression, native YouTube codec' : downloadFormat === 'm4a' ? 'AAC in M4A, great Apple/car stereo compat' : downloadFormat === 'flac' ? 'Lossless: largest files' : 'MP3: widest compatibility'}
+                      {downloadFormat === 'opus' ? 'Best compression, native YouTube codec' : downloadFormat === 'm4a' ? 'AAC in M4A, great Apple/car stereo compat' : downloadFormat === 'flac' ? 'Lossless FLAC: highest quality' : downloadFormat === 'wav' ? 'Uncompressed WAV audio' : downloadFormat === 'copy' ? 'Lossless stream copy (no re-encoding, fastest)' : 'MP3: widest compatibility'}
                     </p>
                   </div>
                   <ThemedSelect
@@ -1180,16 +1268,228 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                       { value: 'opus', label: 'Opus' },
                       { value: 'm4a',  label: 'M4A' },
                       { value: 'flac', label: 'FLAC' },
+                      { value: 'wav',  label: 'WAV' },
+                      { value: 'copy', label: 'Lossless Copy (Fastest)' },
                     ]}
                   />
                 </div>
               </div>
             )}
 
-            {(!searchQuery.trim() || matchCard(["Downloads", "Download Directory", "Download Folder", "Download Path", "Storage Location", "Save Location", "Folder", "Browse", "Offline tracks", downloadPath])) && (
+            {(!searchQuery.trim() || matchCard(["Downloads", "File Organization", "Naming Template", "Pattern", "Save Location", "Download Directory", "Download Folder", "Download Path", "Storage Location", "Folder", "Browse", "Offline tracks", downloadNamingPattern, downloadPath])) && (
               <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)",overflow:"hidden"}}>
                 <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)"}}>
-                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",margin:0}}>Download Directory</h3>
+                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",display:"flex",alignItems:"center",gap:"8px",margin:0}}><FolderOpen size={14} style={{color:"#8c8682"}} /> File Organization & Directory</h3>
+                </div>
+
+                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid var(--v-bdr)"}}>
+                  <div>
+                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>File Organization & Template</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>
+                      Folder hierarchy and file naming convention for saved tracks
+                    </p>
+                  </div>
+                  <ThemedSelect
+                    value={downloadNamingPattern}
+                    onChange={(v) => {
+                      setDownloadNamingPattern?.(v);
+                      saveLS('vg_downloadNamingPattern', v);
+                    }}
+                    options={[
+                      { value: '{artist} - {title}', label: '{Artist} - {Title}' },
+                      { value: '{artist}/{album}/{title}', label: '{Artist}/{Album}/{Title}' },
+                      { value: '{artist}/{title}', label: '{Artist}/{Title}' },
+                      { value: '{title}', label: '{Title}' },
+                    ]}
+                  />
+                </div>
+
+                <div className="v-settings-row" style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",transition:"background 0.15s ease-out"}} onMouseEnter={e=>(e.currentTarget.style.background="rgba(226,221,217,0.005)")} onMouseLeave={e=>(e.currentTarget.style.background="transparent")} onClick={handleSelectDirectory}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9",marginBottom:"6px"}}>Download Directory</p>
+                    <div className="v-settings-path-capsule" style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      fontSize: "12.5px",
+                      color: "#9e9894",
+                      background: "rgba(255, 255, 255, 0.02)",
+                      border: "1px solid var(--v-bdr)",
+                      borderRadius: "20px",
+                      padding: "4px 10px",
+                      transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+                      fontFamily: "monospace",
+                      maxWidth: "90%"
+                    }}>
+                      <FolderOpen size={13} style={{ color: "var(--v-accent)", flexShrink: 0 }} />
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{downloadPath}</span>
+                    </div>
+                    {diskInfo && <p style={{fontSize:"12px",color:"#5c5755",marginTop:"6px"}}>{formatBytes(diskInfo.used_bytes)} used · {diskInfo.track_count} offline tracks</p>}
+                  </div>
+                  <button style={{padding:"6px",marginLeft:"12px",color:"#5c5755",background:"none",border:"none",cursor:"pointer",flexShrink:0,borderRadius:"7px",display:"flex",transition:"color .12s"}} onMouseEnter={e=>(e.currentTarget.style.color="#e2ddd9")} onMouseLeave={e=>(e.currentTarget.style.color="#5c5755")}>
+                    <FolderOpen size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {(!searchQuery.trim() || matchCard(["Downloads", "File Options", "Post-Processing", "Embed Artwork Thumbnail", "Thumbnail", "Album Cover", "Cover Art", "ID3 Tags", "Artwork", "Square Thumbnail", "Crop", "1:1", "SponsorBlock", "Clean audio", "Chapters", "Split"])) && (
+              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)",overflow:"hidden"}}>
+                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)"}}>
+                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",display:"flex",alignItems:"center",gap:"8px",margin:0}}><Image size={14} style={{color:"#8c8682"}} /> Post-Processing & Tags</h3>
+                </div>
+                
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:"1px solid #141312"}}>
+                  <div>
+                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Embed Artwork Thumbnail</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{embedThumbnail ? 'Active: album/track cover art is embedded into audio file tags' : 'Disabled: downloaded audio files will have no embedded cover'}</p>
+                  </div>
+                  <SettingsSwitch checked={embedThumbnail} onChange={() => setEmbedThumbnail(!embedThumbnail)} />
+                </div>
+
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:"1px solid #141312"}}>
+                  <div>
+                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Square Artwork (1:1 Ratio Crop)</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{squareThumbnailEnabled ? 'Active: automatically crops video thumbnails into 1:1 square album art' : 'Disabled: keeps original source aspect ratio'}</p>
+                  </div>
+                  <SettingsSwitch
+                    checked={squareThumbnailEnabled}
+                    onChange={() => {
+                      const next = !squareThumbnailEnabled;
+                      setSquareThumbnailEnabled?.(next);
+                      saveLS('vg_squareThumbnailEnabled', next);
+                    }}
+                  />
+                </div>
+
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:"1px solid #141312"}}>
+                  <div>
+                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>SponsorBlock Audio Cleaning</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{sponsorblockEnabled ? 'Active: automatically strips non-music intros, outros, silence, and sponsor filler' : 'Disabled: downloads raw unmodified audio stream'}</p>
+                  </div>
+                  <SettingsSwitch
+                    checked={sponsorblockEnabled}
+                    onChange={() => {
+                      const next = !sponsorblockEnabled;
+                      setSponsorblockEnabled?.(next);
+                      saveLS('vg_sponsorblockEnabled', next);
+                    }}
+                  />
+                </div>
+
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px"}}>
+                  <div>
+                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Split Chapters into Tracks</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{splitChaptersEnabled ? 'Active: automatically cuts full albums and DJ mix sets into individual song files' : 'Disabled: downloads full video as a single continuous file'}</p>
+                  </div>
+                  <SettingsSwitch
+                    checked={splitChaptersEnabled}
+                    onChange={() => {
+                      const next = !splitChaptersEnabled;
+                      setSplitChaptersEnabled?.(next);
+                      saveLS('vg_splitChaptersEnabled', next);
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {(!searchQuery.trim() || matchCard(["Downloads", "Duplicate Detection", "Smart Duplicate Detection", "Skip existing", "Duplicates", "Overwrite", "Archive", "Download Archive", "Clear Archive"])) && (
+              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)",overflow:"hidden"}}>
+                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)"}}>
+                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",display:"flex",alignItems:"center",gap:"8px",margin:0}}><Database size={14} style={{color:"#8c8682"}} /> Duplicate Detection & Archive</h3>
+                </div>
+
+                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:"1px solid var(--v-bdr)"}}>
+                  <div>
+                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Smart Duplicate Detection</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{duplicateDetect ? 'Active: tracks already in your download folder or archive are skipped' : 'Disabled: duplicates will download and overwrite if triggered'}</p>
+                  </div>
+                  <SettingsSwitch checked={duplicateDetect} onChange={() => setDuplicateDetect(!duplicateDetect)} />
+                </div>
+
+                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div>
+                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Download History Archive</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>
+                      Tracks downloaded are recorded in a unified archive index to prevent duplicate re-downloading.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleClearArchive}
+                    disabled={isClearingArchive}
+                    style={{
+                      padding: "6px 14px",
+                      borderRadius: "18px",
+                      background: "rgba(239, 68, 68, 0.1)",
+                      border: "1px solid rgba(239, 68, 68, 0.3)",
+                      color: "#ef4444",
+                      fontSize: "12px",
+                      fontWeight: 600,
+                      cursor: isClearingArchive ? "not-allowed" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      transition: "all 0.15s ease",
+                      opacity: isClearingArchive ? 0.6 : 1,
+                    }}
+                  >
+                    <Trash2 size={13} />
+                    {isClearingArchive ? 'Clearing...' : 'Clear Archive'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {(!searchQuery.trim() || matchCard(["Downloads", "Browser Cookies", "Cookie", "Bypass", "Age restriction", "Bot verification", "Chrome", "Firefox", "Brave", "Edge", "Chromium", "Opera", "Vivaldi", cookieBrowser])) && (
+              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)",overflow:"hidden"}}>
+                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)"}}>
+                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",display:"flex",alignItems:"center",gap:"8px",margin:0}}><Cookie size={14} style={{color:"#8c8682"}} /> Browser Cookie Source</h3>
+                </div>
+
+                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div>
+                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Import Browser Cookies</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>
+                      Import cookies from your web browser for yt-dlp to bypass bot verification, sign-in, and age blocks
+                    </p>
+                  </div>
+                  <ThemedSelect
+                    value={cookieBrowser}
+                    onChange={(v) => {
+                      setCookieBrowser?.(v);
+                      saveLS('vg_cookieBrowser', v);
+                    }}
+                    options={[
+                      { value: 'none', label: 'None' },
+                      { value: 'chrome', label: 'Google Chrome' },
+                      { value: 'firefox', label: 'Mozilla Firefox' },
+                      { value: 'brave', label: 'Brave Browser' },
+                      { value: 'edge', label: 'Microsoft Edge' },
+                      { value: 'chromium', label: 'Chromium' },
+                      { value: 'opera', label: 'Opera' },
+                      { value: 'vivaldi', label: 'Vivaldi' },
+                    ]}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {matchesStorage && (
+          <div style={{display:"flex",flexDirection:"column",gap:"20px"}}>
+            {!searchQuery.trim() && (
+              <div>
+                <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.01em",color:"#e2ddd9",margin:"0 0 4px"}}>Library &amp; Storage</h2>
+                <p style={{fontSize:"13.5px",color:"#6f6966",margin:0}}>Manage local music folder, streaming cache, application backups, and data retention.</p>
+              </div>
+            )}
+
+            {(!searchQuery.trim() || matchCard(["Storage", "Library", "Local Music Library", "Download Directory", "Download Folder", "Download Path", "Storage Location", "Save Location", "Folder", "Browse", "Offline tracks", downloadPath])) && (
+              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)",overflow:"hidden"}}>
+                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)"}}>
+                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",display:"flex",alignItems:"center",gap:"8px",margin:0}}><FolderOpen size={14} style={{color:"#8c8682"}} /> Local Music Library &amp; Downloads</h3>
                 </div>
                 <div className="v-settings-row" style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",transition:"background 0.15s ease-out"}} onMouseEnter={e=>(e.currentTarget.style.background="rgba(226,221,217,0.005)")} onMouseLeave={e=>(e.currentTarget.style.background="transparent")} onClick={handleSelectDirectory}>
                   <div style={{flex:1,minWidth:0}}>
@@ -1219,26 +1519,203 @@ export const SettingsPanel = React.memo(function SettingsPanel({
               </div>
             )}
 
-            {(!searchQuery.trim() || matchCard(["Downloads", "File Options", "Embed Artwork Thumbnail", "Thumbnail", "Album Cover", "Cover Art", "ID3 Tags", "Artwork", "Smart Duplicate Detection", "Duplicate Detection", "Skip existing", "Duplicates", "Overwrite"])) && (
+            {(!searchQuery.trim() || matchCard(["Storage", "Cache Storage & Auto-Cleaner", "Cache", "Enable Caching & Stream Prefetch", "Cache Size Limit", "Auto-Cleaner", "Clear Cache", "Disk Usage", "Temp Storage", cacheLimit, cacheInfo?.formatted_size || ""])) && (
+              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)"}}>
+                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)",borderTopLeftRadius:"11px",borderTopRightRadius:"11px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                    <HardDrive size={15} style={{color:"var(--v-accent)"}} />
+                    <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",margin:0}}>Cache Storage & Auto-Cleaner</h3>
+                  </div>
+                  {cacheEnabled && (
+                    <button
+                      disabled={isClearingCache || (cacheInfo?.total_bytes === 0)}
+                      onClick={handleClearCache}
+                      style={{
+                        fontSize:"11.5px",
+                        color: isClearingCache || (cacheInfo?.total_bytes === 0) ? "#5c5755" : "#e2ddd9",
+                        background: "rgba(255,255,255,0.03)",
+                        border: "1px solid var(--v-bdr2)",
+                        borderRadius: "6px",
+                        padding: "4px 10px",
+                        cursor: isClearingCache || (cacheInfo?.total_bytes === 0) ? "not-allowed" : "pointer",
+                        display:"flex",
+                        alignItems:"center",
+                        gap:"5px",
+                        transition: "all 0.15s"
+                      }}
+                      onMouseEnter={e => { if (!isClearingCache && cacheInfo?.total_bytes !== 0) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--v-bdr2)'; }}
+                    >
+                      <RefreshCw size={11} className={isClearingCache ? "animate-spin" : ""} />
+                      <span>{isClearingCache ? 'Clearing...' : 'Clear Cache'}</span>
+                    </button>
+                  )}
+                </div>
+
+                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:cacheEnabled?"1px solid var(--v-bdr)":"none"}}>
+                  <div>
+                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Enable Caching & Stream Prefetch</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>
+                      {cacheEnabled
+                        ? 'Active: pre-resolves queued songs in background, buffers 30s audio, and caches search queries'
+                        : 'Disabled: no cache or prefetch files will be saved, existing cache is purged'}
+                    </p>
+                  </div>
+                  <SettingsSwitch checked={cacheEnabled} onChange={() => handleToggleCache(!cacheEnabled)} />
+                </div>
+
+                {cacheEnabled && (
+                  <>
+                    <div
+                      className="v-settings-row"
+                      style={{
+                        padding: "14px 16px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        borderBottom: "1px solid var(--v-bdr)",
+                        cursor: cacheInfo?.cache_dir ? "pointer" : "default",
+                        transition: "background 0.15s ease-out",
+                      }}
+                      onClick={() => {
+                        if (cacheInfo?.cache_dir) {
+                          invoke('open_in_file_manager', { path: cacheInfo.cache_dir }).catch(() => {});
+                        }
+                      }}
+                      title={cacheInfo?.cache_dir ? "Click to open cache folder" : undefined}
+                    >
+                      <div>
+                        <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Current Cache Size</p>
+                        <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>
+                          {cacheInfo ? `${cacheInfo.formatted_size} (${cacheInfo.file_count} cached media & thumbnail files)` : 'Calculating cache usage...'}
+                        </p>
+                      </div>
+                      {cacheInfo?.cache_dir && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div className="v-settings-path-capsule" style={{ maxWidth: "260px" }}>
+                            <FolderOpen size={12} style={{ color: "var(--v-accent)", flexShrink: 0 }} />
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cacheInfo.cache_dir}</span>
+                          </div>
+                          <button
+                            title="Open Cache Folder"
+                            style={{
+                              padding: "6px",
+                              marginLeft: "4px",
+                              color: "#5c5755",
+                              background: "none",
+                              border: "none",
+                              cursor: "pointer",
+                              flexShrink: 0,
+                              borderRadius: "7px",
+                              display: "flex",
+                              transition: "color .12s",
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.color = "#e2ddd9")}
+                            onMouseLeave={e => (e.currentTarget.style.color = "#5c5755")}
+                          >
+                            <FolderOpen size={16} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                      <div>
+                        <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Cache Size Limit</p>
+                        <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>
+                          Automatically purges oldest cached streams and temporary artwork when limit is reached
+                        </p>
+                      </div>
+                      <ThemedSelect
+                        value={cacheLimit}
+                        onChange={handleCacheLimitChange}
+                        options={[
+                          { value: '500mb', label: '500 MB' },
+                          { value: '1gb', label: '1 GB' },
+                          { value: '2gb', label: '2 GB' },
+                          { value: '5gb', label: '5 GB' },
+                          { value: 'unlimited', label: 'Unlimited' },
+                        ]}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {(!searchQuery.trim() || matchCard(["Storage", "Backup & Restore", "Backup Location", "Backup", "Restore", "Download Directory", "veluna_backup.json", backupPath, downloadPath, "Save path", "Folder", "Create Backup", "Restore Backup", "JSON", "Export data", "Import data", "Save playlists", "Restore playlists", "Settings backup"])) && (
               <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)",overflow:"hidden"}}>
                 <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)"}}>
-                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",display:"flex",alignItems:"center",gap:"8px",margin:0}}><Image size={14} style={{color:"#8c8682"}} /> File Options</h3>
+                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",display:"flex",alignItems:"center",gap:"8px",margin:0}}><Upload size={14} style={{color:"#8c8682"}} /> Backup &amp; Restore</h3>
+                </div>
+
+                <div className="v-settings-row" style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",transition:"background 0.15s ease-out",borderBottom:"1px solid var(--v-bdr)"}} onMouseEnter={e=>(e.currentTarget.style.background="rgba(226,221,217,0.005)")} onMouseLeave={e=>(e.currentTarget.style.background="transparent")} onClick={async () => {
+                  try {
+                    const sel = await openDialog({ directory: true, multiple: false, defaultPath: backupPath });
+                    if (sel) setBackupPath(sel as string);
+                  } catch {}
+                }}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9",marginBottom:"6px"}}>Backup File Destination</p>
+                    <div className="v-settings-path-capsule" style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      fontSize: "12.5px",
+                      color: "#9e9894",
+                      background: "rgba(255, 255, 255, 0.02)",
+                      border: "1px solid var(--v-bdr)",
+                      borderRadius: "20px",
+                      padding: "4px 10px",
+                      transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+                      fontFamily: "monospace",
+                      maxWidth: "90%"
+                    }}>
+                      <FolderOpen size={13} style={{ color: "var(--v-accent)", flexShrink: 0 }} />
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{backupPath || downloadPath}</span>
+                    </div>
+                    <p style={{fontSize:"12px",color:"#5c5755",marginTop:"6px"}}>Target file: veluna_backup.json</p>
+                  </div>
+                  <button style={{padding:"6px",marginLeft:"12px",color:"#5c5755",background:"none",border:"none",cursor:"pointer",flexShrink:0,borderRadius:"7px",display:"flex",transition:"color .12s"}} onMouseEnter={e=>(e.currentTarget.style.color="#e2ddd9")} onMouseLeave={e=>(e.currentTarget.style.color="#5c5755")}>
+                    <FolderOpen size={16} />
+                  </button>
                 </div>
                 
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:"1px solid #141312"}}>
+                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",transition:"background 0.15s ease-out",borderBottom:"1px solid var(--v-bdr)"}} onMouseEnter={e=>(e.currentTarget.style.background="rgba(226,221,217,0.005)")} onMouseLeave={e=>(e.currentTarget.style.background="transparent")} onClick={onBackup}>
                   <div>
-                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Embed Artwork Thumbnail</p>
-                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{embedThumbnail ? 'Active: album/track cover art is embedded into audio file tags' : 'Disabled: downloaded audio files will have no embedded cover'}</p>
+                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Create Backup</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>Export all playlists, listening history, and preferences to a backup JSON file</p>
                   </div>
-                  <SettingsSwitch checked={embedThumbnail} onChange={() => setEmbedThumbnail(!embedThumbnail)} />
+                  <button style={{padding:"6px",marginLeft:"12px",color:"#5c5755",background:"none",border:"none",cursor:"pointer",flexShrink:0,borderRadius:"7px",display:"flex",transition:"color .12s"}} onMouseEnter={e=>(e.currentTarget.style.color="#e2ddd9")} onMouseLeave={e=>(e.currentTarget.style.color="#5c5755")}>
+                    <Upload size={16} />
+                  </button>
                 </div>
-                
-                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+
+                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",transition:"background 0.15s ease-out"}} onMouseEnter={e=>(e.currentTarget.style.background="rgba(226,221,217,0.005)")} onMouseLeave={e=>(e.currentTarget.style.background="transparent")} onClick={onRestore}>
                   <div>
-                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Smart Duplicate Detection</p>
-                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>{duplicateDetect ? 'Active: tracks already in your download folder are skipped' : 'Disabled: duplicates will download and overwrite if triggered'}</p>
+                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Restore Backup</p>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>Restore playlists, history, and preferences from an existing backup file</p>
                   </div>
-                  <SettingsSwitch checked={duplicateDetect} onChange={() => setDuplicateDetect(!duplicateDetect)} />
+                  <button style={{padding:"6px",marginLeft:"12px",color:"#5c5755",background:"none",border:"none",cursor:"pointer",flexShrink:0,borderRadius:"7px",display:"flex",transition:"color .12s"}} onMouseEnter={e=>(e.currentTarget.style.color="#e2ddd9")} onMouseLeave={e=>(e.currentTarget.style.color="#5c5755")}>
+                    <ArchiveRestore size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {(!searchQuery.trim() || matchCard(["Storage", "Reset Veluna App", "Reset", "Clear data", "Factory reset", "Wipe database", "Delete all", "Danger zone", "Irreversible"])) && (
+              <div style={{borderRadius:"12px",border:"1px solid rgba(239, 68, 68, 0.15)",background:"rgba(239, 68, 68, 0.005)",overflow:"hidden",transition:"all 0.2s"}}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)'; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.015)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.15)'; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.005)'; }}
+                onClick={onReset}>
+                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}}>
+                  <div>
+                    <h3 style={{fontSize:"14px",fontWeight:600,color:"#ef4444",margin:0}}>Reset Veluna App</h3>
+                    <p style={{fontSize:"12px",color:"rgba(239, 68, 68, 0.6)",marginTop:"4px"}}>Permanently delete all local database contents, playlists, history, and configuration files. This action is irreversible.</p>
+                  </div>
+                  <button style={{padding:"6px",color:"#ef4444",background:"none",border:"none",cursor:"pointer",display:"flex",flexShrink:0,marginLeft:"10px"}}>
+                    <Trash2 size={16}/>
+                  </button>
                 </div>
               </div>
             )}
@@ -1363,29 +1840,6 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                     </div>
                   </>
                 )}
-              </div>
-            )}
-
-            {(!searchQuery.trim() || matchCard(["Integrations", "Lyrics Provider", "Primary Source", "Lyrics", "lrclib", "Musixmatch", "NetEase", "Synced lyrics", "Richsync", "Subtitles", "Karaoke", lyricsSource])) && (
-              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)"}}>
-                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)",borderTopLeftRadius:"11px",borderTopRightRadius:"11px"}}>
-                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",margin:0}}>Lyrics Provider</h3>
-                </div>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px"}}>
-                  <div>
-                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Primary Source</p>
-                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>
-                      {lyricsSource === 'musixmatch' ? 'Musixmatch: word-level richsync when available'
-                        : lyricsSource === 'netease' ? 'NetEase: great for Asian artists & translations'
-                        : 'lrclib: open, fast, fully synced and community-driven'}
-                    </p>
-                  </div>
-                  <ThemedSelect value={lyricsSource} onChange={setLyricsSource} options={[
-                    { value: 'lrclib', label: 'lrclib' },
-                    { value: 'musixmatch', label: 'Musixmatch' },
-                    { value: 'netease', label: 'NetEase' },
-                  ]} />
-                </div>
               </div>
             )}
 
@@ -1729,223 +2183,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
           </div>
         )}
 
-        {matchesStorage && (
-          <div style={{display:"flex",flexDirection:"column",gap:"20px"}}>
-            {!searchQuery.trim() && (
-              <div>
-                <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.01em",color:"#e2ddd9",margin:"0 0 4px"}}>Storage & Backup</h2>
-                <p style={{fontSize:"13.5px",color:"#6f6966",margin:0}}>Manage local streaming cache, application backups, and data retention.</p>
-              </div>
-            )}
 
-            {(!searchQuery.trim() || matchCard(["Storage", "Cache Storage & Auto-Cleaner", "Cache", "Enable Caching & Stream Prefetch", "Cache Size Limit", "Auto-Cleaner", "Clear Cache", "Disk Usage", "Temp Storage", cacheLimit, cacheInfo?.formatted_size || ""])) && (
-              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)"}}>
-                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)",borderTopLeftRadius:"11px",borderTopRightRadius:"11px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                  <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
-                    <HardDrive size={15} style={{color:"var(--v-accent)"}} />
-                    <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",margin:0}}>Cache Storage & Auto-Cleaner</h3>
-                  </div>
-                  {cacheEnabled && (
-                    <button
-                      disabled={isClearingCache || (cacheInfo?.total_bytes === 0)}
-                      onClick={handleClearCache}
-                      style={{
-                        fontSize:"11.5px",
-                        color: isClearingCache || (cacheInfo?.total_bytes === 0) ? "#5c5755" : "#e2ddd9",
-                        background: "rgba(255,255,255,0.03)",
-                        border: "1px solid var(--v-bdr2)",
-                        borderRadius: "6px",
-                        padding: "4px 10px",
-                        cursor: isClearingCache || (cacheInfo?.total_bytes === 0) ? "not-allowed" : "pointer",
-                        display:"flex",
-                        alignItems:"center",
-                        gap:"5px",
-                        transition: "all 0.15s"
-                      }}
-                      onMouseEnter={e => { if (!isClearingCache && cacheInfo?.total_bytes !== 0) e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--v-bdr2)'; }}
-                    >
-                      <RefreshCw size={11} className={isClearingCache ? "animate-spin" : ""} />
-                      <span>{isClearingCache ? 'Clearing...' : 'Clear Cache'}</span>
-                    </button>
-                  )}
-                </div>
-
-                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:cacheEnabled?"1px solid var(--v-bdr)":"none"}}>
-                  <div>
-                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Enable Caching & Stream Prefetch</p>
-                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>
-                      {cacheEnabled
-                        ? 'Active: pre-resolves queued songs in background, buffers 30s audio, and caches search queries'
-                        : 'Disabled: no cache or prefetch files will be saved, existing cache is purged'}
-                    </p>
-                  </div>
-                  <SettingsSwitch checked={cacheEnabled} onChange={() => handleToggleCache(!cacheEnabled)} />
-                </div>
-
-                {cacheEnabled && (
-                  <>
-                    <div
-                      className="v-settings-row"
-                      style={{
-                        padding: "14px 16px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        borderBottom: "1px solid var(--v-bdr)",
-                        cursor: cacheInfo?.cache_dir ? "pointer" : "default",
-                        transition: "background 0.15s ease-out",
-                      }}
-                      onClick={() => {
-                        if (cacheInfo?.cache_dir) {
-                          invoke('open_in_file_manager', { path: cacheInfo.cache_dir }).catch(() => {});
-                        }
-                      }}
-                      title={cacheInfo?.cache_dir ? "Click to open cache folder" : undefined}
-                    >
-                      <div>
-                        <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Current Cache Size</p>
-                        <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>
-                          {cacheInfo ? `${cacheInfo.formatted_size} (${cacheInfo.file_count} cached media & thumbnail files)` : 'Calculating cache usage...'}
-                        </p>
-                      </div>
-                      {cacheInfo?.cache_dir && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div className="v-settings-path-capsule" style={{ maxWidth: "260px" }}>
-                            <FolderOpen size={12} style={{ color: "var(--v-accent)", flexShrink: 0 }} />
-                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cacheInfo.cache_dir}</span>
-                          </div>
-                          <button
-                            title="Open Cache Folder"
-                            style={{
-                              padding: "6px",
-                              marginLeft: "4px",
-                              color: "#5c5755",
-                              background: "none",
-                              border: "none",
-                              cursor: "pointer",
-                              flexShrink: 0,
-                              borderRadius: "7px",
-                              display: "flex",
-                              transition: "color .12s",
-                            }}
-                            onMouseEnter={e => (e.currentTarget.style.color = "#e2ddd9")}
-                            onMouseLeave={e => (e.currentTarget.style.color = "#5c5755")}
-                          >
-                            <FolderOpen size={16} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                      <div>
-                        <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Cache Size Limit</p>
-                        <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>
-                          Automatically purges oldest cached streams and temporary artwork when limit is reached
-                        </p>
-                      </div>
-                      <ThemedSelect
-                        value={cacheLimit}
-                        onChange={handleCacheLimitChange}
-                        options={[
-                          { value: '500mb', label: '500 MB' },
-                          { value: '1gb', label: '1 GB' },
-                          { value: '2gb', label: '2 GB' },
-                          { value: '5gb', label: '5 GB' },
-                          { value: 'unlimited', label: 'Unlimited' },
-                        ]}
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
-            {(!searchQuery.trim() || matchCard(["Storage", "Backup Location", "Download Directory", "veluna_backup.json", backupPath, downloadPath, "Save path", "Folder"])) && (
-              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)",overflow:"hidden"}}>
-                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)"}}>
-                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",margin:0}}>Backup Location</h3>
-                </div>
-                <div className="v-settings-row" style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",transition:"background 0.15s ease-out"}} onMouseEnter={e=>(e.currentTarget.style.background="rgba(226,221,217,0.005)")} onMouseLeave={e=>(e.currentTarget.style.background="transparent")} onClick={async () => {
-                  try {
-                    const sel = await openDialog({ directory: true, multiple: false, defaultPath: backupPath });
-                    if (sel) setBackupPath(sel as string);
-                  } catch {}
-                }}>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div className="v-settings-path-capsule" style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      fontSize: "12.5px",
-                      color: "#9e9894",
-                      background: "rgba(255, 255, 255, 0.02)",
-                      border: "1px solid var(--v-bdr)",
-                      borderRadius: "20px",
-                      padding: "4px 10px",
-                      transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
-                      fontFamily: "monospace",
-                      maxWidth: "90%"
-                    }}>
-                      <FolderOpen size={13} style={{ color: "var(--v-accent)", flexShrink: 0 }} />
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{backupPath || downloadPath}</span>
-                    </div>
-                    <p style={{fontSize:"12px",color:"#5c5755",marginTop:"6px"}}>Backup file: veluna_backup.json</p>
-                  </div>
-                  <button style={{padding:"6px",marginLeft:"12px",color:"#5c5755",background:"none",border:"none",cursor:"pointer",flexShrink:0,borderRadius:"7px",display:"flex",transition:"color .12s"}} onMouseEnter={e=>(e.currentTarget.style.color="#e2ddd9")} onMouseLeave={e=>(e.currentTarget.style.color="#5c5755")}>
-                    <FolderOpen size={16} />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {(!searchQuery.trim() || matchCard(["Storage", "Backup & Restore Actions", "Create Backup", "Restore Backup", "JSON", "Export data", "Import data", "Save playlists", "Restore playlists", "Settings backup"])) && (
-              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)",overflow:"hidden"}}>
-                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)"}}>
-                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",margin:0}}>Backup & Restore Actions</h3>
-                </div>
-                
-                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",transition:"background 0.15s ease-out",borderBottom:"1px solid #141312"}} onMouseEnter={e=>(e.currentTarget.style.background="rgba(226,221,217,0.005)")} onMouseLeave={e=>(e.currentTarget.style.background="transparent")} onClick={onBackup}>
-                  <div>
-                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Create Backup</p>
-                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>Save all playlists, queue, history, and settings to a JSON file</p>
-                  </div>
-                  <button style={{padding:"6px",marginLeft:"12px",color:"#5c5755",background:"none",border:"none",cursor:"pointer",flexShrink:0,borderRadius:"7px",display:"flex",transition:"color .12s"}} onMouseEnter={e=>(e.currentTarget.style.color="#e2ddd9")} onMouseLeave={e=>(e.currentTarget.style.color="#5c5755")}>
-                    <Upload size={16} />
-                  </button>
-                </div>
-
-                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",transition:"background 0.15s ease-out"}} onMouseEnter={e=>(e.currentTarget.style.background="rgba(226,221,217,0.005)")} onMouseLeave={e=>(e.currentTarget.style.background="transparent")} onClick={onRestore}>
-                  <div>
-                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Restore Backup</p>
-                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>Restore playlists, history, and preferences from a backup file</p>
-                  </div>
-                  <button style={{padding:"6px",marginLeft:"12px",color:"#5c5755",background:"none",border:"none",cursor:"pointer",flexShrink:0,borderRadius:"7px",display:"flex",transition:"color .12s"}} onMouseEnter={e=>(e.currentTarget.style.color="#e2ddd9")} onMouseLeave={e=>(e.currentTarget.style.color="#5c5755")}>
-                    <ArchiveRestore size={16} />
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {(!searchQuery.trim() || matchCard(["Storage", "Reset Veluna App", "Reset", "Clear data", "Factory reset", "Wipe database", "Delete all", "Danger zone", "Irreversible"])) && (
-              <div style={{borderRadius:"12px",border:"1px solid rgba(239, 68, 68, 0.15)",background:"rgba(239, 68, 68, 0.005)",overflow:"hidden",transition:"all 0.2s"}}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)'; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.015)'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.15)'; e.currentTarget.style.background = 'rgba(239, 68, 68, 0.005)'; }}
-                onClick={onReset}>
-                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}}>
-                  <div>
-                    <h3 style={{fontSize:"14px",fontWeight:600,color:"#ef4444",margin:0}}>Reset Veluna App</h3>
-                    <p style={{fontSize:"12px",color:"rgba(239, 68, 68, 0.6)",marginTop:"4px"}}>Permanently delete all local database contents, playlists, history, and configuration files. This action is irreversible.</p>
-                  </div>
-                  <button style={{padding:"6px",color:"#ef4444",background:"none",border:"none",cursor:"pointer",display:"flex",flexShrink:0,marginLeft:"10px"}}>
-                    <Trash2 size={16}/>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
         {matchesUpdates && (
           <div style={{display:"flex",flexDirection:"column",gap:"24px"}}>
@@ -2153,6 +2391,75 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                       <>
                         <RefreshCw size={13} />
                         Check Now
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* yt-dlp Audio Engine & Extractor Card */}
+            {(!searchQuery.trim() || matchCard(["Updates", "yt-dlp", "Extractor", "Engine", "Audio Engine", "Update yt-dlp", "ytdlp", ytdlpVersion])) && (
+              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)",overflow:"hidden"}}>
+                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)"}}>
+                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",display:"flex",alignItems:"center",gap:"8px",margin:0}}>
+                    <Zap size={14} style={{color:"var(--v-accent)"}} /> Media Extractor & Downloader (yt-dlp)
+                  </h3>
+                </div>
+                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div>
+                    <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+                      <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9",margin:0}}>Engine Version</p>
+                      <span style={{
+                        fontSize:"11px",
+                        fontFamily:"monospace",
+                        color:"var(--v-accent)",
+                        background:"rgba(255,255,255,0.04)",
+                        border:"1px solid var(--v-bdr)",
+                        borderRadius:"6px",
+                        padding:"2px 6px"
+                      }}>
+                        {ytdlpVersion}
+                      </span>
+                    </div>
+                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>
+                      yt-dlp powers audio stream extraction, SoundCloud resolution, and offline downloads. Keep it up to date to prevent YouTube format breakages.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleUpdateYtdlp}
+                    disabled={isUpdatingYtdlp}
+                    style={{
+                      padding: "7px 16px",
+                      borderRadius: "18px",
+                      background: isUpdatingYtdlp ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.05)",
+                      color: isUpdatingYtdlp ? "#5c5755" : "#e2ddd9",
+                      border: "1px solid var(--v-bdr)",
+                      fontSize: "13px",
+                      fontWeight: 600,
+                      cursor: isUpdatingYtdlp ? "not-allowed" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      transition: "all 0.15s ease",
+                      flexShrink: 0
+                    }}
+                    onMouseEnter={e => {
+                      if (!isUpdatingYtdlp) e.currentTarget.style.borderColor = "var(--v-accent)";
+                    }}
+                    onMouseLeave={e => {
+                      if (!isUpdatingYtdlp) e.currentTarget.style.borderColor = "var(--v-bdr)";
+                    }}
+                  >
+                    {isUpdatingYtdlp ? (
+                      <>
+                        <div style={{width:"12px",height:"12px",border:"2px solid #5c5755",borderTopColor:"transparent",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}/>
+                        Updating...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw size={13} />
+                        Update yt-dlp
                       </>
                     )}
                   </button>

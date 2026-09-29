@@ -45,19 +45,43 @@ export async function dbSavePlaylist(playlist: Playlist): Promise<void> {
   }
 }
 
+interface DbPlaylistTrackRaw {
+  id: number | string;
+  title?: string;
+  artist?: string;
+  duration?: string;
+  url: string;
+  cover?: string;
+  media_type?: 'music' | 'video';
+}
+
+interface DbPlaylistRaw {
+  id: string;
+  name: string;
+  description?: string;
+  custom_cover?: string | null;
+  tracks?: DbPlaylistTrackRaw[];
+}
+
+interface DbListeningEventRaw {
+  url: string;
+  played_at?: string;
+  secs: number;
+}
+
 export async function dbGetPlaylists(): Promise<Playlist[]> {
   try {
-    const res = await invoke<any[]>('db_get_playlists');
+    const res = await invoke<DbPlaylistRaw[]>('db_get_playlists');
     return res.map(p => ({
       id: p.id,
       name: p.name,
-      description: p.description,
+      description: p.description || '',
       customCover: p.custom_cover || undefined,
-      tracks: (p.tracks || []).map((t: any) => ({
-        id: t.id,
-        title: t.title,
-        artist: t.artist,
-        duration: t.duration,
+      tracks: (p.tracks || []).map((t, idx) => ({
+        id: typeof t.id === 'number' ? t.id : (Number(t.id) || idx),
+        title: t.title || 'Unknown',
+        artist: t.artist || '',
+        duration: t.duration || '0:00',
         url: t.url,
         cover: getTrackCoverUrl(t),
         mediaType: t.media_type || 'music',
@@ -91,6 +115,18 @@ export async function dbRecordPlayEvent(track: Track, secs: number): Promise<voi
   }
 }
 
+export async function dbUpdateListeningTime(url: string, secs: number): Promise<void> {
+  if (!url || secs <= 0) return;
+  try {
+    await invoke('db_update_listening_time', {
+      url,
+      secs: Math.round(secs),
+    });
+  } catch (err) {
+    console.warn('Failed to update listening time in SQLite:', err);
+  }
+}
+
 export async function dbGetListeningStats(): Promise<DbTrackStat[]> {
   try {
     return await invoke<DbTrackStat[]>('db_get_listening_stats');
@@ -113,7 +149,7 @@ export function parsePlayedAt(raw?: string): string {
 
 export async function dbGetListeningHistory(limit = 100): Promise<ListeningEvent[]> {
   try {
-    const events = await invoke<any[]>('db_get_listening_history', { limit });
+    const events = await invoke<DbListeningEventRaw[]>('db_get_listening_history', { limit });
     return events.map(e => ({
       url: e.url,
       playedAt: parsePlayedAt(e.played_at),

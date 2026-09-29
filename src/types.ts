@@ -37,6 +37,9 @@ export type Playlist = {
 
 export type RepeatMode = 'off' | 'all' | 'one';
 
+export type SearchSource = 'all' | 'youtube' | 'soundcloud';
+export type SearchDateFilter = 'all' | 'today' | 'week' | 'month' | 'year';
+
 export type LyricLine = {
   time: number;
   text: string;
@@ -79,7 +82,7 @@ export type ActiveDownload = {
   error?: string;
   startedAt: number;
 };
-export type SettingsTab = 'playback' | 'appearance' | 'downloads' | 'integrations' | 'network' | 'storage' | 'updates';
+export type SettingsTab = 'general' | 'playback' | 'appearance' | 'downloads' | 'integrations' | 'network' | 'storage' | 'updates';
 
 export interface UserPreferences {
   languages: string[];

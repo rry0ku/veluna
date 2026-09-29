@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { Track, LocalTrack, AudioInfo, RepeatMode } from '../types';
+import { Track, LocalTrack, AudioInfo, RepeatMode, LyricsData } from '../types';
 import { loadLS, saveLS, parseDurationToSeconds, cleanArtist, parseTrackMeta } from '../utils';
 
 interface UseAudioPlayerProps {
@@ -23,7 +23,7 @@ interface UseAudioPlayerProps {
   onTrackPlayed?: (track: Track) => void;
   onListeningStep?: (url: string, secs: number) => void;
   showToast: (msg: string) => void;
-  setLyricsData?: (data: any) => void;
+  setLyricsData?: (data: LyricsData | null) => void;
 }
 
 export function useAudioPlayer({
@@ -259,12 +259,12 @@ export function useAudioPlayer({
           }
         }
       }, 200);
-    } catch (err: any) {
+    } catch (err: unknown) {
       if (currentTrackRef.current?.url !== track.url) return;
       setIsPlayingSync(false);
       setLoadingTrackUrlSync(null);
       setIsLoadingTrackSync(false);
-      const errMsg = typeof err === 'string' ? err : err?.message || '';
+      const errMsg = typeof err === 'string' ? err : (err instanceof Error ? err.message : '');
       if (!errMsg.toLowerCase().includes('superseded') &&
           !errMsg.toLowerCase().includes('abort') &&
           !errMsg.toLowerCase().includes('cancel') &&
@@ -574,22 +574,29 @@ export function useAudioPlayer({
     }
 
     const ctx = playlistContextRef.current;
-    if (ctx && ctx.tracks.length > 1) {
-      let nextIdx: number;
-      if (shuffle) {
-        do { nextIdx = Math.floor(Math.random() * ctx.tracks.length); }
-        while (nextIdx === ctx.index && ctx.tracks.length > 1);
+    if (ctx && ctx.tracks.length > 0) {
+      if (ctx.tracks.length === 1) {
+        if (repeatModeRef.current === 'all') {
+          await handlePlayTrack(ctx.tracks[0], true);
+          return;
+        }
       } else {
-        nextIdx = ctx.index + 1;
-      }
-      if (nextIdx < ctx.tracks.length) {
-        playlistContextRef.current = { ...ctx, index: nextIdx };
-        await handlePlayTrack(ctx.tracks[nextIdx], true);
-        return;
-      } else if (repeatModeRef.current === 'all') {
-        playlistContextRef.current = { ...ctx, index: 0 };
-        await handlePlayTrack(ctx.tracks[0], true);
-        return;
+        let nextIdx: number;
+        if (shuffle) {
+          do { nextIdx = Math.floor(Math.random() * ctx.tracks.length); }
+          while (nextIdx === ctx.index && ctx.tracks.length > 1);
+        } else {
+          nextIdx = ctx.index + 1;
+        }
+        if (nextIdx < ctx.tracks.length) {
+          playlistContextRef.current = { ...ctx, index: nextIdx };
+          await handlePlayTrack(ctx.tracks[nextIdx], true);
+          return;
+        } else if (repeatModeRef.current === 'all') {
+          playlistContextRef.current = { ...ctx, index: 0 };
+          await handlePlayTrack(ctx.tracks[0], true);
+          return;
+        }
       }
     }
 
@@ -620,7 +627,7 @@ export function useAudioPlayer({
 
   const handleSkipBack = useCallback(async () => {
     const track = currentTrackRef.current;
-    const isLocal = track?.url?.startsWith('local://');
+    const isLocal = track?.url?.startsWith('local://') || currentLocalPathRef.current !== null;
 
     if (isLocal) {
       if (progressSecondsRef.current > 3) {

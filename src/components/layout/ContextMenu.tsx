@@ -44,6 +44,7 @@ interface ContextMenuProps {
   handlePlayTrack: (track: Track, fromQueue?: boolean) => Promise<void>;
   handlePlayLocalTrack: (local: LocalTrack, localList?: LocalTrack[], localIndex?: number) => Promise<void>;
   handleDownload: (track: Track) => void;
+  handleOpenClipDownload?: (track: Track) => void;
   handleCancelDownload: (url: string) => void;
   handleDeleteLocalTrack: (track: LocalTrack) => void;
   handleOpenInFileManager: (path: string) => void;
@@ -79,6 +80,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
   handlePlayTrack,
   handlePlayLocalTrack,
   handleDownload,
+  handleOpenClipDownload,
   handleCancelDownload,
   handleDeleteLocalTrack,
   handleOpenInFileManager,
@@ -328,6 +330,11 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
                   }} className="v-ctx__item">
                     {(downloadingTracks[track.url] ?? 0) > 0 ? 'Cancel Download' : <><Download size={14} /> Download</>}
                   </button>
+                  {handleOpenClipDownload && (
+                    <button onClick={() => { handleOpenClipDownload(track); setCtxMenu(null); }} className="v-ctx__item">
+                      <Clock size={14} /> Clip &amp; Download...
+                    </button>
+                  )}
                   <button onClick={() => { openInYouTube(track); setCtxMenu(null); }} className="v-ctx__item"><ExternalLink size={13} /> Open in YouTube</button>
                 </>
               )}
@@ -498,14 +505,14 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
 
               {/* Pills */}
               <div style={{ display: 'flex', gap: '5px', padding: '0 20px 16px', flexWrap: 'wrap', justifyContent: 'center' }}>
-                {[
-                  infoModalTrack.duration && infoModalTrack.duration !== '0:00' && { icon: <Clock size={9} />, label: infoModalTrack.duration },
-                  isYt && { icon: <Youtube size={9} />, label: 'YouTube' },
-                  trackAudioInfo?.codec && trackAudioInfo.codec !== 'unknown' && { icon: <BarChart2 size={9} />, label: `${trackAudioInfo.codec.toUpperCase()}${trackAudioInfo.bitrate > 0 ? ` · ${Math.round(trackAudioInfo.bitrate / 1000)}k` : ''}` },
-                  trackAudioInfo && trackAudioInfo.samplerate && trackAudioInfo.samplerate > 0 && { icon: <Gauge size={9} />, label: `${(trackAudioInfo.samplerate / 1000).toFixed(1)}kHz` },
-                  trackAudioInfo?.channels && { icon: <AlignLeft size={9} />, label: trackAudioInfo.channels },
-                  trackAudioInfo?.format && { icon: <FileCode2 size={9} />, label: trackAudioInfo.format },
-                ].filter(Boolean).map((item: any, i) => (
+                {([
+                  infoModalTrack.duration && infoModalTrack.duration !== '0:00' ? { icon: <Clock size={9} />, label: infoModalTrack.duration } : null,
+                  isYt ? { icon: <Youtube size={9} />, label: 'YouTube' } : null,
+                  trackAudioInfo?.codec && trackAudioInfo.codec !== 'unknown' ? { icon: <BarChart2 size={9} />, label: `${trackAudioInfo.codec.toUpperCase()}${trackAudioInfo.bitrate > 0 ? ` · ${Math.round(trackAudioInfo.bitrate / 1000)}k` : ''}` } : null,
+                  trackAudioInfo && trackAudioInfo.samplerate && trackAudioInfo.samplerate > 0 ? { icon: <Gauge size={9} />, label: `${(trackAudioInfo.samplerate / 1000).toFixed(1)}kHz` } : null,
+                  trackAudioInfo?.channels ? { icon: <AlignLeft size={9} />, label: trackAudioInfo.channels } : null,
+                  trackAudioInfo?.format ? { icon: <FileCode2 size={9} />, label: trackAudioInfo.format } : null,
+                ] as const).filter((item): item is { icon: React.JSX.Element; label: string } => item !== null).map((item, i) => (
                   <span key={i} style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'var(--v-bg3)', border: '1px solid var(--v-bdr2)', padding: '4px 10px', borderRadius: '9999px', fontSize: '10px', fontWeight: 600, color: 'var(--v-fg2)' }}>
                     {item.icon}{item.label}
                   </span>
