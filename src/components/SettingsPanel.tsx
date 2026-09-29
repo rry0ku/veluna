@@ -1388,6 +1388,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                       const next = !splitChaptersEnabled;
                       setSplitChaptersEnabled?.(next);
                       saveLS('vg_splitChaptersEnabled', next);
+                      saveLS('vg_splitChapters', next);
                     }}
                   />
                 </div>

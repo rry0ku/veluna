@@ -3060,6 +3060,8 @@ async fn download_song(
     }
 
     args.extend([
+        "-P".to_string(),
+        resolved_path.clone(),
         "--retries".to_string(),
         "5".to_string(),
         "--fragment-retries".to_string(),
@@ -3109,6 +3111,15 @@ async fn download_song(
 
     if split_chapters.unwrap_or(false) {
         args.push("--split-chapters".to_string());
+        let chapter_template = if resolved_path.ends_with('/') || resolved_path.ends_with('\\') {
+            format!(
+                "chapter:{resolved_path}%(title)s - %(section_number)02d %(section_title)s.%(ext)s"
+            )
+        } else {
+            format!("chapter:{resolved_path}{sep}%(title)s - %(section_number)02d %(section_title)s.%(ext)s")
+        };
+        args.push("-o".to_string());
+        args.push(chapter_template);
     }
 
     if let Some(ref section) = download_section {

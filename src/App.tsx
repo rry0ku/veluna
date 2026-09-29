@@ -32,6 +32,7 @@ import {
   getTrackGradient,
   cleanArtist,
   parseTrackMeta,
+  parseDurationToSeconds,
   findDuplicateTracks,
   fetchArtistYouTubeTracks,
   globalArtistAvatarCache,
@@ -207,8 +208,8 @@ export function App() {
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [downloadPath, setDownloadPath] = useState<string>(() => loadLS('vg_dlPath', '~/Downloads'));
   const [cookieBrowser, setCookieBrowserState] = useState<string>(() => loadLS('vg_cookieBrowser', 'none'));
-  const [sponsorblockEnabled, setSponsorblockEnabledState] = useState<boolean>(() => loadLS('vg_sponsorblock', false));
-  const [splitChaptersEnabled, setSplitChaptersEnabledState] = useState<boolean>(() => loadLS('vg_splitChapters', false));
+  const [sponsorblockEnabled, setSponsorblockEnabledState] = useState<boolean>(() => loadLS('vg_sponsorblock', loadLS('vg_sponsorblockEnabled', false)));
+  const [splitChaptersEnabled, setSplitChaptersEnabledState] = useState<boolean>(() => loadLS('vg_splitChapters', loadLS('vg_splitChaptersEnabled', false)));
   const [downloadNamingPattern, setDownloadNamingPatternState] = useState<string>(() => {
     const raw = loadLS<string>('vg_downloadNamingPattern', loadLS<string>('vg_dlNaming', '{artist} - {title}'));
     if (raw === 'standard') return '{artist} - {title}';
@@ -217,7 +218,7 @@ export function App() {
     if (raw === 'title_only') return '{title}';
     return raw || '{artist} - {title}';
   });
-  const [squareThumbnailEnabled, setSquareThumbnailEnabledState] = useState<boolean>(() => loadLS('vg_squareThumb', false));
+  const [squareThumbnailEnabled, setSquareThumbnailEnabledState] = useState<boolean>(() => loadLS('vg_squareThumb', loadLS('vg_squareThumbnailEnabled', false)));
   const [clipModalTrack, setClipModalTrack] = useState<Track | null>(null);
   const [backupPath, setBackupPathState] = useState<string>(() => loadLS('vg_backupPath', ''));
   const [trayEnabled, setTrayEnabled] = useState<boolean>(() => loadLS('vg_trayEnabled', false));
@@ -235,14 +236,26 @@ export function App() {
   const [updateAvailable, setUpdateAvailable] = useState<string | null>(null);
 
   const setCookieBrowser = useCallback((b: string) => { setCookieBrowserState(b); saveLS('vg_cookieBrowser', b); }, []);
-  const setSponsorblockEnabled = useCallback((v: boolean) => { setSponsorblockEnabledState(v); saveLS('vg_sponsorblock', v); }, []);
-  const setSplitChaptersEnabled = useCallback((v: boolean) => { setSplitChaptersEnabledState(v); saveLS('vg_splitChapters', v); }, []);
+  const setSponsorblockEnabled = useCallback((v: boolean) => {
+    setSponsorblockEnabledState(v);
+    saveLS('vg_sponsorblock', v);
+    saveLS('vg_sponsorblockEnabled', v);
+  }, []);
+  const setSplitChaptersEnabled = useCallback((v: boolean) => {
+    setSplitChaptersEnabledState(v);
+    saveLS('vg_splitChapters', v);
+    saveLS('vg_splitChaptersEnabled', v);
+  }, []);
   const setDownloadNamingPattern = useCallback((p: string) => {
     setDownloadNamingPatternState(p);
     saveLS('vg_downloadNamingPattern', p);
     saveLS('vg_dlNaming', p);
   }, []);
-  const setSquareThumbnailEnabled = useCallback((v: boolean) => { setSquareThumbnailEnabledState(v); saveLS('vg_squareThumb', v); }, []);
+  const setSquareThumbnailEnabled = useCallback((v: boolean) => {
+    setSquareThumbnailEnabledState(v);
+    saveLS('vg_squareThumb', v);
+    saveLS('vg_squareThumbnailEnabled', v);
+  }, []);
 
   const setCacheEnabled = useCallback((enabled: boolean) => {
     setCacheEnabledState(enabled);
@@ -586,6 +599,9 @@ export function App() {
     confirmRenamePlaylist,
     confirmDeletePlaylist,
     handleCoverUpload: handlePlaylistCoverUpload,
+    removePlaylistCover,
+    reorderPlaylistTracks,
+    reorderPlaylists,
   } = usePlaylists(showToast);
 
   const getPlaylistCover = useCallback((p: Playlist) => p.id === 'p1' ? null : (p.customCover || (p.tracks.find(t => t.cover)?.cover || null)), []);
@@ -1483,7 +1499,12 @@ export function App() {
 
   const handleSaveMetadata = useCallback(async (title: string, artist: string, album: string) => {
     if (!metadataEditingTrack) return;
-    const path = metadataEditingTrack.url.substring(8);
+    const rawUrl = metadataEditingTrack.url;
+    const path = rawUrl.startsWith('local://')
+      ? rawUrl.slice(8)
+      : rawUrl.startsWith('file://')
+      ? rawUrl.slice(7)
+      : rawUrl;
     try {
       await invoke('write_audio_metadata', { path, title, artist, album });
       const newPath: string = await invoke('rename_local_file', { oldPath: path, newTitle: title.trim() });
@@ -1526,7 +1547,7 @@ export function App() {
         title: t.title,
         artist: t.artist || '',
         url: t.url,
-        duration_secs: 0,
+        duration_secs: parseDurationToSeconds(t.duration) || 0,
       }));
       const safeName = playlist.name.replace(/[/\\:*?"<>|]/g, '_');
       const path = `${downloadPath}/${safeName}.m3u`;
@@ -1541,7 +1562,7 @@ export function App() {
         title: t.title,
         artist: t.artist || '',
         url: `local://${t.path}`,
-        duration_secs: 0,
+        duration_secs: parseDurationToSeconds(t.duration || '0:00') || 0,
       }));
       const path = `${downloadPath}/Local_Library.m3u`;
       await invoke('export_playlist_m3u', { tracks: tracksData, path });
@@ -2244,6 +2265,11 @@ export function App() {
             getPlaylistCover={getPlaylistCover}
             addToQueue={addToQueue}
             onArtistClick={openArtistPage}
+            movePlaylistTrack={(from, to) => {
+              if (openPlaylistId) reorderPlaylistTracks(openPlaylistId, from, to);
+            }}
+            movePlaylist={reorderPlaylists}
+            removePlaylistCover={removePlaylistCover}
           />
         )}
 
@@ -2504,12 +2530,14 @@ export function App() {
         setShowDuplicatesPlaylist={setShowDuplicatesPlaylist}
         setBulkEditPlaylist={setBulkEditPlaylist}
         handlePlaylistCoverUpload={handlePlaylistCoverUpload}
+        removePlaylistCover={removePlaylistCover}
         setInfoModalTrack={setInfoModalTrack}
         infoModalTrack={infoModalTrack}
         addToPlaylistTrack={addToPlaylistTrack}
         setAddToPlaylistTrack={setAddToPlaylistTrack}
         setMetadataEditingTrack={setMetadataEditingTrack}
         showToast={showToast}
+        onArtistClick={openArtistPage}
       />
 
       {/* 6. Fullscreen Lyrics View */}

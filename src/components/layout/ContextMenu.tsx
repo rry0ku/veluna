@@ -28,6 +28,7 @@ import {
   X,
   Youtube,
   ImagePlus,
+  User,
 } from 'lucide-react';
 import { Track, LocalTrack, Playlist, CtxMenu, AudioInfo } from '../../types';
 import { getTrackGradient, cleanArtist } from '../../utils';
@@ -59,6 +60,7 @@ interface ContextMenuProps {
   setShowDuplicatesPlaylist?: (playlist: Playlist | null) => void;
   setBulkEditPlaylist?: (playlist: Playlist | null) => void;
   handlePlaylistCoverUpload?: (playlistId: string) => Promise<void> | void;
+  removePlaylistCover?: (playlistId: string) => void;
   setInfoModalTrack: (track: Track | null) => void;
   infoModalTrack: Track | null;
   addToPlaylistTrack: Track | null;
@@ -67,6 +69,7 @@ interface ContextMenuProps {
   showToast: (msg: string) => void;
   currentTrack?: Track | null;
   audioInfo?: AudioInfo | null;
+  onArtistClick?: (artistName: string) => void;
 }
 
 export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
@@ -95,6 +98,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
   setShowDuplicatesPlaylist,
   setBulkEditPlaylist,
   handlePlaylistCoverUpload,
+  removePlaylistCover,
   setInfoModalTrack,
   infoModalTrack,
   addToPlaylistTrack,
@@ -103,6 +107,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
   showToast,
   currentTrack,
   audioInfo,
+  onArtistClick,
 }) => {
   const copyToClipboard = async (text: string) => {
     if (!text) return;
@@ -298,6 +303,9 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
                     {isTrackLiked(track.url) ? 'Remove from Liked' : 'Like'}
                   </button>
                   <button onClick={e => { e.stopPropagation(); setAddToPlaylistTrack(track); setCtxMenu(null); }} className="v-ctx__item"><PlusCircle size={14} /> Add to Playlist</button>
+                  {onArtistClick && cleanArtist(track.artist) && (
+                    <button onClick={() => { onArtistClick(cleanArtist(track.artist)); setCtxMenu(null); }} className="v-ctx__item"><User size={14} /> View Artist</button>
+                  )}
                 </>
               )}
 
@@ -403,6 +411,12 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
                   handlePlaylistCoverUpload(playlist.id);
                   setCtxMenu(null);
                 }}><ImagePlus size={13} /> Change Cover</button>
+              )}
+              {playlist.customCover && removePlaylistCover && (
+                <button className="v-ctx__item v-ctx__item--danger" onClick={() => {
+                  removePlaylistCover(playlist.id);
+                  setCtxMenu(null);
+                }}><Trash2 size={13} /> Remove Cover</button>
               )}
               <div className="v-ctx__sep" />
               <button className="v-ctx__item" onClick={() => {

@@ -166,6 +166,11 @@ export function usePlaylists(showToast?: (msg: string) => void) {
     inp.click();
   }, [setPlaylists, showToast]);
 
+  const removePlaylistCover = useCallback((pid: string) => {
+    setPlaylists(p => p.map(x => x.id === pid ? { ...x, customCover: undefined } : x));
+    if (showToast) showToast('Cover removed');
+  }, [setPlaylists, showToast]);
+
   const isTrackLiked = useCallback((url: string) => {
     return playlists.find(p => p.id === 'p1')?.tracks.some(t => t.url === url) || false;
   }, [playlists]);
@@ -244,6 +249,7 @@ export function usePlaylists(showToast?: (msg: string) => void) {
     addTrackToPlaylist,
     removeFromPlaylist,
     handleCoverUpload,
+    removePlaylistCover,
     isTrackLiked,
     reorderPlaylistTracks,
     reorderPlaylists,

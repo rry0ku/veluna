@@ -98,7 +98,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
   getPlaylistCover: customGetPlaylistCover,
   handlePlaylistCoverUpload,
   handleCoverUpload: customHandleCoverUpload,
-  removePlaylistCover: _removePlaylistCover,
+  removePlaylistCover: customRemovePlaylistCover,
   playAll: customPlayAll,
   setRenamingPlaylist,
   setRenameVal,
@@ -134,8 +134,8 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
   setNewPlaylistDesc,
   setShowDuplicatesPlaylist: _setShowDuplicatesPlaylist,
   setBulkEditPlaylist: _setBulkEditPlaylist,
-  movePlaylistTrack: _movePlaylistTrack,
-  movePlaylist: _movePlaylist,
+  movePlaylistTrack: customMovePlaylistTrack,
+  movePlaylist: customMovePlaylist,
   dragPlaylistCardIdx: _dragPlaylistCardIdx,
   dragOverPlaylistCardIdx: _dragOverPlaylistCardIdx,
   setDragOverPlaylistCardIdx: _setDragOverPlaylistCardIdx,
@@ -329,7 +329,42 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
               {getPlaylistCover(openPlaylist) && (
                 <img src={getPlaylistCover(openPlaylist)!} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}} onError={e=>{e.currentTarget.style.display='none';}} alt=""/>
               )}
-              {openPlaylist.id !== 'p1' && <div className="pl-cover-ov" style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.55)",opacity:0,display:"flex",alignItems:"center",justifyContent:"center",transition:"opacity .15s",zIndex:5}}><ImagePlus size={24} style={{color:"var(--v-fg)"}}/></div>}
+              {openPlaylist.id !== 'p1' && (
+                <div className="pl-cover-ov" style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.65)",opacity:0,display:"flex",alignItems:"center",justifyContent:"center",gap:"10px",transition:"opacity .15s",zIndex:5}}>
+                  <ImagePlus size={24} style={{color:"var(--v-fg)"}}/>
+                  {openPlaylist.customCover && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (customRemovePlaylistCover) {
+                          customRemovePlaylistCover(openPlaylist.id);
+                        } else {
+                          setPlaylists(prev => prev.map(p => p.id === openPlaylist.id ? { ...p, customCover: undefined } : p));
+                          showToast('Cover removed');
+                        }
+                      }}
+                      title="Remove custom cover"
+                      style={{
+                        width: "30px",
+                        height: "30px",
+                        borderRadius: "50%",
+                        background: "rgba(220, 60, 60, 0.85)",
+                        border: "none",
+                        color: "white",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        cursor: "pointer",
+                        transition: "transform 0.15s",
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.1)"; }}
+                      onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             <div style={{flex:1,minWidth:0,paddingBottom:"4px"}}>
               <span style={{
@@ -610,7 +645,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                         itemHeight={56}
                         keyExtractor={(t, i) => `${t.url}_${i}`}
                         renderItem={(t, i) => {
-                          const origIdx = openPlaylist.tracks.indexOf(t);
+                          const origIdx = (playlistSortBy === 'default' && !playlistSearchQ) ? i : openPlaylist.tracks.indexOf(t);
                           const enrichedTrack = { ...t, cover: getTrackCoverUrl(t) };
                           return (
                             <div
@@ -626,7 +661,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                               {dragOverPlaylistIdx === origIdx && dragPlaylistIdx.current !== null && dragPlaylistIdx.current !== origIdx && (
                                 <div style={{position:"absolute",top:0,left:"32px",right:0,height:"2px",background:"var(--v-accent)",borderRadius:"1px",zIndex:10,pointerEvents:"none"}}/>
                               )}
-                              {!playlistSearchQ && (
+                              {!playlistSearchQ && playlistSortBy === 'default' && (
                                 <div
                                   style={{padding:"4px 6px",cursor:"grab",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,opacity:0.2,transition:"opacity .12s"}}
                                   onMouseEnter={e=>(e.currentTarget.style.opacity="0.7")}
@@ -644,13 +679,17 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                                       setDragOverPlaylistIdx(null);
                                       window.removeEventListener('mouseup', onUp);
                                       if (from === null || to === null || from === to) return;
-                                      setPlaylists(prev => prev.map(pl => {
-                                        if (pl.id !== openPlaylist.id) return pl;
-                                        const arr = [...pl.tracks];
-                                        const [moved] = arr.splice(from, 1);
-                                        arr.splice(to, 0, moved);
-                                        return { ...pl, tracks: arr };
-                                      }));
+                                      if (customMovePlaylistTrack) {
+                                        customMovePlaylistTrack(from, to);
+                                      } else {
+                                        setPlaylists(prev => prev.map(pl => {
+                                          if (pl.id !== openPlaylist.id) return pl;
+                                          const arr = [...pl.tracks];
+                                          const [moved] = arr.splice(from, 1);
+                                          arr.splice(to, 0, moved);
+                                          return { ...pl, tracks: arr };
+                                        }));
+                                      }
                                     };
                                     window.addEventListener('mouseup', onUp);
                                   }}
@@ -1010,12 +1049,16 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                               setDragPlaylistCardIdxState(null);
                               window.removeEventListener('mouseup', onUp);
                               if (from === null || to === null || from === to) return;
-                              setPlaylists(prev => {
-                                const arr = [...prev];
-                                const [moved] = arr.splice(from, 1);
-                                arr.splice(to, 0, moved);
-                                return arr;
-                              });
+                              if (customMovePlaylist) {
+                                customMovePlaylist(from, to);
+                              } else {
+                                setPlaylists(prev => {
+                                  const arr = [...prev];
+                                  const [moved] = arr.splice(from, 1);
+                                  arr.splice(to, 0, moved);
+                                  return arr;
+                                });
+                              }
                             };
                             window.addEventListener('mouseup', onUp);
                           }}>
@@ -1121,12 +1164,16 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                             setDragPlaylistCardIdxState(null);
                             window.removeEventListener('mouseup', onUp);
                             if (from === null || to === null || from === to) return;
-                            setPlaylists(prev => {
-                              const arr = [...prev];
-                              const [moved] = arr.splice(from, 1);
-                              arr.splice(to, 0, moved);
-                              return arr;
-                            });
+                            if (customMovePlaylist) {
+                              customMovePlaylist(from, to);
+                            } else {
+                              setPlaylists(prev => {
+                                const arr = [...prev];
+                                const [moved] = arr.splice(from, 1);
+                                arr.splice(to, 0, moved);
+                                return arr;
+                              });
+                            }
                           };
                           window.addEventListener('mouseup', onUp);
                         }}
