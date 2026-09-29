@@ -2410,7 +2410,7 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                 )}
               </div>
 
-              {!isSearching && (ytMusicTracks.length > 0 || videoTracks.length > 0 || searchSource === 'soundcloud') && (
+              {!isSearching && (ytMusicTracks.length > 0 || videoTracks.length > 0) && (
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'8px',margin:'10px 0 16px'}}>
                   <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
                     <button
@@ -2424,9 +2424,9 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                         fontSize: '12px',
                         fontWeight: 700,
                         cursor: 'pointer',
-                        border: searchSource !== 'soundcloud' && searchTab === 'music' ? 'none' : '1px solid var(--v-bdr2)',
-                        background: searchSource !== 'soundcloud' && searchTab === 'music' ? 'var(--v-accent)' : 'var(--v-bg2)',
-                        color: searchSource !== 'soundcloud' && searchTab === 'music' ? '#0c0b0b' : '#8a807c',
+                        border: searchTab === 'music' ? 'none' : '1px solid var(--v-bdr2)',
+                        background: searchTab === 'music' ? 'var(--v-accent)' : 'var(--v-bg2)',
+                        color: searchTab === 'music' ? '#0c0b0b' : '#8a807c',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '6px',
@@ -2435,32 +2435,7 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                     >
                       <Music size={13} />
                       <span>YT Music</span>
-                      {searchSource !== 'soundcloud' && ytMusicTracks.length > 0 && <span style={{fontSize:'10.5px',opacity:0.8}}>({ytMusicTracks.length})</span>}
-                    </button>
-                    
-                    <button
-                      onClick={() => {
-                        setSearchSource?.('soundcloud');
-                        setSearchTab('music');
-                        searchMusic();
-                      }}
-                      style={{
-                        padding: '6px 14px',
-                        borderRadius: '9999px',
-                        fontSize: '12px',
-                        fontWeight: 700,
-                        cursor: 'pointer',
-                        border: searchSource === 'soundcloud' ? 'none' : '1px solid var(--v-bdr2)',
-                        background: searchSource === 'soundcloud' ? 'var(--v-accent)' : 'var(--v-bg2)',
-                        color: searchSource === 'soundcloud' ? '#0c0b0b' : '#8a807c',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        transition: 'all .15s ease'
-                      }}
-                    >
-                      <span>SoundCloud</span>
-                      {searchSource === 'soundcloud' && ytMusicTracks.length > 0 && <span style={{fontSize:'10.5px',opacity:0.8}}>({ytMusicTracks.length})</span>}
+                      {searchTab === 'music' && ytMusicTracks.length > 0 && <span style={{fontSize:'10.5px',opacity:0.8}}>({ytMusicTracks.length})</span>}
                     </button>
 
                     <button
@@ -2474,9 +2449,9 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                         fontSize: '12px',
                         fontWeight: 700,
                         cursor: 'pointer',
-                        border: searchTab === 'video' && searchSource !== 'soundcloud' ? 'none' : '1px solid var(--v-bdr2)',
-                        background: searchTab === 'video' && searchSource !== 'soundcloud' ? 'var(--v-accent)' : 'var(--v-bg2)',
-                        color: searchTab === 'video' && searchSource !== 'soundcloud' ? '#0c0b0b' : '#8a807c',
+                        border: searchTab === 'video' ? 'none' : '1px solid var(--v-bdr2)',
+                        background: searchTab === 'video' ? 'var(--v-accent)' : 'var(--v-bg2)',
+                        color: searchTab === 'video' ? '#0c0b0b' : '#8a807c',
                         display: 'flex',
                         alignItems: 'center',
                         gap: '6px',
@@ -2489,7 +2464,7 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                     </button>
                   </div>
 
-                  {setSearchDateFilter && searchSource !== 'soundcloud' && (
+                  {setSearchDateFilter && (
                     <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
                       <span style={{fontSize:'11px',color:'#8a807c',fontWeight:600}}>Uploaded:</span>
                       <ThemedSelect

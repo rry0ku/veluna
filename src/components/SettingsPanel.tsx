@@ -2507,7 +2507,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                       </span>
                     </div>
                     <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>
-                      yt-dlp powers audio stream extraction, SoundCloud resolution, and offline downloads. Keep it up to date to prevent YouTube format breakages.
+                      yt-dlp powers audio stream extraction and offline downloads. Keep it up to date to prevent YouTube format breakages.
                     </p>
                   </div>
                   <button

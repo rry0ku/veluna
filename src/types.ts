@@ -37,7 +37,7 @@ export type Playlist = {
 
 export type RepeatMode = 'off' | 'all' | 'one';
 
-export type SearchSource = 'all' | 'youtube' | 'soundcloud';
+export type SearchSource = 'all' | 'youtube';
 export type SearchDateFilter = 'all' | 'today' | 'week' | 'month' | 'year';
 
 export type LyricLine = {

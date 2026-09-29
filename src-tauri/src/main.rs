@@ -1602,57 +1602,6 @@ async fn search_youtube(query: String, date_filter: Option<String>) -> Result<St
 }
 
 #[tauri::command]
-async fn search_soundcloud(query: String) -> Result<String, String> {
-    let q_trim = query.trim().to_string();
-    if q_trim.is_empty() {
-        return Ok(String::new());
-    }
-
-    let search_arg = if q_trim.starts_with("http://")
-        || q_trim.starts_with("https://")
-        || q_trim.contains("soundcloud.com")
-    {
-        q_trim
-    } else {
-        format!("scsearch25:{}", q_trim)
-    };
-
-    let mut cmd = tokio::process::Command::new(bin_ytdlp());
-    cmd.kill_on_drop(true);
-    cmd.args([
-        &search_arg,
-        "--flat-playlist",
-        "--print",
-        "%(title)s====%(uploader)s====%(duration_string)s====%(webpage_url,url)s====%(thumbnail)s",
-        "--no-warnings",
-        "--no-check-certificates",
-        "--geo-bypass",
-        "--socket-timeout",
-        "15",
-    ]);
-    if let Some(proxy_str) = get_proxy_url() {
-        cmd.args(["--proxy", &proxy_str]);
-    }
-    cmd.no_window();
-
-    let out = match tokio::time::timeout(std::time::Duration::from_secs(35), cmd.output()).await {
-        Ok(res) => res.map_err(|e| format!("SoundCloud search failed: {}", e))?,
-        Err(_) => return Err("SoundCloud search timed out".to_string()),
-    };
-
-    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-    if stdout.trim().is_empty() {
-        let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-        return Err(if stderr.trim().is_empty() {
-            "No results found".to_string()
-        } else {
-            stderr
-        });
-    }
-    Ok(stdout)
-}
-
-#[tauri::command]
 async fn open_url_in_browser(app: tauri::AppHandle, url: String) -> Result<(), String> {
     let sanitized = url.trim().to_string();
     if !sanitized.starts_with("https://") && !sanitized.starts_with("http://") {
@@ -2428,7 +2377,6 @@ async fn extract_stream_url_async(youtube_url: String, my_id: Option<u64>) -> Op
         use std::process::{Command, Stdio};
         use std::io::Read;
 
-        let is_sc = youtube_url.contains("soundcloud.com");
         let mut children: Vec<(std::process::Child, &'static str)> = Vec::new();
 
         // Primary Tier 1: single-request extraction
@@ -2446,14 +2394,10 @@ async fn extract_stream_url_async(youtube_url: String, my_id: Option<u64>) -> Op
             "--geo-bypass",
             "-g",
         ];
-        if is_sc {
-            cmd_args.extend(["-f", "bestaudio/best"]);
-        } else {
-            cmd_args.extend([
-                "--extractor-args", "youtube:player_client=android;player_skip=webpage,configs,translated_subs,dash,hls,js,initial_data",
-                "-f", "ba/b/bestaudio/best/18/22",
-            ]);
-        }
+        cmd_args.extend([
+            "--extractor-args", "youtube:player_client=android;player_skip=webpage,configs,translated_subs,dash,hls,js,initial_data",
+            "-f", "ba/b/bestaudio/best/18/22",
+        ]);
         cmd_args.extend(["--", &youtube_url]);
         cmd.args(&cmd_args);
         apply_proxy_to_cmd(&mut cmd);
@@ -2489,14 +2433,10 @@ async fn extract_stream_url_async(youtube_url: String, my_id: Option<u64>) -> Op
                     "--geo-bypass",
                     "-g",
                 ];
-                if is_sc {
-                    cmd2_args.extend(["-f", "bestaudio/best"]);
-                } else {
-                    cmd2_args.extend([
-                        "--extractor-args", "youtube:player_client=android,ios,mweb;player_skip=webpage,configs,translated_subs,dash,hls,js,initial_data",
-                        "-f", "ba/b/bestaudio/best/18/22",
-                    ]);
-                }
+                cmd2_args.extend([
+                    "--extractor-args", "youtube:player_client=android,ios,mweb;player_skip=webpage,configs,translated_subs,dash,hls,js,initial_data",
+                    "-f", "ba/b/bestaudio/best/18/22",
+                ]);
                 cmd2_args.extend(["--", &youtube_url]);
                 cmd2.args(&cmd2_args);
                 apply_proxy_to_cmd(&mut cmd2);
@@ -6505,7 +6445,6 @@ fn main() {
             watch_download_folder,
             set_network_config,
             test_network_connection,
-            search_soundcloud,
             get_ytdlp_version,
             update_ytdlp,
             clear_download_archive,

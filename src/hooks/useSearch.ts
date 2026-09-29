@@ -74,55 +74,7 @@ export function useSearch(showToast?: (msg: string) => void, cacheEnabled: boole
     }
 
     try {
-      const isSoundcloudUrl = q.includes('soundcloud.com');
-      const isUrl = q.startsWith('http://') || q.startsWith('https://') || q.includes('youtube.com') || q.includes('youtu.be') || isSoundcloudUrl;
-
-      if (searchSource === 'soundcloud' || isSoundcloudUrl) {
-        const scRaw = await invoke<string>('search_soundcloud', { query: q }).catch(() => '');
-        if (currentId !== searchIdRef.current) return;
-
-        const parsedSc: Track[] = scRaw.trim().split('\n').filter(Boolean).map((line, i): Track | null => {
-          const parts = line.split('====');
-          const title = parts[0]?.trim() || 'Unknown Track';
-          const artist = parts[1]?.trim() || 'SoundCloud';
-          const duration = parts[2]?.trim() || '0:00';
-          const trackUrl = parts[3]?.trim();
-          const cover = parts[4]?.trim() || 'https://a-v2.sndcdn.com/assets/images/default/avatar-large-52a1ba2e.png';
-          if (!trackUrl) return null;
-          return {
-            id: i,
-            title,
-            artist,
-            duration,
-            url: trackUrl,
-            cover,
-            mediaType: 'music'
-          };
-        }).filter((t): t is Track => t !== null);
-
-        if (cacheEnabled) {
-          if (searchCacheRef.current.size > 100) {
-            const firstKey = searchCacheRef.current.keys().next().value;
-            if (firstKey) searchCacheRef.current.delete(firstKey);
-          }
-          searchCacheRef.current.set(cacheKey, { music: parsedSc, video: [] });
-        }
-
-        if (currentId !== searchIdRef.current) return;
-
-        startTransition(() => {
-          setYtMusicTracks(parsedSc);
-          setVideoTracks([]);
-          setIsSearching(false);
-          setSearchTab('music');
-          if (parsedSc.length === 0) {
-            setSearchError(`No tracks found on SoundCloud for "${q}".`);
-          } else {
-            setSearchError(null);
-          }
-        });
-        return;
-      }
+      const isUrl = q.startsWith('http://') || q.startsWith('https://') || q.includes('youtube.com') || q.includes('youtu.be');
 
       const dateArg = searchDateFilter === 'all' ? undefined : searchDateFilter;
       const [resMusic, resVideo] = isUrl 
