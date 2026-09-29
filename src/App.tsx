@@ -67,6 +67,7 @@ const ArtistsView = lazy(() => import('./components/views/ArtistsView').then(m =
 const ArtistView = lazy(() => import('./components/views/ArtistView').then(m => ({ default: m.ArtistView })));
 const SettingsPanel = lazy(() => import('./components/SettingsPanel').then(m => ({ default: m.SettingsPanel })));
 const OnboardingModal = lazy(() => import('./components/OnboardingModal').then(m => ({ default: m.OnboardingModal })));
+const YouTubeCookieModal = lazy(() => import('./components/YouTubeCookieModal').then(m => ({ default: m.YouTubeCookieModal })));
 
 function ViewLoader() {
   return (
@@ -839,6 +840,74 @@ export function App() {
   const [pendingSpotifyImport, setPendingSpotifyImport] = useState<{ tracks: Track[]; matchedCount: number; failedCount: number } | null>(null);
   const [showDuplicatesPlaylist, setShowDuplicatesPlaylist] = useState<Playlist | null>(null);
   const [bulkEditPlaylist, setBulkEditPlaylist] = useState<Playlist | null>(null);
+  const [showYouTubeCookieModal, setShowYouTubeCookieModal] = useState(false);
+
+  const handleYouTubeLibrarySynced = useCallback((result: { liked_songs: any[]; playlists: any[] }) => {
+    setPlaylists(prev => {
+      let updated = [...prev];
+      const p1Idx = updated.findIndex(p => p.id === 'p1');
+      const incomingLiked: Track[] = (result.liked_songs || []).map(t => ({
+        id: Number(t.id) || (Date.now() + Math.floor(Math.random() * 100000)),
+        title: t.title,
+        artist: t.artist,
+        duration: t.duration,
+        url: t.url,
+        cover: t.cover,
+        album: t.album,
+      }));
+
+      if (p1Idx >= 0) {
+        const existingUrls = new Set(updated[p1Idx].tracks.map(t => t.url));
+        const newTracks = incomingLiked.filter(t => !existingUrls.has(t.url));
+        updated[p1Idx] = {
+          ...updated[p1Idx],
+          tracks: [...updated[p1Idx].tracks, ...newTracks],
+        };
+      } else {
+        const newP1: Playlist = {
+          id: 'p1',
+          name: 'Liked Songs',
+          description: '',
+          tracks: incomingLiked,
+        };
+        updated.unshift(newP1);
+      }
+
+      for (const pl of (result.playlists || [])) {
+        const existingPlIdx = updated.findIndex(p => p.id === pl.id || p.name.toLowerCase() === pl.name.toLowerCase());
+        const convertedTracks: Track[] = (pl.tracks || []).map((t: any) => ({
+          id: Number(t.id) || (Date.now() + Math.floor(Math.random() * 100000)),
+          title: t.title,
+          artist: t.artist,
+          duration: t.duration,
+          url: t.url,
+          cover: t.cover,
+          album: t.album,
+        }));
+
+        if (existingPlIdx >= 0) {
+          const existingUrls = new Set(updated[existingPlIdx].tracks.map(t => t.url));
+          const newTracks = convertedTracks.filter(t => !existingUrls.has(t.url));
+          updated[existingPlIdx] = {
+            ...updated[existingPlIdx],
+            tracks: [...updated[existingPlIdx].tracks, ...newTracks],
+            customCover: updated[existingPlIdx].customCover || pl.customCover,
+          };
+        } else {
+          const newPl: Playlist = {
+            id: pl.id || `yt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            name: pl.name,
+            description: pl.description || 'Imported from YouTube Music',
+            tracks: convertedTracks,
+            customCover: pl.customCover,
+          };
+          updated.push(newPl);
+        }
+      }
+
+      return updated;
+    });
+  }, [setPlaylists]);
 
   const openCtx = useCallback((e: React.MouseEvent, menu: Omit<CtxMenu, 'x' | 'y'>) => {
     e.preventDefault();
@@ -2351,6 +2420,8 @@ export function App() {
             setDownloadNamingPattern={setDownloadNamingPattern}
             squareThumbnailEnabled={squareThumbnailEnabled}
             setSquareThumbnailEnabled={setSquareThumbnailEnabled}
+            onOpenYouTubeCookieModal={() => setShowYouTubeCookieModal(true)}
+            onLibrarySynced={handleYouTubeLibrarySynced}
             onBackup={handleBackup}
             onRestore={handleRestore}
             onReset={() => setConfirmModal({
@@ -3051,6 +3122,18 @@ export function App() {
           }}
         />
       )}
+
+      {/* YouTube Cookie & Account Modal */}
+      <Suspense fallback={null}>
+        {showYouTubeCookieModal && (
+          <YouTubeCookieModal
+            isOpen={showYouTubeCookieModal}
+            onClose={() => setShowYouTubeCookieModal(false)}
+            onLibrarySynced={handleYouTubeLibrarySynced}
+            showToast={showToast}
+          />
+        )}
+      </Suspense>
 
       {/* Import Result Modal */}
       {pendingSpotifyImport && !showCsvImportModal && (

@@ -28,6 +28,7 @@ rusqlite                     = { version = "0.32", features = ["bundled"] }
 lofty                        = "0.21"
 futures                      = "0.3"
 base64                       = "0.22"
+sha1                         = "0.10"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus = { version = "3", default-features = false, features = ["tokio"] }

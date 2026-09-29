@@ -4,7 +4,7 @@ import {
   FolderDown, FolderOpen, Image, Zap, BarChart2, Globe,
   Upload, ArchiveRestore, Trash2,
   Download, GitBranch, Radio, CheckCircle2,
-  HardDrive, Maximize2, Palette, Cookie, Sliders, Music, Database
+  HardDrive, Maximize2, Palette, Cookie, Sliders, Music, Database, User
 } from 'lucide-react';
 import { SettingsTab, DiskInfo, CacheInfo } from '../types';
 import { loadLS, saveLS, lightenColor, validateSettingsChange, formatBytes } from '../utils';
@@ -96,6 +96,8 @@ export type SettingsPanelProps = {
   splitChaptersEnabled?: boolean; setSplitChaptersEnabled?: (v: boolean) => void;
   downloadNamingPattern?: string; setDownloadNamingPattern?: (p: string) => void;
   squareThumbnailEnabled?: boolean; setSquareThumbnailEnabled?: (v: boolean) => void;
+  onOpenYouTubeCookieModal?: () => void;
+  onLibrarySynced?: (result: { liked_songs: any[]; playlists: any[] }) => void;
 };
 
 export const SettingsPanel = React.memo(function SettingsPanel({
@@ -104,11 +106,13 @@ export const SettingsPanel = React.memo(function SettingsPanel({
   downloadFormat, setDownloadFormat,
   embedThumbnail, setEmbedThumbnail,
   duplicateDetect, setDuplicateDetect,
-  cookieBrowser = 'none', setCookieBrowser,
+  cookieBrowser = 'none', setCookieBrowser: _setCookieBrowser,
   sponsorblockEnabled = false, setSponsorblockEnabled,
   splitChaptersEnabled = false, setSplitChaptersEnabled,
   downloadNamingPattern = 'standard', setDownloadNamingPattern,
   squareThumbnailEnabled = true, setSquareThumbnailEnabled,
+  onOpenYouTubeCookieModal,
+  onLibrarySynced,
   onBackup, onRestore, onReset,
   backupPath, setBackupPath,
   loudnormEnabled, setLoudnormEnabled,
@@ -205,6 +209,56 @@ export const SettingsPanel = React.memo(function SettingsPanel({
     setLocalDiscordBtnLabel(v);
     propSetDiscordBtnLabel?.(v);
     saveLS('vg_discordBtnLabel', v);
+  };
+
+  const [ytAuthStatus, setYtAuthStatus] = useState<{
+    is_authenticated: boolean;
+    active_account?: { id: string; name: string; handle?: string; avatar_url?: string; is_selected: boolean; page_id?: string };
+    accounts: any[];
+    cookie_count: number;
+    last_synced?: number;
+  } | null>(null);
+  const [isSyncingYt, setIsSyncingYt] = useState(false);
+
+  const loadYtAuth = React.useCallback(async () => {
+    try {
+      const status = await invoke<any>('get_youtube_auth_status');
+      setYtAuthStatus(status);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    loadYtAuth();
+  }, [loadYtAuth]);
+
+  const handleDisconnectYt = async () => {
+    try {
+      await invoke('clear_youtube_cookies');
+      await loadYtAuth();
+      showToast?.('YouTube session disconnected');
+    } catch {
+      showToast?.('Failed to disconnect cookies');
+    }
+  };
+
+  const handleQuickSyncYt = async () => {
+    if (!ytAuthStatus?.is_authenticated) {
+      onOpenYouTubeCookieModal?.();
+      return;
+    }
+    setIsSyncingYt(true);
+    try {
+      const result = await invoke<any>('sync_youtube_library', {
+        pageId: ytAuthStatus.active_account?.page_id || null,
+      });
+      onLibrarySynced?.(result);
+      await loadYtAuth();
+      showToast?.(`Synced ${result.liked_songs_count} liked songs & ${result.playlists?.length || 0} playlists!`);
+    } catch (err: any) {
+      showToast?.(typeof err === 'string' ? err : 'Sync failed');
+    } finally {
+      setIsSyncingYt(false);
+    }
   };
 
   const discordBtnUrl = propDiscordBtnUrl !== undefined ? propDiscordBtnUrl : localDiscordBtnUrl;
@@ -404,7 +458,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
     matchCard(["Downloads", "File Organization", "Naming Template", "Pattern", "Path structure", "Folder structure", "Save Location", "Download Directory", "Download Folder", "Download Path", "Storage Location", "Folder", "Browse", "Offline tracks", downloadNamingPattern, downloadPath]) ||
     matchCard(["Downloads", "File Options", "Post-Processing", "Embed Artwork Thumbnail", "Thumbnail", "Album Cover", "Cover Art", "ID3 Tags", "Artwork", "Square Thumbnail", "Crop", "1:1", "SponsorBlock", "Clean audio", "Chapters", "Split", "Skip intros", "Full album"]) ||
     matchCard(["Downloads", "Duplicate Detection", "Smart Duplicate Detection", "Skip existing", "Duplicates", "Overwrite", "Archive", "Download Archive", "Clear Archive"]) ||
-    matchCard(["Downloads", "Browser Cookies", "Cookie", "Bypass", "Age restriction", "Bot verification", "Chrome", "Firefox", "Brave", "Edge", "Chromium", "Opera", "Vivaldi", cookieBrowser])
+    matchCard(["Downloads", "YouTube", "YouTube Music", "Account", "Browser Cookies", "Cookie", "Cookies", "Bypass", "Age restriction", "Bot verification", "Playlists", "Liked Songs", cookieBrowser])
   );
 
   const matchesStorage = showTab('storage') && (
@@ -1442,37 +1496,132 @@ export const SettingsPanel = React.memo(function SettingsPanel({
               </div>
             )}
 
-            {(!searchQuery.trim() || matchCard(["Downloads", "Browser Cookies", "Cookie", "Bypass", "Age restriction", "Bot verification", "Chrome", "Firefox", "Brave", "Edge", "Chromium", "Opera", "Vivaldi", cookieBrowser])) && (
+            {(!searchQuery.trim() || matchCard(["Downloads", "YouTube", "YouTube Music", "Account", "Browser Cookies", "Cookie", "Cookies", "Bypass", "Age restriction", "Bot verification", "Playlists", "Liked Songs", cookieBrowser])) && (
               <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)",overflow:"hidden"}}>
-                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)"}}>
-                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",display:"flex",alignItems:"center",gap:"8px",margin:0}}><Cookie size={14} style={{color:"#8c8682"}} /> Browser Cookie Source</h3>
+                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",display:"flex",alignItems:"center",gap:"8px",margin:0}}>
+                    <Cookie size={14} style={{color:"#8c8682"}} /> YouTube Music Account &amp; Cookies
+                  </h3>
+                  {ytAuthStatus?.is_authenticated ? (
+                    <span style={{fontSize:"11px",fontWeight:600,padding:"2px 8px",borderRadius:"12px",background:"rgba(34,197,94,0.15)",color:"#4ade80",border:"1px solid rgba(34,197,94,0.3)"}}>
+                      Connected
+                    </span>
+                  ) : (
+                    <span style={{fontSize:"11px",fontWeight:600,padding:"2px 8px",borderRadius:"12px",background:"rgba(255,255,255,0.06)",color:"#8c8682"}}>
+                      Not Connected
+                    </span>
+                  )}
                 </div>
 
-                <div style={{padding:"14px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                  <div>
-                    <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9"}}>Import Browser Cookies</p>
-                    <p style={{fontSize:"12px",color:"#6f6966",marginTop:"4px"}}>
-                      Import cookies from your web browser for yt-dlp to bypass bot verification, sign-in, and age blocks
-                    </p>
+                {ytAuthStatus?.is_authenticated ? (
+                  <div style={{padding:"16px",display:"flex",flexDirection:"column",gap:"14px"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"12px"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:"12px"}}>
+                        {ytAuthStatus.active_account?.avatar_url ? (
+                          <img src={ytAuthStatus.active_account.avatar_url} alt="" style={{width:"40px",height:"40px",borderRadius:"50%",objectFit:"cover"}} />
+                        ) : (
+                          <div style={{width:"40px",height:"40px",borderRadius:"50%",background:"var(--v-bg2)",display:"flex",alignItems:"center",justifyContent:"center",color:"#9e9894"}}>
+                            <User size={18} />
+                          </div>
+                        )}
+                        <div>
+                          <div style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9"}}>
+                            {ytAuthStatus.active_account?.name || "YouTube Account"}
+                          </div>
+                          <div style={{fontSize:"12px",color:"#6f6966",marginTop:"2px"}}>
+                            {ytAuthStatus.active_account?.handle || `${ytAuthStatus.cookie_count} cookies loaded`}
+                            {ytAuthStatus.last_synced ? ` • Synced ${new Date(ytAuthStatus.last_synced * 1000).toLocaleDateString()}` : ''}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
+                        <button
+                          type="button"
+                          onClick={handleQuickSyncYt}
+                          disabled={isSyncingYt}
+                          style={{
+                            padding:"7px 14px",
+                            borderRadius:"8px",
+                            border:"1px solid var(--v-bdr2)",
+                            background:"rgba(255,255,255,0.06)",
+                            color:"#e2ddd9",
+                            fontSize:"12px",
+                            fontWeight:600,
+                            cursor:isSyncingYt ? "not-allowed" : "pointer",
+                            display:"flex",
+                            alignItems:"center",
+                            gap:"6px"
+                          }}
+                        >
+                          <RefreshCw size={13} className={isSyncingYt ? "animate-spin" : ""} />
+                          {isSyncingYt ? "Syncing..." : "Sync Library"}
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={onOpenYouTubeCookieModal}
+                          style={{
+                            padding:"7px 14px",
+                            borderRadius:"8px",
+                            border:"1px solid var(--v-bdr2)",
+                            background:"rgba(255,255,255,0.06)",
+                            color:"#e2ddd9",
+                            fontSize:"12px",
+                            fontWeight:600,
+                            cursor:"pointer"
+                          }}
+                        >
+                          Update Cookies
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={handleDisconnectYt}
+                          style={{
+                            padding:"7px 12px",
+                            borderRadius:"8px",
+                            border:"1px solid rgba(239,68,68,0.25)",
+                            background:"rgba(239,68,68,0.08)",
+                            color:"#f87171",
+                            fontSize:"12px",
+                            fontWeight:600,
+                            cursor:"pointer"
+                          }}
+                        >
+                          Disconnect
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  <ThemedSelect
-                    value={cookieBrowser}
-                    onChange={(v) => {
-                      setCookieBrowser?.(v);
-                      saveLS('vg_cookieBrowser', v);
-                    }}
-                    options={[
-                      { value: 'none', label: 'None' },
-                      { value: 'chrome', label: 'Google Chrome' },
-                      { value: 'firefox', label: 'Mozilla Firefox' },
-                      { value: 'brave', label: 'Brave Browser' },
-                      { value: 'edge', label: 'Microsoft Edge' },
-                      { value: 'chromium', label: 'Chromium' },
-                      { value: 'opera', label: 'Opera' },
-                      { value: 'vivaldi', label: 'Vivaldi' },
-                    ]}
-                  />
-                </div>
+                ) : (
+                  <div style={{padding:"16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"16px",flexWrap:"wrap"}}>
+                    <div>
+                      <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9",margin:0}}>Connect YouTube Music Session</p>
+                      <p style={{fontSize:"12px",color:"#6f6966",margin:"4px 0 0",maxWidth:"480px",lineHeight:1.45}}>
+                        Paste your session cookies to sign in, automatically import all your playlists and liked songs, and bypass download restrictions.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={onOpenYouTubeCookieModal}
+                      style={{
+                        padding:"8px 18px",
+                        borderRadius:"20px",
+                        border:"none",
+                        background:"var(--v-accent, #ffffff)",
+                        color:"#000000",
+                        fontSize:"13px",
+                        fontWeight:700,
+                        cursor:"pointer",
+                        whiteSpace:"nowrap",
+                        boxShadow:"0 2px 10px rgba(0,0,0,0.3)"
+                      }}
+                    >
+                      Connect YouTube Account
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>

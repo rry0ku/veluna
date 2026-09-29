@@ -5,6 +5,7 @@ mod metadata;
 mod tray;
 #[cfg(target_os = "windows")]
 mod windows_smtc;
+mod youtube_auth;
 
 use discord_rich_presence::{activity, DiscordIpc, DiscordIpcClient};
 use serde_json::Value;
@@ -279,7 +280,7 @@ fn init_bin_paths() {
 fn bin_mpv() -> &'static str {
     BIN_MPV.get().map(|s| s.as_str()).unwrap_or("mpv")
 }
-fn bin_ytdlp() -> &'static str {
+pub(crate) fn bin_ytdlp() -> &'static str {
     BIN_YTDLP.get().map(|s| s.as_str()).unwrap_or("yt-dlp")
 }
 fn bin_ffprobe() -> &'static str {
@@ -422,7 +423,7 @@ fn network_config() -> &'static Mutex<NetworkConfig> {
     NETWORK_CONFIG.get_or_init(|| Mutex::new(NetworkConfig::default()))
 }
 
-fn get_proxy_url() -> Option<String> {
+pub(crate) fn get_proxy_url() -> Option<String> {
     network_config()
         .lock()
         .unwrap_or_else(|p| p.into_inner())
@@ -447,7 +448,7 @@ fn apply_proxy_to_cmd(cmd: &mut std::process::Command) {
 type HttpClientCache = Mutex<Option<(Option<String>, reqwest::Client)>>;
 static CURRENT_HTTP_CLIENT: std::sync::OnceLock<HttpClientCache> = std::sync::OnceLock::new();
 
-fn create_http_client(timeout_ms: u64) -> reqwest::Client {
+pub(crate) fn create_http_client(timeout_ms: u64) -> reqwest::Client {
     let mut builder = reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(timeout_ms))
         .tcp_keepalive(std::time::Duration::from_secs(60));
@@ -1664,22 +1665,29 @@ async fn open_url_in_browser(app: tauri::AppHandle, url: String) -> Result<(), S
 }
 
 #[tauri::command]
-async fn import_youtube_playlist(url: String) -> Result<String, String> {
+async fn import_youtube_playlist(app: tauri::AppHandle, url: String) -> Result<String, String> {
     let u_trim = url.trim();
     let mut cmd = tokio::process::Command::new(bin_ytdlp());
     cmd.kill_on_drop(true);
-    cmd.args([
-        "--flat-playlist",
-        "--yes-playlist",
-        "--no-warnings",
-        "--ignore-errors",
-        "--geo-bypass",
-        "--socket-timeout", "15",
-        "--no-config",
-        "--print", "%(id)s====%(title)s====%(duration_string|0:00)s====%(artist,uploader,channel,creator,uploader_id|Unknown)s====%(playlist,playlist_title|YouTube Playlist)s",
-        "--",
-        u_trim,
-    ]);
+    let mut args = vec![
+        "--flat-playlist".to_string(),
+        "--yes-playlist".to_string(),
+        "--no-warnings".to_string(),
+        "--ignore-errors".to_string(),
+        "--geo-bypass".to_string(),
+        "--socket-timeout".to_string(),
+        "15".to_string(),
+        "--no-config".to_string(),
+    ];
+    if let Some(cookie_file) = youtube_auth::get_valid_cookies_file(&app) {
+        args.push("--cookies".to_string());
+        args.push(cookie_file.to_string_lossy().to_string());
+    }
+    args.push("--print".to_string());
+    args.push("%(id)s====%(title)s====%(duration_string|0:00)s====%(artist,uploader,channel,creator,uploader_id|Unknown)s====%(playlist,playlist_title|YouTube Playlist)s".to_string());
+    args.push("--".to_string());
+    args.push(u_trim.to_string());
+    cmd.args(args);
     if let Some(proxy_str) = get_proxy_url() {
         cmd.args(["--proxy", &proxy_str]);
     }
@@ -3096,7 +3104,10 @@ async fn download_song(
         }
     }
 
-    if let Some(ref browser) = cookie_browser {
+    if let Some(cookie_file) = youtube_auth::get_valid_cookies_file(&app_handle) {
+        args.push("--cookies".to_string());
+        args.push(cookie_file.to_string_lossy().to_string());
+    } else if let Some(ref browser) = cookie_browser {
         let b = browser.trim().to_lowercase();
         if b != "none" && !b.is_empty() {
             args.push("--cookies-from-browser".to_string());
@@ -6291,6 +6302,48 @@ async fn download_stream_chunked(
     .await
 }
 
+#[tauri::command]
+async fn save_youtube_cookies(
+    app: tauri::AppHandle,
+    raw_cookies: String,
+) -> Result<youtube_auth::YouTubeAuthStatus, String> {
+    youtube_auth::save_youtube_cookies_internal(&app, raw_cookies).await
+}
+
+#[tauri::command]
+async fn get_youtube_accounts(
+    app: tauri::AppHandle,
+) -> Result<Vec<youtube_auth::YouTubeAccount>, String> {
+    let status = youtube_auth::get_youtube_auth_status_internal(&app);
+    Ok(status.accounts)
+}
+
+#[tauri::command]
+async fn select_youtube_account(
+    app: tauri::AppHandle,
+    account_id: String,
+) -> Result<youtube_auth::YouTubeAuthStatus, String> {
+    youtube_auth::select_youtube_account_internal(&app, account_id).await
+}
+
+#[tauri::command]
+async fn sync_youtube_library(
+    app: tauri::AppHandle,
+    page_id: Option<String>,
+) -> Result<youtube_auth::SyncResult, String> {
+    youtube_auth::sync_youtube_library_internal(&app, page_id).await
+}
+
+#[tauri::command]
+fn get_youtube_auth_status(app: tauri::AppHandle) -> youtube_auth::YouTubeAuthStatus {
+    youtube_auth::get_youtube_auth_status_internal(&app)
+}
+
+#[tauri::command]
+fn clear_youtube_cookies(app: tauri::AppHandle) -> Result<(), String> {
+    youtube_auth::clear_youtube_cookies_internal(&app)
+}
+
 fn main() {
     #[cfg(target_os = "linux")]
     {
@@ -6456,6 +6509,12 @@ fn main() {
             get_ytdlp_version,
             update_ytdlp,
             clear_download_archive,
+            save_youtube_cookies,
+            get_youtube_accounts,
+            select_youtube_account,
+            sync_youtube_library,
+            get_youtube_auth_status,
+            clear_youtube_cookies,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
