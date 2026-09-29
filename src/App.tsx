@@ -842,36 +842,9 @@ export function App() {
   const [bulkEditPlaylist, setBulkEditPlaylist] = useState<Playlist | null>(null);
   const [showYouTubeCookieModal, setShowYouTubeCookieModal] = useState(false);
 
-  const handleYouTubeLibrarySynced = useCallback((result: { liked_songs: any[]; playlists: any[] }) => {
+  const handleYouTubeLibrarySynced = useCallback((result: { liked_songs_count: number; playlists: any[] }) => {
     setPlaylists(prev => {
       let updated = [...prev];
-      const p1Idx = updated.findIndex(p => p.id === 'p1');
-      const incomingLiked: Track[] = (result.liked_songs || []).map(t => ({
-        id: Number(t.id) || (Date.now() + Math.floor(Math.random() * 100000)),
-        title: t.title,
-        artist: t.artist,
-        duration: t.duration,
-        url: t.url,
-        cover: t.cover,
-        album: t.album,
-      }));
-
-      if (p1Idx >= 0) {
-        const existingUrls = new Set(updated[p1Idx].tracks.map(t => t.url));
-        const newTracks = incomingLiked.filter(t => !existingUrls.has(t.url));
-        updated[p1Idx] = {
-          ...updated[p1Idx],
-          tracks: [...updated[p1Idx].tracks, ...newTracks],
-        };
-      } else {
-        const newP1: Playlist = {
-          id: 'p1',
-          name: 'Liked Songs',
-          description: '',
-          tracks: incomingLiked,
-        };
-        updated.unshift(newP1);
-      }
 
       for (const pl of (result.playlists || [])) {
         const existingPlIdx = updated.findIndex(p => p.id === pl.id || p.name.toLowerCase() === pl.name.toLowerCase());
@@ -2421,7 +2394,6 @@ export function App() {
             squareThumbnailEnabled={squareThumbnailEnabled}
             setSquareThumbnailEnabled={setSquareThumbnailEnabled}
             onOpenYouTubeCookieModal={() => setShowYouTubeCookieModal(true)}
-            onLibrarySynced={handleYouTubeLibrarySynced}
             onBackup={handleBackup}
             onRestore={handleRestore}
             onReset={() => setConfirmModal({

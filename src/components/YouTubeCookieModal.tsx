@@ -25,7 +25,7 @@ export interface YouTubeAuthStatus {
 interface YouTubeCookieModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onLibrarySynced: (result: { liked_songs: any[]; playlists: any[] }) => void;
+  onLibrarySynced: (result: { liked_songs_count: number; playlists: any[] }) => void;
   showToast: (msg: string) => void;
 }
 
@@ -145,12 +145,11 @@ export const YouTubeCookieModal: React.FC<YouTubeCookieModalProps> = ({
     try {
       const result = await invoke<{
         liked_songs_count: number;
-        liked_songs: any[];
         playlists: any[];
       }>('sync_youtube_library', { pageId, authUser });
 
       onLibrarySynced({
-        liked_songs: result.liked_songs || [],
+        liked_songs_count: result.liked_songs_count || 0,
         playlists: result.playlists || [],
       });
 

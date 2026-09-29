@@ -97,7 +97,6 @@ export type SettingsPanelProps = {
   downloadNamingPattern?: string; setDownloadNamingPattern?: (p: string) => void;
   squareThumbnailEnabled?: boolean; setSquareThumbnailEnabled?: (v: boolean) => void;
   onOpenYouTubeCookieModal?: () => void;
-  onLibrarySynced?: (result: { liked_songs: any[]; playlists: any[] }) => void;
 };
 
 export const SettingsPanel = React.memo(function SettingsPanel({
@@ -112,7 +111,6 @@ export const SettingsPanel = React.memo(function SettingsPanel({
   downloadNamingPattern = 'standard', setDownloadNamingPattern,
   squareThumbnailEnabled = true, setSquareThumbnailEnabled,
   onOpenYouTubeCookieModal,
-  onLibrarySynced,
   onBackup, onRestore, onReset,
   backupPath, setBackupPath,
   loudnormEnabled, setLoudnormEnabled,
@@ -216,9 +214,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
     active_account?: { id: string; name: string; handle?: string; avatar_url?: string; is_selected: boolean; page_id?: string };
     accounts: any[];
     cookie_count: number;
-    last_synced?: number;
   } | null>(null);
-  const [isSyncingYt, setIsSyncingYt] = useState(false);
 
   const loadYtAuth = React.useCallback(async () => {
     try {
@@ -238,26 +234,6 @@ export const SettingsPanel = React.memo(function SettingsPanel({
       showToast?.('YouTube session disconnected');
     } catch {
       showToast?.('Failed to disconnect cookies');
-    }
-  };
-
-  const handleQuickSyncYt = async () => {
-    if (!ytAuthStatus?.is_authenticated) {
-      onOpenYouTubeCookieModal?.();
-      return;
-    }
-    setIsSyncingYt(true);
-    try {
-      const result = await invoke<any>('sync_youtube_library', {
-        pageId: ytAuthStatus.active_account?.page_id || null,
-      });
-      onLibrarySynced?.(result);
-      await loadYtAuth();
-      showToast?.(`Synced ${result.liked_songs_count} liked songs & ${result.playlists?.length || 0} playlists!`);
-    } catch (err: any) {
-      showToast?.(typeof err === 'string' ? err : 'Sync failed');
-    } finally {
-      setIsSyncingYt(false);
     }
   };
 
@@ -1530,68 +1506,26 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                           </div>
                           <div style={{fontSize:"12px",color:"#6f6966",marginTop:"2px"}}>
                             {ytAuthStatus.active_account?.handle || `${ytAuthStatus.cookie_count} cookies loaded`}
-                            {ytAuthStatus.last_synced ? ` • Synced ${new Date(ytAuthStatus.last_synced * 1000).toLocaleDateString()}` : ''}
                           </div>
                         </div>
                       </div>
 
-                      <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
-                        <button
-                          type="button"
-                          onClick={handleQuickSyncYt}
-                          disabled={isSyncingYt}
-                          style={{
-                            padding:"7px 14px",
-                            borderRadius:"8px",
-                            border:"1px solid var(--v-bdr2)",
-                            background:"rgba(255,255,255,0.06)",
-                            color:"#e2ddd9",
-                            fontSize:"12px",
-                            fontWeight:600,
-                            cursor:isSyncingYt ? "not-allowed" : "pointer",
-                            display:"flex",
-                            alignItems:"center",
-                            gap:"6px"
-                          }}
-                        >
-                          <RefreshCw size={13} className={isSyncingYt ? "animate-spin" : ""} />
-                          {isSyncingYt ? "Syncing..." : "Sync Library"}
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={onOpenYouTubeCookieModal}
-                          style={{
-                            padding:"7px 14px",
-                            borderRadius:"8px",
-                            border:"1px solid var(--v-bdr2)",
-                            background:"rgba(255,255,255,0.06)",
-                            color:"#e2ddd9",
-                            fontSize:"12px",
-                            fontWeight:600,
-                            cursor:"pointer"
-                          }}
-                        >
-                          Update Cookies
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={handleDisconnectYt}
-                          style={{
-                            padding:"7px 12px",
-                            borderRadius:"8px",
-                            border:"1px solid rgba(239,68,68,0.25)",
-                            background:"rgba(239,68,68,0.08)",
-                            color:"#f87171",
-                            fontSize:"12px",
-                            fontWeight:600,
-                            cursor:"pointer"
-                          }}
-                        >
-                          Disconnect
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={handleDisconnectYt}
+                        style={{
+                          padding:"7px 12px",
+                          borderRadius:"8px",
+                          border:"1px solid rgba(239,68,68,0.25)",
+                          background:"rgba(239,68,68,0.08)",
+                          color:"#f87171",
+                          fontSize:"12px",
+                          fontWeight:600,
+                          cursor:"pointer"
+                        }}
+                      >
+                        Disconnect
+                      </button>
                     </div>
                   </div>
                 ) : (

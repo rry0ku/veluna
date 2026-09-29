@@ -23,7 +23,6 @@ pub struct YouTubeAuthStatus {
     pub active_account: Option<YouTubeAccount>,
     pub accounts: Vec<YouTubeAccount>,
     pub cookie_count: usize,
-    pub last_synced: Option<u64>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -60,7 +59,6 @@ pub struct SyncedPlaylist {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SyncResult {
     pub liked_songs_count: usize,
-    pub liked_songs: Vec<SyncedTrack>,
     pub playlists: Vec<SyncedPlaylist>,
 }
 
@@ -68,7 +66,6 @@ pub struct SyncResult {
 struct SavedAccountState {
     pub active_account: Option<YouTubeAccount>,
     pub accounts: Vec<YouTubeAccount>,
-    pub last_synced: Option<u64>,
 }
 
 pub fn get_storage_dir(app: &AppHandle) -> PathBuf {
@@ -209,7 +206,6 @@ fn load_saved_state(app: &AppHandle) -> SavedAccountState {
     SavedAccountState {
         active_account: None,
         accounts: Vec::new(),
-        last_synced: None,
     }
 }
 
@@ -239,7 +235,6 @@ pub fn get_youtube_auth_status_internal(app: &AppHandle) -> YouTubeAuthStatus {
         active_account: state.active_account,
         accounts: state.accounts,
         cookie_count,
-        last_synced: state.last_synced,
     }
 }
 
@@ -461,7 +456,6 @@ pub async fn save_youtube_cookies_internal(
     let state = SavedAccountState {
         active_account: active.clone(),
         accounts: accounts.clone(),
-        last_synced: None,
     };
     save_account_state(app, &state);
 
@@ -470,7 +464,6 @@ pub async fn save_youtube_cookies_internal(
         active_account: active,
         accounts,
         cookie_count: pairs.len(),
-        last_synced: None,
     })
 }
 
@@ -637,6 +630,190 @@ async fn query_innertube_playlists(
     playlists
 }
 
+async fn fetch_liked_songs_innertube(
+    raw_cookie_str: &str,
+    sapisid: &str,
+    page_id: Option<&str>,
+) -> Vec<SyncedTrack> {
+    let client = crate::create_http_client(30000);
+    let origin = "https://music.youtube.com";
+    let (ts, hash) = generate_sapisid_hash(sapisid, origin);
+    let auth_header = format!("SAPISIDHASH {}_{}", ts, hash);
+
+    let mut headers = HeaderMap::new();
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+    headers.insert(ORIGIN, HeaderValue::from_static("https://music.youtube.com"));
+    headers.insert("X-Origin", HeaderValue::from_static("https://music.youtube.com"));
+    headers.insert(USER_AGENT, HeaderValue::from_static(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+    ));
+    if let Ok(v) = HeaderValue::from_str(&auth_header) {
+        headers.insert("Authorization", v);
+    }
+    if let Ok(v) = HeaderValue::from_str(raw_cookie_str) {
+        headers.insert(COOKIE, v);
+    }
+    if let Some(pid) = page_id {
+        if let Ok(v) = HeaderValue::from_str(pid) {
+            headers.insert("X-Goog-PageId", v);
+        }
+    }
+
+    let base_body = serde_json::json!({
+        "context": {
+            "client": {
+                "clientName": "WEB_REMIX",
+                "clientVersion": "1.20240101.01.00",
+                "hl": "en"
+            }
+        },
+        "browseId": "FEmusic_liked_songs"
+    });
+
+    let mut all_tracks: Vec<SyncedTrack> = Vec::new();
+    let mut continuation_token: Option<String> = None;
+
+    // First request
+    let resp = client
+        .post("https://music.youtube.com/youtubei/v1/browse")
+        .headers(headers.clone())
+        .json(&base_body)
+        .send()
+        .await;
+
+    if let Ok(r) = resp {
+        if r.status().is_success() {
+            if let Ok(json_val) = r.json::<Value>().await {
+                extract_liked_songs_from_json(&json_val, &mut all_tracks, &mut continuation_token);
+            }
+        }
+    }
+
+    // Paginate if needed (continuation)
+    let mut page_count = 0;
+    while let Some(token) = continuation_token.take() {
+        page_count += 1;
+        if page_count > 20 { break; } // safety cap
+
+        let cont_body = serde_json::json!({
+            "context": {
+                "client": {
+                    "clientName": "WEB_REMIX",
+                    "clientVersion": "1.20240101.01.00",
+                    "hl": "en"
+                }
+            },
+            "continuation": token
+        });
+
+        let resp = client
+            .post("https://music.youtube.com/youtubei/v1/browse")
+            .headers(headers.clone())
+            .json(&cont_body)
+            .send()
+            .await;
+
+        match resp {
+            Ok(r) if r.status().is_success() => {
+                if let Ok(json_val) = r.json::<Value>().await {
+                    extract_liked_songs_from_json(&json_val, &mut all_tracks, &mut continuation_token);
+                }
+            }
+            _ => break,
+        }
+    }
+
+    all_tracks
+}
+
+fn extract_liked_songs_from_json(
+    val: &Value,
+    tracks: &mut Vec<SyncedTrack>,
+    continuation: &mut Option<String>,
+) {
+    // Look for continuation token anywhere
+    if let Some(token) = val
+        .pointer("/continuationContents/musicShelfContinuation/continuations/0/nextContinuationData/continuation")
+        .or_else(|| val.pointer("/contents/singleColumnBrowseResultsRenderer/tabs/0/tabRenderer/content/sectionListRenderer/contents/0/musicShelfRenderer/continuations/0/nextContinuationData/continuation"))
+        .and_then(|t| t.as_str())
+    {
+        *continuation = Some(token.to_string());
+    }
+
+    // Recursively find musicResponsiveListItemRenderer nodes which contain track data
+    find_responsive_items_in_json(val, tracks);
+}
+
+fn find_responsive_items_in_json(val: &Value, tracks: &mut Vec<SyncedTrack>) {
+    if let Some(obj) = val.as_object() {
+        if let Some(item) = obj.get("musicResponsiveListItemRenderer") {
+            // Extract video ID from overlay or flexColumns
+            let video_id = item
+                .pointer("/overlay/musicItemThumbnailOverlayRenderer/content/musicPlayButtonRenderer/playNavigationEndpoint/watchEndpoint/videoId")
+                .or_else(|| item.pointer("/flexColumns/0/musicResponsiveListItemFlexColumnRenderer/text/runs/0/navigationEndpoint/watchEndpoint/videoId"))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+
+            let Some(vid_id) = video_id else {
+                // Still recurse into children
+                for v in obj.values() {
+                    find_responsive_items_in_json(v, tracks);
+                }
+                return;
+            };
+
+            // Title from first flex column
+            let title = item
+                .pointer("/flexColumns/0/musicResponsiveListItemFlexColumnRenderer/text/runs/0/text")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Untitled")
+                .to_string();
+
+            // Artist from second flex column first run
+            let artist = item
+                .pointer("/flexColumns/1/musicResponsiveListItemFlexColumnRenderer/text/runs/0/text")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Unknown Artist")
+                .to_string();
+
+            // Duration from fixed columns
+            let duration = item
+                .pointer("/fixedColumns/0/musicResponsiveListItemFixedColumnRenderer/text/runs/0/text")
+                .and_then(|v| v.as_str())
+                .unwrap_or("0:00")
+                .to_string();
+
+            let thumbnail = item
+                .pointer("/thumbnail/musicThumbnailRenderer/thumbnail/thumbnails")
+                .and_then(|t| t.as_array())
+                .and_then(|arr| arr.last())
+                .and_then(|t| t.get("url"))
+                .and_then(|u| u.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| format!("https://i.ytimg.com/vi/{}/hqdefault.jpg", vid_id));
+
+            tracks.push(SyncedTrack {
+                id: generate_track_id(&vid_id),
+                title,
+                artist,
+                duration,
+                url: format!("https://www.youtube.com/watch?v={}", vid_id),
+                cover: thumbnail,
+                album: None,
+            });
+            return;
+        }
+
+        for v in obj.values() {
+            find_responsive_items_in_json(v, tracks);
+        }
+    } else if let Some(arr) = val.as_array() {
+        for v in arr {
+            find_responsive_items_in_json(v, tracks);
+        }
+    }
+}
+
 async fn fetch_tracks_from_playlist_url(
     url: &str,
     cookies_path: &Path,
@@ -724,17 +901,15 @@ pub async fn sync_youtube_library_internal(
         processed_items: 0,
     });
 
-    // 1. Fetch Liked Songs (LM or LL)
+    // 1. Fetch Liked Songs via InnerTube (avoids yt-dlp 403 on LM playlist)
     let mut liked_songs = Vec::new();
-    match fetch_tracks_from_playlist_url("https://music.youtube.com/playlist?list=LM", &cookies_path).await {
-        Ok(tracks) if !tracks.is_empty() => {
+    if let Some(sid) = sapisid {
+        liked_songs = fetch_liked_songs_innertube(&raw_cookies, sid, page_id.as_deref()).await;
+    }
+    // Fallback: try yt-dlp with LL (standard YouTube liked videos) if InnerTube returned nothing
+    if liked_songs.is_empty() {
+        if let Ok(tracks) = fetch_tracks_from_playlist_url("https://www.youtube.com/playlist?list=LL", &cookies_path).await {
             liked_songs = tracks;
-        }
-        _ => {
-            // Fallback to youtube.com/playlist?list=LL
-            if let Ok(tracks) = fetch_tracks_from_playlist_url("https://www.youtube.com/playlist?list=LL", &cookies_path).await {
-                liked_songs = tracks;
-            }
         }
     }
 
@@ -749,13 +924,25 @@ pub async fn sync_youtube_library_internal(
 
     // 2. Discover user playlists
     let mut discovered_playlists = Vec::new();
-    if let Some(sid) = sapisid {
-        discovered_playlists = query_innertube_playlists(&raw_cookies, sid, page_id.as_deref()).await;
+    if let Some(sid2) = get_sapisid(&pairs) {
+        discovered_playlists = query_innertube_playlists(&raw_cookies, sid2, page_id.as_deref()).await;
     }
 
     let total_playlists = discovered_playlists.len();
-    let mut synced_playlists = Vec::new();
+    let mut synced_playlists: Vec<SyncedPlaylist> = Vec::new();
 
+    // 2a. Add liked songs as a separate "Liked Songs (YT)" playlist
+    if !liked_songs.is_empty() {
+        synced_playlists.push(SyncedPlaylist {
+            id: "yt_liked".to_string(),
+            name: "Liked Songs (YT)".to_string(),
+            description: "Liked songs imported from YouTube Music".to_string(),
+            tracks: liked_songs.clone(),
+            custom_cover: None,
+        });
+    }
+
+    // 2b. Import regular user playlists
     for (idx, (pl_id, pl_name, pl_cover)) in discovered_playlists.into_iter().enumerate() {
         let pct = 40.0 + ((idx as f64) / (total_playlists.max(1) as f64)) * 55.0;
         let _ = app.emit("youtube_sync_progress", SyncProgressPayload {
@@ -779,19 +966,14 @@ pub async fn sync_youtube_library_internal(
         }
     }
 
-    let now_ts = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-
-    let mut state = load_saved_state(app);
-    state.last_synced = Some(now_ts);
-    save_account_state(app, &state);
-
     let _ = app.emit("youtube_sync_progress", SyncProgressPayload {
         stage: "completed".to_string(),
         progress: 100.0,
-        message: format!("Sync complete! Imported {} liked songs and {} playlists.", liked_songs.len(), synced_playlists.len()),
+        message: format!(
+            "Import complete! {} liked songs and {} playlists imported.",
+            liked_songs.len(),
+            synced_playlists.len().saturating_sub(if liked_songs.is_empty() { 0 } else { 1 })
+        ),
         current_item: None,
         total_items: total_playlists,
         processed_items: total_playlists,
@@ -799,7 +981,6 @@ pub async fn sync_youtube_library_internal(
 
     Ok(SyncResult {
         liked_songs_count: liked_songs.len(),
-        liked_songs,
         playlists: synced_playlists,
     })
 }

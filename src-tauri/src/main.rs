@@ -6530,6 +6530,8 @@ fn main() {
                 }
             }
             tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
+                // Wipe YouTube session cookies on exit (privacy: one-shot import only)
+                let _ = youtube_auth::clear_youtube_cookies_internal(app_handle);
                 if let Some(mut child) = mpv_process()
                     .lock()
                     .unwrap_or_else(|p| p.into_inner())
