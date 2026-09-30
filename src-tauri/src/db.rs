@@ -286,13 +286,22 @@ pub fn get_all_playlists() -> Result<Vec<DbPlaylist>, String> {
 }
 
 pub fn delete_playlist(id: &str) -> Result<(), String> {
+    delete_playlists(&[id.to_string()])
+}
+
+pub fn delete_playlists(ids: &[String]) -> Result<(), String> {
+    if ids.is_empty() {
+        return Ok(());
+    }
     with_db_mut(|conn| {
         let tx = conn.transaction()?;
-        tx.execute(
-            "DELETE FROM playlist_tracks WHERE playlist_id = ?1",
-            params![id],
-        )?;
-        tx.execute("DELETE FROM playlists WHERE id = ?1", params![id])?;
+        for id in ids {
+            tx.execute(
+                "DELETE FROM playlist_tracks WHERE playlist_id = ?1",
+                params![id],
+            )?;
+            tx.execute("DELETE FROM playlists WHERE id = ?1", params![id])?;
+        }
         tx.commit()?;
         Ok(())
     })

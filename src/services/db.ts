@@ -94,10 +94,21 @@ export async function dbGetPlaylists(): Promise<Playlist[]> {
 }
 
 export async function dbDeletePlaylist(id: string): Promise<void> {
+  return dbDeletePlaylists([id]);
+}
+
+export async function dbDeletePlaylists(ids: string[]): Promise<void> {
+  if (!ids || ids.length === 0) return;
   try {
-    await invoke('db_delete_playlist', { id });
+    await invoke('db_delete_playlists', { ids });
   } catch (err) {
-    console.warn('Failed to delete playlist in SQLite:', err);
+    console.warn('Failed to delete playlists in SQLite:', err);
+    // Fallback to sequential deletion if batch call fails
+    for (const id of ids) {
+      try {
+        await invoke('db_delete_playlist', { id });
+      } catch {}
+    }
   }
 }
 

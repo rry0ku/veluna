@@ -597,6 +597,7 @@ export function App() {
     toggleLikeTrack,
     isTrackLiked,
     confirmCreatePlaylist,
+    requestDeleteSelectedPlaylists,
     confirmRenamePlaylist,
     confirmDeletePlaylist,
     handleCoverUpload: handlePlaylistCoverUpload,
@@ -2295,6 +2296,7 @@ export function App() {
             setShowYtImportModal={setShowYtImportModal}
             handleImportPlaylistM3u={handleImportPlaylistM3u}
             setPlaylistDeleteModal={setPlaylistDeleteModal}
+            requestDeleteSelectedPlaylists={requestDeleteSelectedPlaylists}
             setRenamingPlaylist={setRenamingPlaylist}
             setRenameVal={setRenameVal}
             setRenameDescVal={setRenameDescVal}

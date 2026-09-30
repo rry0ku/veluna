@@ -6180,6 +6180,11 @@ fn db_delete_playlist(id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn db_delete_playlists(ids: Vec<String>) -> Result<(), String> {
+    db::delete_playlists(&ids)
+}
+
+#[tauri::command]
 fn db_record_play_event(
     url: String,
     title: String,
@@ -6378,6 +6383,7 @@ fn main() {
             db_save_playlist,
             db_get_playlists,
             db_delete_playlist,
+            db_delete_playlists,
             db_record_play_event,
             db_update_listening_time,
             db_get_listening_stats,

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Playlist, Track } from '../types';
 import { loadLS, saveLS } from '../utils';
-import { dbSavePlaylist, dbDeletePlaylist, dbGetPlaylists } from '../services/db';
+import { dbSavePlaylist, dbDeletePlaylists, dbGetPlaylists } from '../services/db';
 
 export function usePlaylists(showToast?: (msg: string) => void) {
   const [playlists, setPlaylistsState] = useState<Playlist[]>(() =>
@@ -83,25 +83,32 @@ export function usePlaylists(showToast?: (msg: string) => void) {
   const requestDeleteSelectedPlaylists = useCallback(() => {
     const validIds = selectedPlaylistIds.filter(id => id !== 'p1');
     if (validIds.length === 0) return;
-    const names = playlists.filter(p => validIds.includes(p.id)).map(p => p.name);
+    const names = validIds.map(id => playlists.find(p => String(p.id) === String(id))?.name || 'Playlist');
     setPlaylistDeleteModal({ ids: validIds, names });
   }, [selectedPlaylistIds, playlists]);
 
-  const confirmDeletePlaylist = useCallback(() => {
+  const confirmDeletePlaylist = useCallback(async () => {
     if (!playlistDeleteModal) return;
     const idsToDelete = playlistDeleteModal.ids;
-    setPlaylists(p => p.filter(x => !idsToDelete.includes(x.id)));
-    idsToDelete.forEach(id => dbDeletePlaylist(id));
-    if (openPlaylistId && idsToDelete.includes(openPlaylistId)) {
+    if (!idsToDelete || idsToDelete.length === 0) {
+      setPlaylistDeleteModal(null);
+      return;
+    }
+    const idSet = new Set(idsToDelete.map(id => String(id)));
+    setPlaylists(prev => {
+      const updated = (prev || []).filter(x => x && !idSet.has(String(x.id)));
+      saveLS('vg_playlists', updated);
+      return updated;
+    });
+    if (openPlaylistId && idSet.has(String(openPlaylistId))) {
       setOpenPlaylistId(null);
     }
-    setSelectedPlaylistIds(prev => prev.filter(id => !idsToDelete.includes(id)));
-    if (idsToDelete.length > 1) {
-      setIsPlaylistMultiSelect(false);
-    }
+    setSelectedPlaylistIds(prev => prev.filter(id => !idSet.has(String(id))));
+    setIsPlaylistMultiSelect(false);
     const count = idsToDelete.length;
     setPlaylistDeleteModal(null);
     if (showToast) showToast(count === 1 ? 'Playlist deleted' : `${count} playlists deleted`);
+    await dbDeletePlaylists(idsToDelete);
   }, [playlistDeleteModal, openPlaylistId, setPlaylists, showToast]);
 
   const confirmRenamePlaylist = useCallback(() => {

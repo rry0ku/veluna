@@ -1592,45 +1592,6 @@ export function PlaylistDeleteConfirmModal({
           </div>
         </div>
 
-        {isMulti && (
-          <div
-            style={{
-              margin: '0 20px 16px 20px',
-              maxHeight: '160px',
-              overflowY: 'auto',
-              padding: '8px 10px',
-              borderRadius: '8px',
-              background: 'rgba(255, 255, 255, 0.03)',
-              border: '1px solid rgba(255, 255, 255, 0.07)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '3px'
-            }}
-            className="custom-scrollbar"
-          >
-            {modalData.names.map((name, i) => (
-              <div
-                key={i}
-                style={{
-                  fontSize: '12px',
-                  fontWeight: 500,
-                  color: '#c8c3bf',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  padding: '2px 0'
-                }}
-              >
-                <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: 'var(--v-accent)', flexShrink: 0, opacity: 0.7 }} />
-                {name || 'Playlist'}
-              </div>
-            ))}
-          </div>
-        )}
-
         <div
           style={{
             display: 'flex',

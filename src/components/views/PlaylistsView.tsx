@@ -200,7 +200,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
   const requestDeleteSelectedPlaylists = customRequestDelete || (() => {
     const validIds = selectedPlaylistIds.filter(id => id !== 'p1');
     if (validIds.length === 0) return;
-    const names = validIds.map(id => playlists.find(p => p.id === id)?.name || 'Playlist');
+    const names = validIds.map(id => playlists.find(p => String(p.id) === String(id))?.name || 'Playlist');
     if (setPlaylistDeleteModal) {
       setPlaylistDeleteModal({ ids: validIds, names });
     }
@@ -819,7 +819,8 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                       <button
                         onClick={() => {
                           const deletable = playlists.filter(p => p.id !== 'p1').map(p => p.id);
-                          if (selectedPlaylistIds.length === deletable.length) {
+                          const isAllSelected = deletable.length > 0 && deletable.every(id => selectedPlaylistIds.includes(id));
+                          if (isAllSelected) {
                             setSelectedPlaylistIds([]);
                           } else {
                             setSelectedPlaylistIds(deletable);
@@ -842,7 +843,11 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                         onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--v-accent)'; }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; }}
                       >
-                        {selectedPlaylistIds.length === playlists.filter(p => p.id !== 'p1').length ? 'Deselect All' : 'Select All'}
+                        {(() => {
+                          const deletable = playlists.filter(p => p.id !== 'p1');
+                          const isAllSelected = deletable.length > 0 && deletable.every(p => selectedPlaylistIds.includes(p.id));
+                          return isAllSelected ? 'Deselect All' : 'Select All';
+                        })()}
                       </button>
 
                       <button
