@@ -160,7 +160,7 @@ export const YouTubeCookieModal: React.FC<YouTubeCookieModalProps> = ({
 
       setStep('done');
       setIsLoading(false);
-      showToast(`Imported ${result.liked_songs_count} liked songs & ${result.playlists?.length || 0} playlists!`);
+      showToast(`Imported ${result.liked_songs_count} liked tracks & ${result.playlists?.length || 0} playlists!`);
     } catch (err: any) {
       setError(typeof err === 'string' ? err : err?.message || 'Failed to sync library.');
       setStep('paste');
@@ -667,7 +667,7 @@ export const YouTubeCookieModal: React.FC<YouTubeCookieModalProps> = ({
                     <div style={{ fontSize: '16px', fontWeight: 700, color: '#f0ede8' }}>
                       {syncSummary?.likedCount ?? 0}
                     </div>
-                    <div style={{ fontSize: '11px', color: '#7a7470', fontWeight: 600 }}>LIKED SONGS</div>
+                    <div style={{ fontSize: '11px', color: '#7a7470', fontWeight: 600 }}>LIKED MUSIC</div>
                   </div>
                 </div>
 

@@ -669,6 +669,10 @@ async fn fetch_liked_songs_innertube(
         }
     }
 
+    let mut all_tracks: Vec<SyncedTrack> = Vec::new();
+    let mut continuation_token: Option<String> = None;
+
+    // 1. Try browseId FEmusic_liked_songs
     let base_body = serde_json::json!({
         "context": {
             "client": {
@@ -680,10 +684,6 @@ async fn fetch_liked_songs_innertube(
         "browseId": "FEmusic_liked_songs"
     });
 
-    let mut all_tracks: Vec<SyncedTrack> = Vec::new();
-    let mut continuation_token: Option<String> = None;
-
-    // First request
     let resp = client
         .post("https://music.youtube.com/youtubei/v1/browse")
         .headers(headers.clone())
@@ -699,11 +699,39 @@ async fn fetch_liked_songs_innertube(
         }
     }
 
-    // Paginate if needed (continuation)
+    // 2. If FEmusic_liked_songs returned nothing, try VLLM (YouTube Music playlist browseId for Liked Music)
+    if all_tracks.is_empty() {
+        let vllm_body = serde_json::json!({
+            "context": {
+                "client": {
+                    "clientName": "WEB_REMIX",
+                    "clientVersion": "1.20240101.01.00",
+                    "hl": "en"
+                }
+            },
+            "browseId": "VLLM"
+        });
+
+        if let Ok(resp) = client
+            .post("https://music.youtube.com/youtubei/v1/browse")
+            .headers(headers.clone())
+            .json(&vllm_body)
+            .send()
+            .await
+        {
+            if resp.status().is_success() {
+                if let Ok(json_val) = resp.json::<Value>().await {
+                    extract_liked_songs_from_json(&json_val, &mut all_tracks, &mut continuation_token);
+                }
+            }
+        }
+    }
+
+    // 3. Paginate continuations to fetch all songs (e.g. 500+ songs)
     let mut page_count = 0;
     while let Some(token) = continuation_token.take() {
         page_count += 1;
-        if page_count > 20 { break; } // safety cap
+        if page_count > 60 { break; } // Safety cap: 60 pages * ~25-100 items per page
 
         let cont_body = serde_json::json!({
             "context": {
@@ -716,8 +744,11 @@ async fn fetch_liked_songs_innertube(
             "continuation": token
         });
 
+        let encoded_token = urlencoding::encode(&token);
+        let cont_url = format!("https://music.youtube.com/youtubei/v1/browse?continuation={}&ctoken={}", encoded_token, encoded_token);
+
         let resp = client
-            .post("https://music.youtube.com/youtubei/v1/browse")
+            .post(&cont_url)
             .headers(headers.clone())
             .json(&cont_body)
             .send()
@@ -726,14 +757,46 @@ async fn fetch_liked_songs_innertube(
         match resp {
             Ok(r) if r.status().is_success() => {
                 if let Ok(json_val) = r.json::<Value>().await {
+                    let prev_len = all_tracks.len();
                     extract_liked_songs_from_json(&json_val, &mut all_tracks, &mut continuation_token);
+                    if all_tracks.len() == prev_len && continuation_token.is_none() {
+                        break;
+                    }
                 }
             }
             _ => break,
         }
     }
 
+    // Deduplicate by URL
+    let mut seen = std::collections::HashSet::new();
+    all_tracks.retain(|t| seen.insert(t.url.clone()));
+
     all_tracks
+}
+
+fn find_continuation_token(val: &Value) -> Option<String> {
+    if let Some(obj) = val.as_object() {
+        if let Some(token) = obj
+            .get("nextContinuationData")
+            .and_then(|n| n.get("continuation"))
+            .and_then(|c| c.as_str())
+        {
+            return Some(token.to_string());
+        }
+        for v in obj.values() {
+            if let Some(t) = find_continuation_token(v) {
+                return Some(t);
+            }
+        }
+    } else if let Some(arr) = val.as_array() {
+        for v in arr {
+            if let Some(t) = find_continuation_token(v) {
+                return Some(t);
+            }
+        }
+    }
+    None
 }
 
 fn extract_liked_songs_from_json(
@@ -741,31 +804,26 @@ fn extract_liked_songs_from_json(
     tracks: &mut Vec<SyncedTrack>,
     continuation: &mut Option<String>,
 ) {
-    // Look for continuation token anywhere
-    if let Some(token) = val
-        .pointer("/continuationContents/musicShelfContinuation/continuations/0/nextContinuationData/continuation")
-        .or_else(|| val.pointer("/contents/singleColumnBrowseResultsRenderer/tabs/0/tabRenderer/content/sectionListRenderer/contents/0/musicShelfRenderer/continuations/0/nextContinuationData/continuation"))
-        .and_then(|t| t.as_str())
-    {
-        *continuation = Some(token.to_string());
+    if let Some(token) = find_continuation_token(val) {
+        *continuation = Some(token);
     }
-
-    // Recursively find musicResponsiveListItemRenderer nodes which contain track data
     find_responsive_items_in_json(val, tracks);
 }
 
 fn find_responsive_items_in_json(val: &Value, tracks: &mut Vec<SyncedTrack>) {
     if let Some(obj) = val.as_object() {
         if let Some(item) = obj.get("musicResponsiveListItemRenderer") {
-            // Extract video ID from overlay or flexColumns
+            // Extract video ID from multiple possible locations
             let video_id = item
                 .pointer("/overlay/musicItemThumbnailOverlayRenderer/content/musicPlayButtonRenderer/playNavigationEndpoint/watchEndpoint/videoId")
                 .or_else(|| item.pointer("/flexColumns/0/musicResponsiveListItemFlexColumnRenderer/text/runs/0/navigationEndpoint/watchEndpoint/videoId"))
+                .or_else(|| item.pointer("/playlistItemData/videoId"))
+                .or_else(|| item.pointer("/navigationEndpoint/watchEndpoint/videoId"))
+                .or_else(|| item.pointer("/menu/menuRenderer/topLevelButtons/0/likeButtonRenderer/target/videoId"))
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string());
 
             let Some(vid_id) = video_id else {
-                // Still recurse into children
                 for v in obj.values() {
                     find_responsive_items_in_json(v, tracks);
                 }
@@ -779,7 +837,7 @@ fn find_responsive_items_in_json(val: &Value, tracks: &mut Vec<SyncedTrack>) {
                 .unwrap_or("Untitled")
                 .to_string();
 
-            // Artist from second flex column first run
+            // Artist from second flex column
             let artist = item
                 .pointer("/flexColumns/1/musicResponsiveListItemFlexColumnRenderer/text/runs/0/text")
                 .and_then(|v| v.as_str())
@@ -905,28 +963,22 @@ pub async fn sync_youtube_library_internal(
     let _ = app.emit("youtube_sync_progress", SyncProgressPayload {
         stage: "fetching_liked_songs".to_string(),
         progress: 10.0,
-        message: "Fetching your Liked Songs from YouTube Music...".to_string(),
-        current_item: Some("Liked Songs".to_string()),
+        message: "Fetching your Liked Music from YouTube Music...".to_string(),
+        current_item: Some("Liked Music".to_string()),
         total_items: 0,
         processed_items: 0,
     });
 
-    // 1. Fetch Liked Songs via InnerTube (avoids yt-dlp 403 on LM playlist)
+    // 1. Fetch Liked Music via InnerTube YouTube Music API (YouTube Music ONLY, never import non-music YouTube liked videos)
     let mut liked_songs = Vec::new();
     if let Some(sid) = sapisid {
         liked_songs = fetch_liked_songs_innertube(&raw_cookies, sid, page_id.as_deref()).await;
-    }
-    // Fallback: try yt-dlp with LL (standard YouTube liked videos) if InnerTube returned nothing
-    if liked_songs.is_empty() {
-        if let Ok(tracks) = fetch_tracks_from_playlist_url("https://www.youtube.com/playlist?list=LL", &cookies_path).await {
-            liked_songs = tracks;
-        }
     }
 
     let _ = app.emit("youtube_sync_progress", SyncProgressPayload {
         stage: "fetching_playlists".to_string(),
         progress: 35.0,
-        message: format!("Retrieved {} Liked Songs. Discovering your playlists...", liked_songs.len()),
+        message: format!("Retrieved {} Liked Music tracks. Discovering your playlists...", liked_songs.len()),
         current_item: None,
         total_items: 0,
         processed_items: 0,
@@ -941,12 +993,12 @@ pub async fn sync_youtube_library_internal(
     let total_playlists = discovered_playlists.len();
     let mut synced_playlists: Vec<SyncedPlaylist> = Vec::new();
 
-    // 2a. Add liked songs as a separate "Liked Songs (YT)" playlist
+    // 2a. Add liked music as a separate "Liked Music" playlist
     if !liked_songs.is_empty() {
         synced_playlists.push(SyncedPlaylist {
             id: "yt_liked".to_string(),
-            name: "Liked Songs (YT)".to_string(),
-            description: "Liked songs imported from YouTube Music".to_string(),
+            name: "Liked Music".to_string(),
+            description: "Liked music imported from YouTube Music".to_string(),
             tracks: liked_songs.clone(),
             custom_cover: None,
         });
