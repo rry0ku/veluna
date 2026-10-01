@@ -25,6 +25,7 @@ import { ThemedSelect } from '../ThemedSelect';
 import { BatchActionBar } from '../BatchActionBar';
 import { VirtualTrackList } from '../VirtualTrackList';
 import { useMultiSelect } from '../../hooks/useMultiSelect';
+import { isProtectedPlaylist } from '../../hooks/usePlaylists';
 
 interface PlaylistsViewProps {
   openPlaylistId: string | null;
@@ -183,7 +184,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
 
   const deletePlaylist = customDeletePlaylist || ((id: string) => {
     const pl = playlists.find(p => p.id === id);
-    if (!pl || id === 'p1') return;
+    if (!pl || isProtectedPlaylist(id)) return;
     if (setPlaylistDeleteModal) {
       setPlaylistDeleteModal({ ids: [id], names: [pl.name] });
     }
@@ -198,7 +199,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
   });
 
   const requestDeleteSelectedPlaylists = customRequestDelete || (() => {
-    const validIds = selectedPlaylistIds.filter(id => id !== 'p1');
+    const validIds = selectedPlaylistIds.filter(id => !isProtectedPlaylist(id));
     if (validIds.length === 0) return;
     const names = validIds.map(id => playlists.find(p => String(p.id) === String(id))?.name || 'Playlist');
     if (setPlaylistDeleteModal) {
@@ -493,7 +494,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                   return null;
                 })()}
 
-                {openPlaylist.id !== 'p1' && (
+                {!isProtectedPlaylist(openPlaylist.id) && (
                   <button onClick={()=>{setRenamingPlaylist(openPlaylist);setRenameVal(openPlaylist.name);setRenameDescVal(openPlaylist.description);}}
                     style={{
                       display:"flex",
@@ -522,7 +523,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                     <Pencil size={14}/> Edit
                   </button>
                 )}
-                {openPlaylist.id !== 'p1' && (
+                {!isProtectedPlaylist(openPlaylist.id) && (
                   <button onClick={()=>{deletePlaylist(openPlaylist.id);setOpenPlaylistId(null);}}
                     style={{
                       display:"flex",
@@ -818,7 +819,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                     <>
                       <button
                         onClick={() => {
-                          const deletable = playlists.filter(p => p.id !== 'p1').map(p => p.id);
+                          const deletable = playlists.filter(p => !isProtectedPlaylist(p.id)).map(p => p.id);
                           const isAllSelected = deletable.length > 0 && deletable.every(id => selectedPlaylistIds.includes(id));
                           if (isAllSelected) {
                             setSelectedPlaylistIds([]);
@@ -844,7 +845,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                         onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; }}
                       >
                         {(() => {
-                          const deletable = playlists.filter(p => p.id !== 'p1');
+                          const deletable = playlists.filter(p => !isProtectedPlaylist(p.id));
                           const isAllSelected = deletable.length > 0 && deletable.every(p => selectedPlaylistIds.includes(p.id));
                           return isAllSelected ? 'Deselect All' : 'Select All';
                         })()}
@@ -930,7 +931,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                         </div>
                       </div>
 
-                      {playlists.some(p => p.id !== 'p1') && (
+                      {playlists.some(p => !isProtectedPlaylist(p.id)) && (
                         <button
                           onClick={() => setIsPlaylistMultiSelect(true)}
                           style={{
@@ -957,7 +958,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
 
                       <button onClick={() => { setNewPlaylistName?.(''); setNewPlaylistDesc?.(''); setIsPlaylistModalOpen(true); }}
                         className="v-new-playlist-btn">
-                        <PlusCircle size={13} /> <span>New Playlist</span>
+                          <PlusCircle size={13} /> <span>New Playlist</span>
                       </button>
                     </>
                   )}
@@ -970,7 +971,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                     const isDragTarget = dragOverPlaylistCardIdx === plIdx && dragPlaylistCardIdx.current !== null && dragPlaylistCardIdx.current !== plIdx;
                     const isSelected = selectedPlaylistIds.includes(pl.id);
                     const toggleSelect = () => {
-                      if (pl.id === 'p1') return;
+                      if (isProtectedPlaylist(pl.id)) return;
                       setSelectedPlaylistIds(prev => prev.includes(pl.id) ? prev.filter(id => id !== pl.id) : [...prev, pl.id]);
                     };
                     return (
@@ -1006,7 +1007,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                           }} />
                         )}
 
-                        {isPlaylistMultiSelect && pl.id !== 'p1' && (
+                        {isPlaylistMultiSelect && !isProtectedPlaylist(pl.id) && (
                           <div
                             onClick={e => { e.stopPropagation(); toggleSelect(); }}
                             style={{
@@ -1068,7 +1069,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                             window.addEventListener('mouseup', onUp);
                           }}>
                           <div style={{position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-                            {pl.id==='p1'
+                            {isProtectedPlaylist(pl.id)
                               ? <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,rgba(140,30,30,0.4) 0%,rgba(140,30,30,0.1) 100%)"}}><Heart size={22} style={{color:"#e05555",fill:"rgba(220,60,60,0.25)"}}/></div>
                               : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,rgba(255,255,255,0.03) 0%,rgba(255,255,255,0.01) 100%)"}}><ListMusic size={24} style={{color:"var(--v-fg3)"}}/></div>}
                           </div>
@@ -1090,7 +1091,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                         <div style={{fontSize:"11px",color:"#8a807c",marginTop:"4px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                           {pl.description?pl.description:`${pl.tracks.length} track${pl.tracks.length!==1?'s':''}`}
                         </div>
-                        {pl.id!=='p1' && !isPlaylistMultiSelect && (
+                        {!isProtectedPlaylist(pl.id) && !isPlaylistMultiSelect && (
                           <button onClick={e=>{e.stopPropagation();deletePlaylist(pl.id);}}
                             className="pl-card-del"
                             style={{position:"absolute",top:"10px",right:"10px",opacity:0,width:"26px",height:"26px",display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.75)",borderRadius:"8px",border:"1px solid rgba(255,255,255,0.06)",cursor:"pointer",color:"#8a807c",transition:"all .2s cubic-bezier(0.2,0,0,1)",zIndex:6}}
@@ -1110,7 +1111,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                     const isDragTarget = dragOverPlaylistCardIdx === plIdx && dragPlaylistCardIdx.current !== null && dragPlaylistCardIdx.current !== plIdx;
                     const isSelected = selectedPlaylistIds.includes(pl.id);
                     const toggleSelect = () => {
-                      if (pl.id === 'p1') return;
+                      if (isProtectedPlaylist(pl.id)) return;
                       setSelectedPlaylistIds(prev => prev.includes(pl.id) ? prev.filter(id => id !== pl.id) : [...prev, pl.id]);
                     };
                     return (
@@ -1198,7 +1199,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                           }} />
                         )}
 
-                        {isPlaylistMultiSelect && pl.id !== 'p1' && (
+                        {isPlaylistMultiSelect && !isProtectedPlaylist(pl.id) && (
                           <div
                             onClick={e => { e.stopPropagation(); toggleSelect(); }}
                             style={{
@@ -1232,7 +1233,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                           }}
                         >
                           <div style={{position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-                            {pl.id==='p1'
+                            {isProtectedPlaylist(pl.id)
                               ? <Heart size={14} style={{color:"#e05555",fill:"rgba(220,60,60,0.25)"}}/>
                               : <ListMusic size={16} style={{color:"var(--v-fg3)"}}/>}
                           </div>
@@ -1259,7 +1260,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                             >
                               <Play size={10} style={{fill:"currentColor",marginLeft:"1px"}}/>
                             </button>
-                            {pl.id!=='p1'&&(
+                            {!isProtectedPlaylist(pl.id) && (
                               <button onClick={() => deletePlaylist(pl.id)}
                                 style={{width:"28px",height:"28px",background:"rgba(255,255,255,0.03)",color:"#8a807c",borderRadius:"8px",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid rgba(255,255,255,0.05)",cursor:"pointer",transition:"all 0.15s"}}
                                 onMouseEnter={e=>{e.currentTarget.style.color="#ff6060";e.currentTarget.style.background="rgba(160,40,40,0.15)";e.currentTarget.style.borderColor="rgba(255,96,96,0.15)";e.currentTarget.style.transform="scale(1.05)";}}

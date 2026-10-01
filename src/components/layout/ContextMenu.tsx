@@ -31,7 +31,8 @@ import {
   User,
 } from 'lucide-react';
 import { Track, LocalTrack, Playlist, CtxMenu, AudioInfo } from '../../types';
-import { getTrackGradient, cleanArtist } from '../../utils';
+import { getTrackGradient, cleanArtist, areTrackUrlsEqual } from '../../utils';
+import { isProtectedPlaylist } from '../../hooks/usePlaylists';
 import { CopyButton } from '../Modals';
 
 interface ContextMenuProps {
@@ -352,7 +353,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
 
         if ((ctxMenu.type === 'playlist' || ctxMenu.type === 'sidebar-playlist') && playlist) {
           const menuWidth = 200;
-          const menuHeight = playlist.id === 'p1' ? 340 : 430;
+          const menuHeight = isProtectedPlaylist(playlist.id) ? 340 : 430;
           const maxLeft = vw - menuWidth - 12;
           const maxTop = vh - menuHeight - 12;
           const left = Math.max(12, Math.min(ctxMenu.x, maxLeft));
@@ -386,7 +387,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
                 setCtxMenu(null);
               }}><ListPlus size={13} /> Add to Queue</button>
               <div className="v-ctx__sep" />
-              {playlist.id !== 'p1' && (
+              {!isProtectedPlaylist(playlist.id) && (
                 <button className="v-ctx__item" onClick={() => {
                   setRenamingPlaylist(playlist);
                   setRenameVal(playlist.name);
@@ -423,7 +424,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
                 handleExportPlaylistM3u(playlist);
                 setCtxMenu(null);
               }}><FileOutput size={13} /> Export M3U</button>
-              {playlist.id !== 'p1' && (
+              {!isProtectedPlaylist(playlist.id) && (
                 <button className="v-ctx__item v-ctx__item--danger" onClick={() => {
                   setPlaylistDeleteModal({ ids: [playlist.id], names: [playlist.name] });
                   setCtxMenu(null);
@@ -451,7 +452,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
             </div>
             <div style={{ padding: '4px 0', maxHeight: '220px', overflowY: 'auto' }} className="custom-scrollbar">
               {playlists.map(p => {
-                const alreadyIn = p.tracks.some(t => t.url === addToPlaylistTrack.url);
+                const alreadyIn = p.tracks.some(t => areTrackUrlsEqual(t.url, addToPlaylistTrack.url));
                 return (
                   <button
                     key={p.id}
@@ -461,7 +462,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
                     style={{ opacity: alreadyIn ? 0.4 : 1, cursor: alreadyIn ? 'not-allowed' : 'pointer' }}
                   >
                     <div style={{ width: '24px', height: '24px', borderRadius: '5px', overflow: 'hidden', flexShrink: 0, background: 'var(--v-bg3)', border: '1px solid var(--v-bdr)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {p.id === 'p1' ? <Heart size={12} style={{ color: 'var(--v-accent)', fill: 'currentColor' }} /> : <ListMusic size={13} style={{ color: 'var(--v-fg2)' }} />}
+                      {isProtectedPlaylist(p.id) ? <Heart size={12} style={{ color: 'var(--v-accent)', fill: 'currentColor' }} /> : <ListMusic size={13} style={{ color: 'var(--v-fg2)' }} />}
                     </div>
                     <span style={{ fontSize: '13px', color: 'var(--v-fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{p.name}</span>
                     {alreadyIn ? <span style={{ fontSize: '9.5px', color: 'var(--v-fg3)', fontWeight: 700 }}>Added</span> : <span style={{ fontSize: '10px', color: 'var(--v-fg3)' }}>{p.tracks.length}</span>}

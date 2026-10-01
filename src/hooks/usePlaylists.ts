@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Playlist, Track } from '../types';
-import { loadLS, saveLS } from '../utils';
+import { loadLS, saveLS, areTrackUrlsEqual } from '../utils';
 import { dbSavePlaylist, dbDeletePlaylists, dbGetPlaylists } from '../services/db';
+
+export const isProtectedPlaylist = (id: string) => id === 'p1' || id === 'yt_liked';
 
 export function usePlaylists(showToast?: (msg: string) => void) {
   const [playlists, setPlaylistsState] = useState<Playlist[]>(() =>
@@ -33,9 +35,21 @@ export function usePlaylists(showToast?: (msg: string) => void) {
         if (!hasCustom) {
           return dbPls;
         }
-        const existingIds = new Set(prev.map(p => p.id));
-        const toAdd = dbPls.filter(p => !existingIds.has(p.id));
-        return toAdd.length > 0 ? [...prev, ...toAdd] : prev;
+        const dbMap = new Map(dbPls.map(p => [p.id, p]));
+        const updated = prev.map(p => {
+          const dbPl = dbMap.get(p.id);
+          if (dbPl && dbPl.tracks.length > p.tracks.length) {
+            return dbPl;
+          }
+          return p;
+        });
+        const existingIds = new Set(updated.map(p => p.id));
+        for (const dbPl of dbPls) {
+          if (!existingIds.has(dbPl.id)) {
+            updated.push(dbPl);
+          }
+        }
+        return updated;
       });
     }).catch(() => {});
     return () => {
@@ -74,14 +88,14 @@ export function usePlaylists(showToast?: (msg: string) => void) {
   }, [newPlaylistName, newPlaylistDesc, setPlaylists, showToast]);
 
   const requestDeletePlaylist = useCallback((id: string) => {
-    if (id === 'p1') return;
+    if (isProtectedPlaylist(id)) return;
     const pl = playlists.find(p => p.id === id);
     if (!pl) return;
     setPlaylistDeleteModal({ ids: [id], names: [pl.name] });
   }, [playlists]);
 
   const requestDeleteSelectedPlaylists = useCallback(() => {
-    const validIds = selectedPlaylistIds.filter(id => id !== 'p1');
+    const validIds = selectedPlaylistIds.filter(id => !isProtectedPlaylist(id));
     if (validIds.length === 0) return;
     const names = validIds.map(id => playlists.find(p => String(p.id) === String(id))?.name || 'Playlist');
     setPlaylistDeleteModal({ ids: validIds, names });
@@ -89,7 +103,7 @@ export function usePlaylists(showToast?: (msg: string) => void) {
 
   const confirmDeletePlaylist = useCallback(async () => {
     if (!playlistDeleteModal) return;
-    const idsToDelete = playlistDeleteModal.ids;
+    const idsToDelete = playlistDeleteModal.ids.filter(id => !isProtectedPlaylist(id));
     if (!idsToDelete || idsToDelete.length === 0) {
       setPlaylistDeleteModal(null);
       return;
@@ -97,7 +111,13 @@ export function usePlaylists(showToast?: (msg: string) => void) {
     const idSet = new Set(idsToDelete.map(id => String(id)));
     setPlaylists(prev => {
       const updated = (prev || []).filter(x => x && !idSet.has(String(x.id)));
+      // Ensure p1 (Liked Songs) is strictly preserved
+      const p1 = prev.find(p => p.id === 'p1');
+      if (p1 && !updated.some(p => p.id === 'p1')) {
+        updated.unshift(p1);
+      }
       saveLS('vg_playlists', updated);
+      updated.forEach(p => dbSavePlaylist(p).catch(() => {}));
       return updated;
     });
     if (openPlaylistId && idSet.has(String(openPlaylistId))) {
@@ -112,7 +132,7 @@ export function usePlaylists(showToast?: (msg: string) => void) {
   }, [playlistDeleteModal, openPlaylistId, setPlaylists, showToast]);
 
   const confirmRenamePlaylist = useCallback(() => {
-    if (!renameVal.trim() || !renamingPlaylist) return;
+    if (!renameVal.trim() || !renamingPlaylist || isProtectedPlaylist(renamingPlaylist.id)) return;
     setPlaylists(p => p.map(x => x.id === renamingPlaylist.id ? { ...x, name: renameVal.trim(), description: renameDescVal.trim() } : x));
     setRenamingPlaylist(null);
     if (showToast) showToast('Playlist updated');
@@ -123,11 +143,20 @@ export function usePlaylists(showToast?: (msg: string) => void) {
       if (showToast) showToast('Offline tracks cannot be added to Liked Songs');
       return;
     }
-    setPlaylists(p => p.map(x => {
-      if (x.id !== 'p1') return x;
-      const liked = x.tracks.some(y => y.url === t.url);
-      return { ...x, tracks: liked ? x.tracks.filter(y => y.url !== t.url) : [...x.tracks, t] };
-    }));
+    setPlaylists(p => {
+      const updated = p.map(x => {
+        if (x.id !== 'p1') return x;
+        const liked = x.tracks.some(y => areTrackUrlsEqual(y.url, t.url));
+        const newTracks = liked
+          ? x.tracks.filter(y => !areTrackUrlsEqual(y.url, t.url))
+          : [...x.tracks, t];
+        return { ...x, tracks: newTracks };
+      });
+      saveLS('vg_playlists', updated);
+      const p1 = updated.find(x => x.id === 'p1');
+      if (p1) dbSavePlaylist(p1).catch(() => {});
+      return updated;
+    });
   }, [setPlaylists, showToast]);
 
   const addTrackToPlaylist = useCallback((pid: string, t: Track) => {
@@ -179,7 +208,8 @@ export function usePlaylists(showToast?: (msg: string) => void) {
   }, [setPlaylists, showToast]);
 
   const isTrackLiked = useCallback((url: string) => {
-    return playlists.find(p => p.id === 'p1')?.tracks.some(t => t.url === url) || false;
+    if (!url) return false;
+    return playlists.find(p => p.id === 'p1')?.tracks.some(t => areTrackUrlsEqual(t.url, url)) || false;
   }, [playlists]);
 
   const reorderPlaylistTracks = useCallback((pid: string, fromIdx: number, toIdx: number) => {

@@ -48,6 +48,7 @@ import { useSearch } from './hooks/useSearch';
 import { usePlaylists } from './hooks/usePlaylists';
 import { useAudioPlayer } from './hooks/useAudioPlayer';
 import { useScrobbler } from './hooks/useScrobbler';
+import { dbSavePlaylist } from './services/db';
 
 import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
@@ -871,16 +872,26 @@ export function App() {
         }));
 
         if (existingPlIdx >= 0) {
-          const existingUrls = new Set(updated[existingPlIdx].tracks.map(t => t.url));
-          const newTracks = convertedTracks.filter(t => !existingUrls.has(t.url));
-          updated[existingPlIdx] = {
-            ...updated[existingPlIdx],
-            tracks: [...updated[existingPlIdx].tracks, ...newTracks],
-            customCover: updated[existingPlIdx].customCover || pl.customCover,
-          };
+          if (pl.id === 'yt_liked' || pl.name.toLowerCase() === 'liked music') {
+            // Strictly reflect all tracks from YouTube Music Liked Music
+            updated[existingPlIdx] = {
+              ...updated[existingPlIdx],
+              name: 'Liked Music',
+              tracks: convertedTracks,
+              customCover: updated[existingPlIdx].customCover || pl.customCover,
+            };
+          } else {
+            const existingUrls = new Set(updated[existingPlIdx].tracks.map(t => t.url));
+            const newTracks = convertedTracks.filter(t => !existingUrls.has(t.url));
+            updated[existingPlIdx] = {
+              ...updated[existingPlIdx],
+              tracks: [...updated[existingPlIdx].tracks, ...newTracks],
+              customCover: updated[existingPlIdx].customCover || pl.customCover,
+            };
+          }
         } else {
           const newPl: Playlist = {
-            id: pl.id || `yt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            id: pl.id || (pl.name.toLowerCase() === 'liked music' ? 'yt_liked' : `yt_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`),
             name: pl.name,
             description: pl.description || 'Imported from YouTube Music',
             tracks: convertedTracks,
@@ -889,6 +900,10 @@ export function App() {
           updated.push(newPl);
         }
       }
+
+      // Synchronously write to localStorage and persist to SQLite immediately so data survives any restart
+      saveLS('vg_playlists', updated);
+      updated.forEach(p => dbSavePlaylist(p).catch(() => {}));
 
       return updated;
     });

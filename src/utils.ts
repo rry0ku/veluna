@@ -485,3 +485,21 @@ export async function fetchArtistYouTubeTracks(artists: string[]): Promise<Track
 
   return tracks;
 }
+
+export function normalizeTrackUrl(url?: string): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  const match = trimmed.match(/(?:youtube\.com\/(?:watch\?.*v=|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+  if (match) {
+    return `https://www.youtube.com/watch?v=${match[1]}`;
+  }
+  return trimmed;
+}
+
+export function areTrackUrlsEqual(urlA?: string, urlB?: string): boolean {
+  if (!urlA || !urlB) return false;
+  if (urlA === urlB) return true;
+  const normA = normalizeTrackUrl(urlA);
+  const normB = normalizeTrackUrl(urlB);
+  return normA.toLowerCase() === normB.toLowerCase();
+}

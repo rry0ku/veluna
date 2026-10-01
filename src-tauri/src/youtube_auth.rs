@@ -685,7 +685,7 @@ async fn fetch_liked_songs_innertube(
     });
 
     let resp = client
-        .post("https://music.youtube.com/youtubei/v1/browse")
+        .post("https://music.youtube.com/youtubei/v1/browse?alt=json")
         .headers(headers.clone())
         .json(&base_body)
         .send()
@@ -713,7 +713,7 @@ async fn fetch_liked_songs_innertube(
         });
 
         if let Ok(resp) = client
-            .post("https://music.youtube.com/youtubei/v1/browse")
+            .post("https://music.youtube.com/youtubei/v1/browse?alt=json")
             .headers(headers.clone())
             .json(&vllm_body)
             .send()
@@ -727,11 +727,11 @@ async fn fetch_liked_songs_innertube(
         }
     }
 
-    // 3. Paginate continuations to fetch all songs (e.g. 500+ songs)
+    // 3. Paginate continuations to fetch ALL songs (e.g. 500+ songs, up to 10,000)
     let mut page_count = 0;
     while let Some(token) = continuation_token.take() {
         page_count += 1;
-        if page_count > 60 { break; } // Safety cap: 60 pages * ~25-100 items per page
+        if page_count > 100 { break; } // Safety cap: 100 pages
 
         let cont_body = serde_json::json!({
             "context": {
@@ -744,15 +744,30 @@ async fn fetch_liked_songs_innertube(
             "continuation": token
         });
 
-        let encoded_token = urlencoding::encode(&token);
-        let cont_url = format!("https://music.youtube.com/youtubei/v1/browse?continuation={}&ctoken={}", encoded_token, encoded_token);
+        // Standard InnerTube continuation request: POST to browse endpoint with continuation payload
+        let cont_url = "https://music.youtube.com/youtubei/v1/browse?alt=json";
 
-        let resp = client
-            .post(&cont_url)
+        let mut resp = client
+            .post(cont_url)
             .headers(headers.clone())
             .json(&cont_body)
             .send()
             .await;
+
+        // Fallback: If clean browse fails, try with ctoken and continuation query params
+        if resp.as_ref().map(|r| !r.status().is_success()).unwrap_or(true) {
+            let encoded_token = urlencoding::encode(&token);
+            let fallback_url = format!(
+                "https://music.youtube.com/youtubei/v1/browse?ctoken={}&continuation={}&type=next&alt=json",
+                encoded_token, encoded_token
+            );
+            resp = client
+                .post(&fallback_url)
+                .headers(headers.clone())
+                .json(&cont_body)
+                .send()
+                .await;
+        }
 
         match resp {
             Ok(r) if r.status().is_success() => {
@@ -762,13 +777,15 @@ async fn fetch_liked_songs_innertube(
                     if all_tracks.len() == prev_len && continuation_token.is_none() {
                         break;
                     }
+                } else {
+                    break;
                 }
             }
             _ => break,
         }
     }
 
-    // Deduplicate by URL
+    // Deduplicate by URL while preserving order
     let mut seen = std::collections::HashSet::new();
     all_tracks.retain(|t| seen.insert(t.url.clone()));
 
@@ -777,20 +794,54 @@ async fn fetch_liked_songs_innertube(
 
 fn find_continuation_token(val: &Value) -> Option<String> {
     if let Some(obj) = val.as_object() {
-        if let Some(token) = obj
-            .get("nextContinuationData")
-            .and_then(|n| n.get("continuation"))
-            .and_then(|c| c.as_str())
-        {
-            return Some(token.to_string());
+        // 1. continuationCommand -> token
+        if let Some(cmd) = obj.get("continuationCommand") {
+            if let Some(token) = cmd.get("token").and_then(|t| t.as_str()) {
+                if !token.is_empty() {
+                    return Some(token.to_string());
+                }
+            }
         }
+
+        // 2. continuationItemRenderer -> continuationEndpoint -> continuationCommand -> token
+        if let Some(cir) = obj.get("continuationItemRenderer") {
+            if let Some(token) = cir
+                .pointer("/continuationEndpoint/continuationCommand/token")
+                .and_then(|t| t.as_str())
+            {
+                if !token.is_empty() {
+                    return Some(token.to_string());
+                }
+            }
+        }
+
+        // 3. nextContinuationData -> continuation
+        if let Some(ncd) = obj.get("nextContinuationData") {
+            if let Some(token) = ncd.get("continuation").and_then(|c| c.as_str()) {
+                if !token.is_empty() {
+                    return Some(token.to_string());
+                }
+            }
+        }
+
+        // 4. reloadContinuationData -> continuation
+        if let Some(rcd) = obj.get("reloadContinuationData") {
+            if let Some(token) = rcd.get("continuation").and_then(|c| c.as_str()) {
+                if !token.is_empty() {
+                    return Some(token.to_string());
+                }
+            }
+        }
+
+        // Recurse into object values
         for v in obj.values() {
             if let Some(t) = find_continuation_token(v) {
                 return Some(t);
             }
         }
     } else if let Some(arr) = val.as_array() {
-        for v in arr {
+        // Iterate in reverse because continuation items are typically at the end of lists
+        for v in arr.iter().rev() {
             if let Some(t) = find_continuation_token(v) {
                 return Some(t);
             }
@@ -832,21 +883,50 @@ fn find_responsive_items_in_json(val: &Value, tracks: &mut Vec<SyncedTrack>) {
 
             // Title from first flex column
             let title = item
-                .pointer("/flexColumns/0/musicResponsiveListItemFlexColumnRenderer/text/runs/0/text")
-                .and_then(|v| v.as_str())
-                .unwrap_or("Untitled")
-                .to_string();
+                .pointer("/flexColumns/0/musicResponsiveListItemFlexColumnRenderer/text/runs")
+                .and_then(|r| r.as_array())
+                .map(|runs| {
+                    runs.iter()
+                        .filter_map(|r| r.get("text").and_then(|t| t.as_str()))
+                        .collect::<Vec<_>>()
+                        .join("")
+                })
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| {
+                    item.pointer("/flexColumns/0/musicResponsiveListItemFlexColumnRenderer/text/runs/0/text")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Untitled")
+                        .to_string()
+                });
 
-            // Artist from second flex column
+            // Artist from second flex column (join artist runs before any bullet separator)
             let artist = item
-                .pointer("/flexColumns/1/musicResponsiveListItemFlexColumnRenderer/text/runs/0/text")
-                .and_then(|v| v.as_str())
-                .unwrap_or("Unknown Artist")
-                .to_string();
+                .pointer("/flexColumns/1/musicResponsiveListItemFlexColumnRenderer/text/runs")
+                .and_then(|r| r.as_array())
+                .map(|runs| {
+                    let mut parts = Vec::new();
+                    for r in runs {
+                        if let Some(t) = r.get("text").and_then(|t| t.as_str()) {
+                            if t.contains('•') || t.contains("views") || t.contains("plays") {
+                                break;
+                            }
+                            parts.push(t);
+                        }
+                    }
+                    parts.join("").trim().to_string()
+                })
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| {
+                    item.pointer("/flexColumns/1/musicResponsiveListItemFlexColumnRenderer/text/runs/0/text")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Unknown Artist")
+                        .to_string()
+                });
 
             // Duration from fixed columns
             let duration = item
                 .pointer("/fixedColumns/0/musicResponsiveListItemFixedColumnRenderer/text/runs/0/text")
+                .or_else(|| item.pointer("/fixedColumns/0/musicResponsiveListItemFixedColumnRenderer/text/simpleText"))
                 .and_then(|v| v.as_str())
                 .unwrap_or("0:00")
                 .to_string();
@@ -860,6 +940,28 @@ fn find_responsive_items_in_json(val: &Value, tracks: &mut Vec<SyncedTrack>) {
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| format!("https://i.ytimg.com/vi/{}/hqdefault.jpg", vid_id));
 
+            // Extract album if present after bullet
+            let album = item
+                .pointer("/flexColumns/1/musicResponsiveListItemFlexColumnRenderer/text/runs")
+                .and_then(|r| r.as_array())
+                .and_then(|runs| {
+                    let mut found_bullet = false;
+                    for r in runs {
+                        if let Some(t) = r.get("text").and_then(|t| t.as_str()) {
+                            if found_bullet {
+                                let trimmed = t.trim();
+                                if !trimmed.is_empty() && !trimmed.contains("views") && !trimmed.contains("plays") && !trimmed.contains(':') {
+                                    return Some(trimmed.to_string());
+                                }
+                            }
+                            if t.contains('•') {
+                                found_bullet = true;
+                            }
+                        }
+                    }
+                    None
+                });
+
             tracks.push(SyncedTrack {
                 id: generate_track_id(&vid_id),
                 title,
@@ -867,7 +969,7 @@ fn find_responsive_items_in_json(val: &Value, tracks: &mut Vec<SyncedTrack>) {
                 duration,
                 url: format!("https://www.youtube.com/watch?v={}", vid_id),
                 cover: thumbnail,
-                album: None,
+                album,
             });
             return;
         }
@@ -1074,5 +1176,128 @@ mod tests {
         let (ts, hash) = generate_sapisid_hash("test_sapisid", "https://music.youtube.com");
         assert!(ts > 0);
         assert_eq!(hash.len(), 40);
+    }
+
+    #[test]
+    fn test_find_continuation_token() {
+        // Page 1 style (nextContinuationData)
+        let page1_json = serde_json::json!({
+            "contents": {
+                "musicPlaylistShelfRenderer": {
+                    "continuations": [
+                        {
+                            "nextContinuationData": {
+                                "continuation": "token_page_1_abc"
+                            }
+                        }
+                    ]
+                }
+            }
+        });
+        assert_eq!(find_continuation_token(&page1_json), Some("token_page_1_abc".to_string()));
+
+        // Page 2+ style (continuationItemRenderer -> continuationEndpoint -> continuationCommand -> token)
+        let page2_json = serde_json::json!({
+            "onResponseReceivedActions": [
+                {
+                    "appendContinuationItemsAction": {
+                        "continuationItems": [
+                            {
+                                "musicResponsiveListItemRenderer": {
+                                    "playlistItemData": { "videoId": "vid123" }
+                                }
+                            },
+                            {
+                                "continuationItemRenderer": {
+                                    "trigger": "CONTINUATION_TRIGGER_ON_ITEM_SHOWN",
+                                    "continuationEndpoint": {
+                                        "continuationCommand": {
+                                            "token": "token_page_2_xyz",
+                                            "request": "CONTINUATION_REQUEST_TYPE_BROWSE"
+                                        }
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        });
+        assert_eq!(find_continuation_token(&page2_json), Some("token_page_2_xyz".to_string()));
+
+        // End of list (no continuation)
+        let end_json = serde_json::json!({
+            "onResponseReceivedActions": [
+                {
+                    "appendContinuationItemsAction": {
+                        "continuationItems": [
+                            {
+                                "musicResponsiveListItemRenderer": {
+                                    "playlistItemData": { "videoId": "vid456" }
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        });
+        assert_eq!(find_continuation_token(&end_json), None);
+    }
+
+    #[test]
+    fn test_find_responsive_items_in_json() {
+        let json = serde_json::json!({
+            "contents": [
+                {
+                    "musicResponsiveListItemRenderer": {
+                        "playlistItemData": { "videoId": "abc12345" },
+                        "flexColumns": [
+                            {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                    "text": {
+                                        "runs": [
+                                            { "text": "Song Title" }
+                                        ]
+                                    }
+                                }
+                            },
+                            {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                    "text": {
+                                        "runs": [
+                                            { "text": "Main Artist" },
+                                            { "text": " & " },
+                                            { "text": "Featured Artist" },
+                                            { "text": " • " },
+                                            { "text": "Test Album" }
+                                        ]
+                                    }
+                                }
+                            }
+                        ],
+                        "fixedColumns": [
+                            {
+                                "musicResponsiveListItemFixedColumnRenderer": {
+                                    "text": {
+                                        "runs": [
+                                            { "text": "3:45" }
+                                        ]
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        });
+
+        let mut tracks = Vec::new();
+        find_responsive_items_in_json(&json, &mut tracks);
+        assert_eq!(tracks.len(), 1);
+        assert_eq!(tracks[0].title, "Song Title");
+        assert_eq!(tracks[0].artist, "Main Artist & Featured Artist");
+        assert_eq!(tracks[0].album, Some("Test Album".to_string()));
+        assert_eq!(tracks[0].duration, "3:45");
+        assert_eq!(tracks[0].url, "https://www.youtube.com/watch?v=abc12345");
     }
 }

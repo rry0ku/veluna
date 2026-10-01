@@ -225,7 +225,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
                 {playlists.map(pl => {
                   const isOpen = openPlaylistId === pl.id && (activeNav === 'playlists' || activeNav === 'library');
                   const cover = getPlaylistCover(pl);
-                  const isLiked = pl.id === 'p1';
+                  const isLiked = pl.id === 'p1' || pl.id === 'yt_liked';
                   return (
                     <button key={pl.id}
                       onClick={() => { setOpenPlaylistId(pl.id); navigateTo('playlists'); }}
