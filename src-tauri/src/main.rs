@@ -6369,6 +6369,9 @@ fn main() {
                 }
             }
 
+            // Privacy: Wipe any leftover YouTube session cookies on startup/reopen
+            let _ = youtube_auth::clear_youtube_cookies_internal(app.handle());
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -6472,6 +6475,8 @@ fn main() {
                 let flag = app_handle.state::<tray::TrayFlag>();
                 if tray::handle_close_requested(app_handle, &flag) {
                     api.prevent_close();
+                } else {
+                    let _ = youtube_auth::clear_youtube_cookies_internal(app_handle);
                 }
             }
             tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {

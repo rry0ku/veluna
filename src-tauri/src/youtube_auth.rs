@@ -239,6 +239,16 @@ pub fn get_youtube_auth_status_internal(app: &AppHandle) -> YouTubeAuthStatus {
 }
 
 pub fn clear_youtube_cookies_internal(app: &AppHandle) -> Result<(), String> {
+    if let Ok(dir) = app.path().app_cache_dir() {
+        let _ = std::fs::remove_file(dir.join("cookies.txt"));
+        let _ = std::fs::remove_file(dir.join("youtube_cookies_raw.txt"));
+        let _ = std::fs::remove_file(dir.join("youtube_account.json"));
+    }
+    if let Ok(dir) = app.path().app_data_dir() {
+        let _ = std::fs::remove_file(dir.join("cookies.txt"));
+        let _ = std::fs::remove_file(dir.join("youtube_cookies_raw.txt"));
+        let _ = std::fs::remove_file(dir.join("youtube_account.json"));
+    }
     let _ = std::fs::remove_file(get_cookies_txt_path(app));
     let _ = std::fs::remove_file(get_raw_cookies_path(app));
     let _ = std::fs::remove_file(get_account_state_path(app));

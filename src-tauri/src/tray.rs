@@ -104,7 +104,10 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
                     let _ = app.emit("tray_prev", ());
                 }
                 "show" => toggle_window(app),
-                "quit" => app.exit(0),
+                "quit" => {
+                    let _ = crate::youtube_auth::clear_youtube_cookies_internal(app);
+                    app.exit(0);
+                }
                 _ => {}
             })
             .on_tray_icon_event(|tray, event| {

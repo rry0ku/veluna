@@ -614,6 +614,17 @@ export function App() {
     saveLS('vg_startupNav', nav);
   }, []);
 
+  useEffect(() => {
+    // Privacy: wipe YouTube session cookies on startup and when closing window
+    invoke('clear_youtube_cookies').catch(() => {});
+
+    const handleBeforeUnload = () => {
+      invoke('clear_youtube_cookies').catch(() => {});
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
   const [activeNav, setActiveNavState] = useState<NavView>(() => {
     const startup = loadLS<string>('vg_startupNav', 'home');
     if (startup === 'last') return loadLS<NavView>('vg_lastNav', 'home');
