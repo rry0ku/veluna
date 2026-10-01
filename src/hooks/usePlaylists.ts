@@ -3,7 +3,7 @@ import { Playlist, Track } from '../types';
 import { loadLS, saveLS, areTrackUrlsEqual } from '../utils';
 import { dbSavePlaylist, dbDeletePlaylists, dbGetPlaylists } from '../services/db';
 
-export const isProtectedPlaylist = (id: string) => id === 'p1' || id === 'yt_liked';
+export const isProtectedPlaylist = (id: string) => id === 'p1';
 
 export function usePlaylists(showToast?: (msg: string) => void) {
   const [playlists, setPlaylistsState] = useState<Playlist[]>(() =>

@@ -82,7 +82,7 @@ export type ActiveDownload = {
   error?: string;
   startedAt: number;
 };
-export type SettingsTab = 'general' | 'playback' | 'appearance' | 'downloads' | 'integrations' | 'network' | 'storage' | 'updates';
+export type SettingsTab = 'general' | 'apps' | 'playback' | 'appearance' | 'downloads' | 'integrations' | 'network' | 'storage' | 'updates';
 
 export interface UserPreferences {
   languages: string[];

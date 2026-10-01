@@ -462,7 +462,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
                     style={{ opacity: alreadyIn ? 0.4 : 1, cursor: alreadyIn ? 'not-allowed' : 'pointer' }}
                   >
                     <div style={{ width: '24px', height: '24px', borderRadius: '5px', overflow: 'hidden', flexShrink: 0, background: 'var(--v-bg3)', border: '1px solid var(--v-bdr)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      {isProtectedPlaylist(p.id) ? <Heart size={12} style={{ color: 'var(--v-accent)', fill: 'currentColor' }} /> : <ListMusic size={13} style={{ color: 'var(--v-fg2)' }} />}
+                      {(p.id === 'p1' || p.id === 'yt_liked') ? <Heart size={12} style={{ color: 'var(--v-accent)', fill: 'currentColor' }} /> : <ListMusic size={13} style={{ color: 'var(--v-fg2)' }} />}
                     </div>
                     <span style={{ fontSize: '13px', color: 'var(--v-fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{p.name}</span>
                     {alreadyIn ? <span style={{ fontSize: '9.5px', color: 'var(--v-fg3)', fontWeight: 700 }}>Added</span> : <span style={{ fontSize: '10px', color: 'var(--v-fg3)' }}>{p.tracks.length}</span>}

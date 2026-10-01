@@ -6289,6 +6289,11 @@ fn clear_youtube_cookies(app: tauri::AppHandle) -> Result<(), String> {
     youtube_auth::clear_youtube_cookies_internal(&app)
 }
 
+#[tauri::command]
+fn cancel_youtube_sync(app: tauri::AppHandle) -> Result<(), String> {
+    youtube_auth::cancel_youtube_sync_internal(&app)
+}
+
 fn main() {
     #[cfg(target_os = "linux")]
     {
@@ -6463,6 +6468,7 @@ fn main() {
             sync_youtube_library,
             get_youtube_auth_status,
             clear_youtube_cookies,
+            cancel_youtube_sync,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

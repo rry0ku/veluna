@@ -4,7 +4,8 @@ import {
   FolderDown, FolderOpen, Image, Zap, BarChart2, Globe,
   Upload, ArchiveRestore, Trash2,
   Download, GitBranch, Radio, CheckCircle2,
-  HardDrive, Maximize2, Palette, Cookie, Sliders, Music, Database, User
+  HardDrive, Maximize2, Palette, Cookie, Sliders, Music, Database, User,
+  LayoutGrid
 } from 'lucide-react';
 import { SettingsTab, DiskInfo, CacheInfo } from '../types';
 import { loadLS, saveLS, lightenColor, validateSettingsChange, formatBytes } from '../utils';
@@ -399,6 +400,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
 
   const tabs: { id: SettingsTab; label: string; icon: React.ReactNode }[] = [
     { id: 'general',      label: 'General',           icon: <Sliders size={15} /> },
+    { id: 'apps',         label: 'Apps',              icon: <LayoutGrid size={15} /> },
     { id: 'playback',     label: 'Playback & Audio',  icon: <Zap size={15} /> },
     { id: 'appearance',   label: 'Appearance',        icon: <Palette size={15} /> },
     { id: 'downloads',    label: 'Downloads',         icon: <FolderDown size={15} /> },
@@ -413,6 +415,10 @@ export const SettingsPanel = React.memo(function SettingsPanel({
     matchCard(["General", "System Integration", "System Tray", "Enable System Tray Icon", "Minimize to tray", "Close to tray", "Background", "Tray"]) ||
     matchCard(["General", "Interface Scaling", "UI Scale", "Scale", "Zoom", "Page size", "Interface size", "Small", "Large", `${uiScale}`]) ||
     matchCard(["General", "Performance & Graphics", "Low-Spec / Performance Mode", "Low-Spec Mode", "Performance Mode", "Eco Mode", "Performance", "Graphics", "GPU", "Battery", "Lag", "Speed", "Animations", "Blur", "Low power"])
+  );
+
+  const matchesApps = showTab('apps') && (
+    matchCard(["Apps", "YouTube", "YouTube Music", "Account", "Browser Cookies", "Cookie", "Cookies", "Bypass", "Age restriction", "Bot verification", "Playlists", "Liked Songs", "Import", cookieBrowser])
   );
 
   const matchesPlayback = showTab('playback') && (
@@ -433,8 +439,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
     matchCard(["Downloads", "Audio Specifications", "Audio Format", "Format", "Codec", "MP3", "Opus", "M4A", "FLAC", "Lossless", "AAC", "WAV", "Copy", downloadFormat]) ||
     matchCard(["Downloads", "File Organization", "Naming Template", "Pattern", "Path structure", "Folder structure", "Save Location", "Download Directory", "Download Folder", "Download Path", "Storage Location", "Folder", "Browse", "Offline tracks", downloadNamingPattern, downloadPath]) ||
     matchCard(["Downloads", "File Options", "Post-Processing", "Embed Artwork Thumbnail", "Thumbnail", "Album Cover", "Cover Art", "ID3 Tags", "Artwork", "Square Thumbnail", "Crop", "1:1", "SponsorBlock", "Clean audio", "Chapters", "Split", "Skip intros", "Full album"]) ||
-    matchCard(["Downloads", "Duplicate Detection", "Smart Duplicate Detection", "Skip existing", "Duplicates", "Overwrite", "Archive", "Download Archive", "Clear Archive"]) ||
-    matchCard(["Downloads", "YouTube", "YouTube Music", "Account", "Browser Cookies", "Cookie", "Cookies", "Bypass", "Age restriction", "Bot verification", "Playlists", "Liked Songs", cookieBrowser])
+    matchCard(["Downloads", "Duplicate Detection", "Smart Duplicate Detection", "Skip existing", "Duplicates", "Overwrite", "Archive", "Download Archive", "Clear Archive"])
   );
 
   const matchesStorage = showTab('storage') && (
@@ -459,7 +464,7 @@ export const SettingsPanel = React.memo(function SettingsPanel({
     matchCard(["Updates", "yt-dlp", "Extractor", "Engine", "Audio Engine", "Update yt-dlp", "ytdlp", ytdlpVersion])
   );
 
-  const hasAnyMatches = !searchQuery.trim() || matchesGeneral || matchesPlayback || matchesAppearance || matchesDownloads || matchesIntegrations || matchesNetwork || matchesStorage || matchesUpdates;
+  const hasAnyMatches = !searchQuery.trim() || matchesGeneral || matchesApps || matchesPlayback || matchesAppearance || matchesDownloads || matchesIntegrations || matchesNetwork || matchesStorage || matchesUpdates;
 
   return (
     <div style={{flex:1,display:"flex",overflow:"hidden",background:"var(--v-bg0)"}}>
@@ -741,6 +746,104 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                     showToast(next ? 'Low-Spec Mode enabled' : 'Low-Spec Mode disabled');
                   }} />
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {matchesApps && (
+          <div style={{display:"flex",flexDirection:"column",gap:"20px"}}>
+            {!searchQuery.trim() && (
+              <div>
+                <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.01em",color:"#e2ddd9",margin:"0 0 4px"}}>Apps</h2>
+                <p style={{fontSize:"13.5px",color:"#6f6966",margin:0}}>Connect third-party services, import playlists and music library data.</p>
+              </div>
+            )}
+
+            {(!searchQuery.trim() || matchCard(["Apps", "YouTube", "YouTube Music", "Account", "Browser Cookies", "Cookie", "Cookies", "Bypass", "Age restriction", "Bot verification", "Playlists", "Liked Songs", "Import", cookieBrowser])) && (
+              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)",overflow:"hidden"}}>
+                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",display:"flex",alignItems:"center",gap:"8px",margin:0}}>
+                    <Cookie size={14} style={{color:"#8c8682"}} /> YouTube Music Account &amp; Cookies
+                  </h3>
+                  {ytAuthStatus?.is_authenticated ? (
+                    <span style={{fontSize:"11px",fontWeight:600,padding:"2px 8px",borderRadius:"12px",background:"rgba(34,197,94,0.15)",color:"#4ade80",border:"1px solid rgba(34,197,94,0.3)"}}>
+                      Connected
+                    </span>
+                  ) : (
+                    <span style={{fontSize:"11px",fontWeight:600,padding:"2px 8px",borderRadius:"12px",background:"rgba(255,255,255,0.06)",color:"#8c8682"}}>
+                      Not Connected
+                    </span>
+                  )}
+                </div>
+
+                {ytAuthStatus?.is_authenticated ? (
+                  <div style={{padding:"16px",display:"flex",flexDirection:"column",gap:"14px"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"12px"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:"12px"}}>
+                        {ytAuthStatus.active_account?.avatar_url ? (
+                          <img src={ytAuthStatus.active_account.avatar_url} alt="" style={{width:"40px",height:"40px",borderRadius:"50%",objectFit:"cover"}} />
+                        ) : (
+                          <div style={{width:"40px",height:"40px",borderRadius:"50%",background:"var(--v-bg2)",display:"flex",alignItems:"center",justifyContent:"center",color:"#9e9894"}}>
+                            <User size={18} />
+                          </div>
+                        )}
+                        <div>
+                          <div style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9"}}>
+                            {ytAuthStatus.active_account?.name || "YouTube Account"}
+                          </div>
+                          <div style={{fontSize:"12px",color:"#6f6966",marginTop:"2px"}}>
+                            {ytAuthStatus.active_account?.handle || `${ytAuthStatus.cookie_count} cookies loaded`}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleDisconnectYt}
+                        style={{
+                          padding:"7px 12px",
+                          borderRadius:"8px",
+                          border:"1px solid rgba(239,68,68,0.25)",
+                          background:"rgba(239,68,68,0.08)",
+                          color:"#f87171",
+                          fontSize:"12px",
+                          fontWeight:600,
+                          cursor:"pointer"
+                        }}
+                      >
+                        Disconnect
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{padding:"16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"16px",flexWrap:"wrap"}}>
+                    <div>
+                      <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9",margin:0}}>Connect YouTube Music Session</p>
+                      <p style={{fontSize:"12px",color:"#6f6966",margin:"4px 0 0",maxWidth:"480px",lineHeight:1.45}}>
+                        Paste your session cookies to sign in, automatically import all your playlists and liked songs, and bypass download restrictions.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={onOpenYouTubeCookieModal}
+                      style={{
+                        padding:"8px 18px",
+                        borderRadius:"20px",
+                        border:"none",
+                        background:"var(--v-accent, #ffffff)",
+                        color:"#000000",
+                        fontSize:"13px",
+                        fontWeight:700,
+                        cursor:"pointer",
+                        whiteSpace:"nowrap",
+                        boxShadow:"0 2px 10px rgba(0,0,0,0.3)"
+                      }}
+                    >
+                      Connect YouTube Account
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1469,93 +1572,6 @@ export const SettingsPanel = React.memo(function SettingsPanel({
                     {isClearingArchive ? 'Clearing...' : 'Clear Archive'}
                   </button>
                 </div>
-              </div>
-            )}
-
-            {(!searchQuery.trim() || matchCard(["Downloads", "YouTube", "YouTube Music", "Account", "Browser Cookies", "Cookie", "Cookies", "Bypass", "Age restriction", "Bot verification", "Playlists", "Liked Songs", cookieBrowser])) && (
-              <div style={{borderRadius:"12px",border:"1px solid var(--v-bdr)",background:"var(--v-bg0)",overflow:"hidden"}}>
-                <div style={{padding:"12px 16px",borderBottom:"1px solid var(--v-bdr)",background:"rgba(226,221,217,0.015)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                  <h3 style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9",display:"flex",alignItems:"center",gap:"8px",margin:0}}>
-                    <Cookie size={14} style={{color:"#8c8682"}} /> YouTube Music Account &amp; Cookies
-                  </h3>
-                  {ytAuthStatus?.is_authenticated ? (
-                    <span style={{fontSize:"11px",fontWeight:600,padding:"2px 8px",borderRadius:"12px",background:"rgba(34,197,94,0.15)",color:"#4ade80",border:"1px solid rgba(34,197,94,0.3)"}}>
-                      Connected
-                    </span>
-                  ) : (
-                    <span style={{fontSize:"11px",fontWeight:600,padding:"2px 8px",borderRadius:"12px",background:"rgba(255,255,255,0.06)",color:"#8c8682"}}>
-                      Not Connected
-                    </span>
-                  )}
-                </div>
-
-                {ytAuthStatus?.is_authenticated ? (
-                  <div style={{padding:"16px",display:"flex",flexDirection:"column",gap:"14px"}}>
-                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"12px"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:"12px"}}>
-                        {ytAuthStatus.active_account?.avatar_url ? (
-                          <img src={ytAuthStatus.active_account.avatar_url} alt="" style={{width:"40px",height:"40px",borderRadius:"50%",objectFit:"cover"}} />
-                        ) : (
-                          <div style={{width:"40px",height:"40px",borderRadius:"50%",background:"var(--v-bg2)",display:"flex",alignItems:"center",justifyContent:"center",color:"#9e9894"}}>
-                            <User size={18} />
-                          </div>
-                        )}
-                        <div>
-                          <div style={{fontSize:"14px",fontWeight:600,color:"#e2ddd9"}}>
-                            {ytAuthStatus.active_account?.name || "YouTube Account"}
-                          </div>
-                          <div style={{fontSize:"12px",color:"#6f6966",marginTop:"2px"}}>
-                            {ytAuthStatus.active_account?.handle || `${ytAuthStatus.cookie_count} cookies loaded`}
-                          </div>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={handleDisconnectYt}
-                        style={{
-                          padding:"7px 12px",
-                          borderRadius:"8px",
-                          border:"1px solid rgba(239,68,68,0.25)",
-                          background:"rgba(239,68,68,0.08)",
-                          color:"#f87171",
-                          fontSize:"12px",
-                          fontWeight:600,
-                          cursor:"pointer"
-                        }}
-                      >
-                        Disconnect
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{padding:"16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"16px",flexWrap:"wrap"}}>
-                    <div>
-                      <p style={{fontSize:"14px",fontWeight:500,color:"#e2ddd9",margin:0}}>Connect YouTube Music Session</p>
-                      <p style={{fontSize:"12px",color:"#6f6966",margin:"4px 0 0",maxWidth:"480px",lineHeight:1.45}}>
-                        Paste your session cookies to sign in, automatically import all your playlists and liked songs, and bypass download restrictions.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={onOpenYouTubeCookieModal}
-                      style={{
-                        padding:"8px 18px",
-                        borderRadius:"20px",
-                        border:"none",
-                        background:"var(--v-accent, #ffffff)",
-                        color:"#000000",
-                        fontSize:"13px",
-                        fontWeight:700,
-                        cursor:"pointer",
-                        whiteSpace:"nowrap",
-                        boxShadow:"0 2px 10px rgba(0,0,0,0.3)"
-                      }}
-                    >
-                      Connect YouTube Account
-                    </button>
-                  </div>
-                )}
               </div>
             )}
           </div>

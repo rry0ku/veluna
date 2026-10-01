@@ -60,6 +60,8 @@ export const YouTubeCookieModal: React.FC<YouTubeCookieModalProps> = ({
     playlistCount: number;
   } | null>(null);
 
+  const [isCancelling, setIsCancelling] = useState(false);
+
   // Listen to Tauri sync progress events
   useEffect(() => {
     let unlisten: (() => void) | null = null;
@@ -83,6 +85,7 @@ export const YouTubeCookieModal: React.FC<YouTubeCookieModalProps> = ({
       setCookieInput('');
       setError(null);
       setIsLoading(false);
+      setIsCancelling(false);
       setSyncSummary(null);
     }
   }, [isOpen]);
@@ -93,6 +96,32 @@ export const YouTubeCookieModal: React.FC<YouTubeCookieModalProps> = ({
     openUrl('https://music.youtube.com').catch(() => {
       window.open('https://music.youtube.com', '_blank');
     });
+  };
+
+  const handleCancelSync = async () => {
+    setIsCancelling(true);
+    try {
+      await invoke('cancel_youtube_sync');
+    } catch (_) {}
+    try {
+      await invoke('clear_youtube_cookies');
+    } catch (_) {}
+    setCookieInput('');
+    setIsLoading(false);
+    setIsCancelling(false);
+    setStep('paste');
+    onClose();
+    showToast('Import cancelled. YouTube cookies permanently deleted.');
+  };
+
+  const handleCloseOrCancel = async () => {
+    if (isLoading || step === 'syncing') {
+      await handleCancelSync();
+    } else {
+      invoke('clear_youtube_cookies').catch(() => {});
+      setCookieInput('');
+      onClose();
+    }
   };
 
   const handleContinuePaste = async () => {
@@ -162,7 +191,13 @@ export const YouTubeCookieModal: React.FC<YouTubeCookieModalProps> = ({
       setIsLoading(false);
       showToast(`Imported ${result.liked_songs_count} liked tracks & ${result.playlists?.length || 0} playlists!`);
     } catch (err: any) {
-      setError(typeof err === 'string' ? err : err?.message || 'Failed to sync library.');
+      const errMsg = typeof err === 'string' ? err : err?.message || '';
+      if (errMsg.toLowerCase().includes('cancel')) {
+        setIsLoading(false);
+        setStep('paste');
+        return;
+      }
+      setError(errMsg || 'Failed to sync library.');
       setStep('paste');
       setIsLoading(false);
     }
@@ -182,8 +217,8 @@ export const YouTubeCookieModal: React.FC<YouTubeCookieModalProps> = ({
         backdropFilter: 'blur(8px)',
       }}
       onClick={(e) => {
-        if (e.target === e.currentTarget && !isLoading && step !== 'syncing') {
-          onClose();
+        if (e.target === e.currentTarget && !isCancelling) {
+          handleCloseOrCancel();
         }
       }}
     >
@@ -228,34 +263,38 @@ export const YouTubeCookieModal: React.FC<YouTubeCookieModalProps> = ({
               {step === 'done' && 'Library Successfully Synced'}
             </h2>
           </div>
-          {step !== 'syncing' && (
-            <button
-              onClick={onClose}
-              style={{
-                background: 'rgba(255, 255, 255, 0.05)',
-                border: 'none',
-                borderRadius: '8px',
-                width: '30px',
-                height: '30px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#8e8884',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-              onMouseEnter={(e) => {
+          <button
+            onClick={handleCloseOrCancel}
+            disabled={isCancelling}
+            title={step === 'syncing' ? 'Cancel import and delete cookies' : 'Close'}
+            style={{
+              background: 'rgba(255, 255, 255, 0.05)',
+              border: 'none',
+              borderRadius: '8px',
+              width: '30px',
+              height: '30px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: isCancelling ? '#4a4542' : '#8e8884',
+              cursor: isCancelling ? 'not-allowed' : 'pointer',
+              transition: 'all 0.15s ease',
+            }}
+            onMouseEnter={(e) => {
+              if (!isCancelling) {
                 e.currentTarget.style.color = '#fff';
                 e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
-              }}
-              onMouseLeave={(e) => {
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!isCancelling) {
                 e.currentTarget.style.color = '#8e8884';
                 e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)';
-              }}
-            >
-              <X size={16} />
-            </button>
-          )}
+              }
+            }}
+          >
+            <X size={16} />
+          </button>
         </div>
 
         {/* Modal Body */}
@@ -479,8 +518,8 @@ export const YouTubeCookieModal: React.FC<YouTubeCookieModalProps> = ({
               >
                 <button
                   type="button"
-                  onClick={onClose}
-                  disabled={isLoading}
+                  onClick={handleCloseOrCancel}
+                  disabled={isLoading || isCancelling}
                   style={{
                     padding: '10px 18px',
                     borderRadius: '8px',
@@ -609,6 +648,52 @@ export const YouTubeCookieModal: React.FC<YouTubeCookieModalProps> = ({
               <div style={{ fontSize: '12px', color: '#5e5855', fontWeight: 600 }}>
                 {Math.round(syncProgress.progress)}% COMPLETE
               </div>
+
+              {/* Prominent cancel button that immediately terminates sync & deletes cookies */}
+              <button
+                type="button"
+                onClick={handleCancelSync}
+                disabled={isCancelling}
+                style={{
+                  marginTop: '8px',
+                  padding: '9px 22px',
+                  borderRadius: '20px',
+                  border: '1px solid rgba(239, 68, 68, 0.35)',
+                  background: 'rgba(239, 68, 68, 0.08)',
+                  color: '#f87171',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: isCancelling ? 'not-allowed' : 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={(e) => {
+                  if (!isCancelling) {
+                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.18)';
+                    e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.55)';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!isCancelling) {
+                    e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
+                    e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.35)';
+                  }
+                }}
+              >
+                {isCancelling ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    Cancelling &amp; deleting cookies...
+                  </>
+                ) : (
+                  <>
+                    <X size={14} />
+                    Cancel
+                  </>
+                )}
+              </button>
             </div>
           )}
 

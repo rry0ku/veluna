@@ -5,7 +5,19 @@ use sha1::{Digest, Sha1};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Emitter, Manager};
+
+static SYNC_CANCELLED: AtomicBool = AtomicBool::new(false);
+
+pub fn is_sync_cancelled() -> bool {
+    SYNC_CANCELLED.load(Ordering::SeqCst)
+}
+
+pub fn cancel_youtube_sync_internal(app: &AppHandle) -> Result<(), String> {
+    SYNC_CANCELLED.store(true, Ordering::SeqCst);
+    clear_youtube_cookies_internal(app)
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct YouTubeAccount {
@@ -729,7 +741,14 @@ async fn fetch_liked_songs_innertube(
 
     // 3. Paginate continuations to fetch ALL songs (e.g. 500+ songs, up to 10,000)
     let mut page_count = 0;
+    let mut seen_tokens: std::collections::HashSet<String> = std::collections::HashSet::new();
     while let Some(token) = continuation_token.take() {
+        if is_sync_cancelled() {
+            break;
+        }
+        if !seen_tokens.insert(token.clone()) {
+            break;
+        }
         page_count += 1;
         if page_count > 100 { break; } // Safety cap: 100 pages
 
@@ -785,11 +804,65 @@ async fn fetch_liked_songs_innertube(
         }
     }
 
-    // Deduplicate by URL while preserving order
-    let mut seen = std::collections::HashSet::new();
-    all_tracks.retain(|t| seen.insert(t.url.clone()));
-
+    // Preserve ALL items returned by YouTube Music without artificial deduplication
     all_tracks
+}
+
+fn is_valid_youtube_video_id(s: &str) -> bool {
+    let len = s.len();
+    (len >= 8 && len <= 16) && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+fn extract_video_id_from_url_str(s: &str) -> Option<String> {
+    if let Some(pos) = s.find("/vi/") {
+        let remainder = &s[pos + 4..];
+        let id: String = remainder.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').collect();
+        if is_valid_youtube_video_id(&id) {
+            return Some(id);
+        }
+    }
+    if let Some(pos) = s.find("v=") {
+        let remainder = &s[pos + 2..];
+        let id: String = remainder.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').collect();
+        if is_valid_youtube_video_id(&id) {
+            return Some(id);
+        }
+    }
+    if let Some(pos) = s.find("youtu.be/") {
+        let remainder = &s[pos + 9..];
+        let id: String = remainder.chars().take_while(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_').collect();
+        if is_valid_youtube_video_id(&id) {
+            return Some(id);
+        }
+    }
+    None
+}
+
+fn find_first_valid_video_id(val: &Value) -> Option<String> {
+    if let Some(obj) = val.as_object() {
+        if let Some(vid) = obj.get("videoId").and_then(|v| v.as_str()) {
+            if is_valid_youtube_video_id(vid) {
+                return Some(vid.to_string());
+            }
+        }
+        if let Some(url_str) = obj.get("url").and_then(|u| u.as_str()) {
+            if let Some(vid) = extract_video_id_from_url_str(url_str) {
+                return Some(vid);
+            }
+        }
+        for v in obj.values() {
+            if let Some(vid) = find_first_valid_video_id(v) {
+                return Some(vid);
+            }
+        }
+    } else if let Some(arr) = val.as_array() {
+        for v in arr {
+            if let Some(vid) = find_first_valid_video_id(v) {
+                return Some(vid);
+            }
+        }
+    }
+    None
 }
 
 fn find_continuation_token(val: &Value) -> Option<String> {
@@ -833,6 +906,13 @@ fn find_continuation_token(val: &Value) -> Option<String> {
             }
         }
 
+        // 5. General token in continuationEndpoint
+        if let Some(token) = val.pointer("/continuationEndpoint/continuationCommand/token").and_then(|t| t.as_str()) {
+            if !token.is_empty() {
+                return Some(token.to_string());
+            }
+        }
+
         // Recurse into object values
         for v in obj.values() {
             if let Some(t) = find_continuation_token(v) {
@@ -863,16 +943,18 @@ fn extract_liked_songs_from_json(
 
 fn find_responsive_items_in_json(val: &Value, tracks: &mut Vec<SyncedTrack>) {
     if let Some(obj) = val.as_object() {
+        // 1. YouTube Music Responsive List Item Renderer
         if let Some(item) = obj.get("musicResponsiveListItemRenderer") {
-            // Extract video ID from multiple possible locations
             let video_id = item
-                .pointer("/overlay/musicItemThumbnailOverlayRenderer/content/musicPlayButtonRenderer/playNavigationEndpoint/watchEndpoint/videoId")
+                .pointer("/playlistItemData/videoId")
+                .or_else(|| item.pointer("/overlay/musicItemThumbnailOverlayRenderer/content/musicPlayButtonRenderer/playNavigationEndpoint/watchEndpoint/videoId"))
                 .or_else(|| item.pointer("/flexColumns/0/musicResponsiveListItemFlexColumnRenderer/text/runs/0/navigationEndpoint/watchEndpoint/videoId"))
-                .or_else(|| item.pointer("/playlistItemData/videoId"))
                 .or_else(|| item.pointer("/navigationEndpoint/watchEndpoint/videoId"))
                 .or_else(|| item.pointer("/menu/menuRenderer/topLevelButtons/0/likeButtonRenderer/target/videoId"))
                 .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
+                .filter(|s| is_valid_youtube_video_id(s))
+                .map(|s| s.to_string())
+                .or_else(|| find_first_valid_video_id(item));
 
             let Some(vid_id) = video_id else {
                 for v in obj.values() {
@@ -891,13 +973,13 @@ fn find_responsive_items_in_json(val: &Value, tracks: &mut Vec<SyncedTrack>) {
                         .collect::<Vec<_>>()
                         .join("")
                 })
-                .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| {
+                .filter(|s| !s.trim().is_empty())
+                .or_else(|| {
                     item.pointer("/flexColumns/0/musicResponsiveListItemFlexColumnRenderer/text/runs/0/text")
                         .and_then(|v| v.as_str())
-                        .unwrap_or("Untitled")
-                        .to_string()
-                });
+                        .map(|s| s.to_string())
+                })
+                .unwrap_or_else(|| "Untitled Track".to_string());
 
             // Artist from second flex column (join artist runs before any bullet separator)
             let artist = item
@@ -940,30 +1022,36 @@ fn find_responsive_items_in_json(val: &Value, tracks: &mut Vec<SyncedTrack>) {
                 .map(|s| s.to_string())
                 .unwrap_or_else(|| format!("https://i.ytimg.com/vi/{}/hqdefault.jpg", vid_id));
 
-            // Extract album if present after bullet
+            // Extract album if present in column 2 or after bullet in column 1
             let album = item
-                .pointer("/flexColumns/1/musicResponsiveListItemFlexColumnRenderer/text/runs")
-                .and_then(|r| r.as_array())
-                .and_then(|runs| {
-                    let mut found_bullet = false;
-                    for r in runs {
-                        if let Some(t) = r.get("text").and_then(|t| t.as_str()) {
-                            if found_bullet {
-                                let trimmed = t.trim();
-                                if !trimmed.is_empty() && !trimmed.contains("views") && !trimmed.contains("plays") && !trimmed.contains(':') {
-                                    return Some(trimmed.to_string());
+                .pointer("/flexColumns/2/musicResponsiveListItemFlexColumnRenderer/text/runs/0/text")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .or_else(|| {
+                    item.pointer("/flexColumns/1/musicResponsiveListItemFlexColumnRenderer/text/runs")
+                        .and_then(|r| r.as_array())
+                        .and_then(|runs| {
+                            let mut found_bullet = false;
+                            for r in runs {
+                                if let Some(t) = r.get("text").and_then(|t| t.as_str()) {
+                                    if found_bullet {
+                                        let trimmed = t.trim();
+                                        if !trimmed.is_empty() && !trimmed.contains("views") && !trimmed.contains("plays") && !trimmed.contains(':') {
+                                            return Some(trimmed.to_string());
+                                        }
+                                    }
+                                    if t.contains('•') {
+                                        found_bullet = true;
+                                    }
                                 }
                             }
-                            if t.contains('•') {
-                                found_bullet = true;
-                            }
-                        }
-                    }
-                    None
+                            None
+                        })
                 });
 
+            let track_idx = tracks.len();
             tracks.push(SyncedTrack {
-                id: generate_track_id(&vid_id),
+                id: generate_track_id(&format!("{}_{}", vid_id, track_idx)),
                 title,
                 artist,
                 duration,
@@ -972,6 +1060,83 @@ fn find_responsive_items_in_json(val: &Value, tracks: &mut Vec<SyncedTrack>) {
                 album,
             });
             return;
+        }
+
+        // 2. Playlist Video Renderer (YouTube video in playlist)
+        if let Some(item) = obj.get("playlistVideoRenderer") {
+            let video_id = item.get("videoId").and_then(|v| v.as_str())
+                .filter(|s| is_valid_youtube_video_id(s))
+                .map(|s| s.to_string())
+                .or_else(|| find_first_valid_video_id(item));
+            if let Some(vid_id) = video_id {
+                let title = item.pointer("/title/runs/0/text")
+                    .or_else(|| item.pointer("/title/simpleText"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Untitled Track")
+                    .to_string();
+                let artist = item.pointer("/shortBylineText/runs/0/text")
+                    .or_else(|| item.pointer("/shortBylineText/simpleText"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Unknown Artist")
+                    .to_string();
+                let duration = item.pointer("/lengthText/simpleText")
+                    .or_else(|| item.pointer("/lengthText/runs/0/text"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("0:00")
+                    .to_string();
+                let thumbnail = item.pointer("/thumbnail/thumbnails")
+                    .and_then(|t| t.as_array())
+                    .and_then(|arr| arr.last())
+                    .and_then(|t| t.get("url"))
+                    .and_then(|u| u.as_str())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| format!("https://i.ytimg.com/vi/{}/hqdefault.jpg", vid_id));
+
+                let track_idx = tracks.len();
+                tracks.push(SyncedTrack {
+                    id: generate_track_id(&format!("{}_{}", vid_id, track_idx)),
+                    title,
+                    artist,
+                    duration,
+                    url: format!("https://www.youtube.com/watch?v={}", vid_id),
+                    cover: thumbnail,
+                    album: None,
+                });
+                return;
+            }
+        }
+
+        // 3. Music Two Row Item Renderer
+        if let Some(item) = obj.get("musicTwoRowItemRenderer") {
+            if let Some(vid_id) = find_first_valid_video_id(item) {
+                let title = item.pointer("/title/runs/0/text")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Untitled Track")
+                    .to_string();
+                let artist = item.pointer("/subtitle/runs/0/text")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("Unknown Artist")
+                    .to_string();
+                let thumbnail = item.pointer("/thumbnailRenderer/musicThumbnailRenderer/thumbnail/thumbnails")
+                    .and_then(|t| t.as_array())
+                    .and_then(|arr| arr.last())
+                    .and_then(|t| t.get("url"))
+                    .and_then(|u| u.as_str())
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| format!("https://i.ytimg.com/vi/{}/hqdefault.jpg", vid_id));
+
+                let track_idx = tracks.len();
+                tracks.push(SyncedTrack {
+                    id: generate_track_id(&format!("{}_{}", vid_id, track_idx)),
+                    title,
+                    artist,
+                    duration: "0:00".to_string(),
+                    url: format!("https://www.youtube.com/watch?v={}", vid_id),
+                    cover: thumbnail,
+                    album: None,
+                });
+                return;
+            }
         }
 
         for v in obj.values() {
@@ -1009,7 +1174,7 @@ async fn fetch_tracks_from_playlist_url(
     #[cfg(windows)]
     cmd.creation_flags(0x08000000);
 
-    let output = match tokio::time::timeout(std::time::Duration::from_secs(60), cmd.output()).await {
+    let output = match tokio::time::timeout(std::time::Duration::from_secs(120), cmd.output()).await {
         Ok(res) => res.map_err(|e| format!("yt-dlp execution error: {}", e))?,
         Err(_) => return Err("yt-dlp playlist fetch timed out".to_string()),
     };
@@ -1032,7 +1197,8 @@ async fn fetch_tracks_from_playlist_url(
             let duration = parts[2].trim();
             let artist = parts[3].trim();
 
-            let track_id = generate_track_id(vid_id);
+            let track_idx = tracks.len();
+            let track_id = generate_track_id(&format!("{}_{}", vid_id, track_idx));
             tracks.push(SyncedTrack {
                 id: track_id,
                 title: if title.is_empty() { "Untitled Track".to_string() } else { title.to_string() },
@@ -1052,6 +1218,8 @@ pub async fn sync_youtube_library_internal(
     app: &AppHandle,
     page_id: Option<String>,
 ) -> Result<SyncResult, String> {
+    SYNC_CANCELLED.store(false, Ordering::SeqCst);
+
     let cookies_path = get_cookies_txt_path(app);
     if !cookies_path.is_file() {
         return Err("No YouTube cookies found. Please paste your cookies first.".to_string());
@@ -1077,6 +1245,56 @@ pub async fn sync_youtube_library_internal(
         liked_songs = fetch_liked_songs_innertube(&raw_cookies, sid, page_id.as_deref()).await;
     }
 
+    if is_sync_cancelled() {
+        let _ = clear_youtube_cookies_internal(app);
+        return Err("Sync cancelled by user".to_string());
+    }
+
+    // 1b. Also query YouTube Music Liked Music (LM) via yt-dlp to guarantee 100% complete parity
+    if let Ok(ytdlp_liked) = fetch_tracks_from_playlist_url("https://www.youtube.com/playlist?list=LM", &cookies_path).await {
+        if is_sync_cancelled() {
+            let _ = clear_youtube_cookies_internal(app);
+            return Err("Sync cancelled by user".to_string());
+        }
+        if ytdlp_liked.len() > liked_songs.len() {
+            let mut innertube_map = std::collections::HashMap::new();
+            for t in &liked_songs {
+                innertube_map.insert(t.url.clone(), t.clone());
+            }
+            liked_songs = ytdlp_liked.into_iter().enumerate().map(|(idx, mut yt_track)| {
+                if let Some(it_track) = innertube_map.get(&yt_track.url) {
+                    if yt_track.artist == "Unknown" || yt_track.artist == "Unknown Artist" {
+                        yt_track.artist = it_track.artist.clone();
+                    }
+                    if yt_track.album.is_none() {
+                        yt_track.album = it_track.album.clone();
+                    }
+                    if yt_track.cover.is_empty() || yt_track.cover.contains("null") {
+                        yt_track.cover = it_track.cover.clone();
+                    }
+                }
+                yt_track.id = generate_track_id(&format!("{}_{}", yt_track.url, idx));
+                yt_track
+            }).collect();
+        } else if !ytdlp_liked.is_empty() {
+            let mut existing_urls: std::collections::HashSet<String> = liked_songs.iter().map(|t| t.url.clone()).collect();
+            for yt_track in ytdlp_liked {
+                if !existing_urls.contains(&yt_track.url) {
+                    existing_urls.insert(yt_track.url.clone());
+                    let idx = liked_songs.len();
+                    let mut t = yt_track;
+                    t.id = generate_track_id(&format!("{}_{}", t.url, idx));
+                    liked_songs.push(t);
+                }
+            }
+        }
+    }
+
+    if is_sync_cancelled() {
+        let _ = clear_youtube_cookies_internal(app);
+        return Err("Sync cancelled by user".to_string());
+    }
+
     let _ = app.emit("youtube_sync_progress", SyncProgressPayload {
         stage: "fetching_playlists".to_string(),
         progress: 35.0,
@@ -1090,6 +1308,11 @@ pub async fn sync_youtube_library_internal(
     let mut discovered_playlists = Vec::new();
     if let Some(sid2) = get_sapisid(&pairs) {
         discovered_playlists = query_innertube_playlists(&raw_cookies, sid2, page_id.as_deref()).await;
+    }
+
+    if is_sync_cancelled() {
+        let _ = clear_youtube_cookies_internal(app);
+        return Err("Sync cancelled by user".to_string());
     }
 
     let total_playlists = discovered_playlists.len();
@@ -1108,6 +1331,10 @@ pub async fn sync_youtube_library_internal(
 
     // 2b. Import regular user playlists
     for (idx, (pl_id, pl_name, pl_cover)) in discovered_playlists.into_iter().enumerate() {
+        if is_sync_cancelled() {
+            let _ = clear_youtube_cookies_internal(app);
+            return Err("Sync cancelled by user".to_string());
+        }
         let pct = 40.0 + ((idx as f64) / (total_playlists.max(1) as f64)) * 55.0;
         let _ = app.emit("youtube_sync_progress", SyncProgressPayload {
             stage: "importing_tracks".to_string(),
@@ -1299,5 +1526,94 @@ mod tests {
         assert_eq!(tracks[0].album, Some("Test Album".to_string()));
         assert_eq!(tracks[0].duration, "3:45");
         assert_eq!(tracks[0].url, "https://www.youtube.com/watch?v=abc12345");
+    }
+
+    #[test]
+    fn test_multiple_renderers_and_duplicates() {
+        let json = serde_json::json!({
+            "contents": [
+                // 1. Standard musicResponsiveListItemRenderer
+                {
+                    "musicResponsiveListItemRenderer": {
+                        "playlistItemData": { "videoId": "vid00111111" },
+                        "flexColumns": [
+                            {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                    "text": { "runs": [{ "text": "First Track" }] }
+                                }
+                            },
+                            {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                    "text": { "runs": [{ "text": "Artist A" }] }
+                                }
+                            }
+                        ]
+                    }
+                },
+                // 2. Duplicate song (same video ID, different playlist entry)
+                {
+                    "musicResponsiveListItemRenderer": {
+                        "playlistItemData": { "videoId": "vid00111111" },
+                        "flexColumns": [
+                            {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                    "text": { "runs": [{ "text": "First Track (Re-release)" }] }
+                                }
+                            },
+                            {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                    "text": { "runs": [{ "text": "Artist A" }] }
+                                }
+                            }
+                        ]
+                    }
+                },
+                // 3. playlistVideoRenderer
+                {
+                    "playlistVideoRenderer": {
+                        "videoId": "vid00222222",
+                        "title": { "runs": [{ "text": "Music Video Track" }] },
+                        "shortBylineText": { "runs": [{ "text": "Artist B" }] },
+                        "lengthText": { "simpleText": "4:12" }
+                    }
+                },
+                // 4. Item where videoId is only in thumbnail URL
+                {
+                    "musicResponsiveListItemRenderer": {
+                        "flexColumns": [
+                            {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                    "text": { "runs": [{ "text": "Restricted Track" }] }
+                                }
+                            },
+                            {
+                                "musicResponsiveListItemFlexColumnRenderer": {
+                                    "text": { "runs": [{ "text": "Artist C" }] }
+                                }
+                            }
+                        ],
+                        "thumbnail": {
+                            "musicThumbnailRenderer": {
+                                "thumbnail": {
+                                    "thumbnails": [
+                                        { "url": "https://i.ytimg.com/vi/vid00333333/hqdefault.jpg" }
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                }
+            ]
+        });
+
+        let mut tracks = Vec::new();
+        find_responsive_items_in_json(&json, &mut tracks);
+        assert_eq!(tracks.len(), 4, "All 4 items including duplicate and playlistVideoRenderer must be extracted");
+        assert_eq!(tracks[0].url, "https://www.youtube.com/watch?v=vid00111111");
+        assert_eq!(tracks[1].url, "https://www.youtube.com/watch?v=vid00111111");
+        assert_eq!(tracks[2].url, "https://www.youtube.com/watch?v=vid00222222");
+        assert_eq!(tracks[3].url, "https://www.youtube.com/watch?v=vid00333333");
+        // Ensure each has a unique ID
+        assert_ne!(tracks[0].id, tracks[1].id);
     }
 }

@@ -1069,7 +1069,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                             window.addEventListener('mouseup', onUp);
                           }}>
                           <div style={{position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-                            {isProtectedPlaylist(pl.id)
+                            {pl.id === 'p1' || pl.id === 'yt_liked'
                               ? <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,rgba(140,30,30,0.4) 0%,rgba(140,30,30,0.1) 100%)"}}><Heart size={22} style={{color:"#e05555",fill:"rgba(220,60,60,0.25)"}}/></div>
                               : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,rgba(255,255,255,0.03) 0%,rgba(255,255,255,0.01) 100%)"}}><ListMusic size={24} style={{color:"var(--v-fg3)"}}/></div>}
                           </div>
@@ -1233,7 +1233,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                           }}
                         >
                           <div style={{position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
-                            {isProtectedPlaylist(pl.id)
+                            {pl.id === 'p1' || pl.id === 'yt_liked'
                               ? <Heart size={14} style={{color:"#e05555",fill:"rgba(220,60,60,0.25)"}}/>
                               : <ListMusic size={16} style={{color:"var(--v-fg3)"}}/>}
                           </div>

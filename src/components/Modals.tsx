@@ -920,7 +920,7 @@ export function CsvImportModal({
                   onMouseEnter={e => { e.currentTarget.style.background = "rgba(255, 96, 96, 0.18)"; }}
                   onMouseLeave={e => { e.currentTarget.style.background = "rgba(255, 96, 96, 0.08)"; }}
                 >
-                  Cancel Import
+                  Cancel
                 </button>
               </div>
             )}
