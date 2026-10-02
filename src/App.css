@@ -864,7 +864,8 @@ kbd {
 .v-sidebar-playlist-menu {
   position: absolute;
   top: calc(100% + 4px);
-  left: 0;
+  right: 0;
+  left: auto;
   width: 160px;
   display: flex;
   flex-direction: column;
@@ -1370,6 +1371,22 @@ kbd {
 }
 .v-queue-item:hover { background: rgba(255,255,255,0.025); }
 .v-queue-item--active { background: rgba(255, 255, 255, 0.045); }
+.v-queue-drag-icon {
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+.v-queue-drag-index {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.v-queue-item:hover .v-queue-drag-icon {
+  display: flex;
+}
+.v-queue-item:hover .v-queue-drag-index {
+  display: none;
+}
 
 .exportify-btn {
   transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);

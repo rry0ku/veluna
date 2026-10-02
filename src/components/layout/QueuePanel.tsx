@@ -378,9 +378,12 @@ export const QueuePanel: React.FC<QueuePanelProps> = React.memo(({
                       <div
                         key={`${track.url}-${i}`}
                         className="v-queue-item"
-                        style={{ position: 'relative', paddingLeft: '16px' }}
+                        style={{ position: 'relative' }}
                         onContextMenu={e => openCtx(e, { type: 'track', track })}
                       >
+                        <div style={{ width: "20px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <span style={{ fontSize: "11px", color: "var(--v-fg3)", fontVariantNumeric: "tabular-nums" }}>{i + 1}</span>
+                        </div>
                         <div
                           className="v-queue-cover-container"
                           style={{ position: 'relative', width: '36px', height: '36px', borderRadius: '6px', overflow: 'hidden', flexShrink: 0, cursor: 'pointer' }}
@@ -393,7 +396,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = React.memo(({
                             display: "flex", alignItems: "center", justifyContent: "center"
                           }}>
                             <Music size={12} style={{ position: 'absolute', color: 'rgba(255,255,255,0.25)' }} />
-                            {track.cover && <img src={track.cover} style={{ position: 'absolute', inset: 0, width: "100%", height: "100%", objectFit: "cover" }} onError={e => { e.currentTarget.style.display = 'none'; }} alt="" />}
+                            {getTrackCoverUrl(track) && <img src={getTrackCoverUrl(track)} style={{ position: 'absolute', inset: 0, width: "100%", height: "100%", objectFit: "cover" }} onError={handleThumbnailError} alt="" />}
                           </div>
                           <div className="v-queue-play-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff' }}>
                             <Play size={12} fill="currentColor" />

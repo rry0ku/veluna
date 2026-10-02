@@ -2506,11 +2506,12 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
 
               {isSearching && (
                 <>
-                  <div style={{display:"flex",alignItems:"center",gap:"14px",padding:"0 12px 6px",borderBottom:"1px solid var(--v-bdr2)",marginBottom:"4px"}}>
-                    <div style={{width:"26px",flexShrink:0}}/><div style={{width:"38px",flexShrink:0}}/>
-                    <p style={{flex:1,fontSize:"9.5px",fontWeight:700,letterSpacing:".1em",textTransform:"uppercase",color:"var(--v-fg3)"}}>Title</p>
-                    <div style={{width:"60px",flexShrink:0}}/>
-                    <Clock size={12} style={{color:"var(--v-fg3)",width:"36px",flexShrink:0}}/>
+                  <div style={{display:"flex",alignItems:"center",gap:"12px",padding:"0 12px 6px",borderBottom:"1px solid var(--v-bdr2)",marginBottom:"4px"}}>
+                    {isMultiSelectActive && <div style={{width:"22px",flexShrink:0}}/>}
+                    <div style={{width:"28px",flexShrink:0,textAlign:"center",fontSize:"10px",fontWeight:700,letterSpacing:".05em",color:"var(--v-fg3)"}}>#</div>
+                    <div style={{width:"40px",flexShrink:0}}/>
+                    <p style={{flex:1,fontSize:"10px",fontWeight:700,letterSpacing:".1em",textTransform:"uppercase",color:"var(--v-fg3)",margin:0}}>Title</p>
+                    <div style={{width:"120px",flexShrink:0,textAlign:"right",paddingRight:"2px",fontSize:"10px",fontWeight:700,letterSpacing:".1em",textTransform:"uppercase",color:"var(--v-fg3)"}}>Duration</div>
                   </div>
                   <div style={{display:"flex",flexDirection:"column",gap:"3px",marginTop:"4px"}}>{Array.from({ length: 8 }).map((_, i) => <TrackRowSkeleton key={i} index={i} />)}</div>
                 </>
@@ -2518,11 +2519,12 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
 
               {!isSearching && activeTracks.length > 0 && (
                 <>
-                  <div style={{display:"flex",alignItems:"center",gap:"14px",padding:"0 12px 6px",borderBottom:"1px solid var(--v-bdr2)",marginBottom:"4px"}}>
-                    <div style={{width:"26px",flexShrink:0}}/><div style={{width:"38px",flexShrink:0}}/>
-                    <p style={{flex:1,fontSize:"9.5px",fontWeight:700,letterSpacing:".1em",textTransform:"uppercase",color:"var(--v-fg3)"}}>Title</p>
-                    <div style={{width:"60px",flexShrink:0}}/>
-                    <Clock size={12} style={{color:"var(--v-fg3)",width:"36px",flexShrink:0}}/>
+                  <div style={{display:"flex",alignItems:"center",gap:"12px",padding:"0 12px 6px",borderBottom:"1px solid var(--v-bdr2)",marginBottom:"4px"}}>
+                    {isMultiSelectActive && <div style={{width:"22px",flexShrink:0}}/>}
+                    <div style={{width:"28px",flexShrink:0,textAlign:"center",fontSize:"10px",fontWeight:700,letterSpacing:".05em",color:"var(--v-fg3)"}}>#</div>
+                    <div style={{width:"40px",flexShrink:0}}/>
+                    <p style={{flex:1,fontSize:"10px",fontWeight:700,letterSpacing:".1em",textTransform:"uppercase",color:"var(--v-fg3)",margin:0}}>Title</p>
+                    <div style={{width:"120px",flexShrink:0,textAlign:"right",paddingRight:"2px",fontSize:"10px",fontWeight:700,letterSpacing:".1em",textTransform:"uppercase",color:"var(--v-fg3)"}}>Duration</div>
                   </div>
                   <div style={{marginTop:"4px"}}>
                     <VirtualTrackList

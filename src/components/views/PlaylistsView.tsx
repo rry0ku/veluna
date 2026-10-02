@@ -618,22 +618,36 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                       />
                     </div>
                     <div style={{
-                      display:"flex",
-                      alignItems:"center",
-                      padding:"8px 12px",
-                      color:"var(--v-fg3)",
-                      fontSize:"11px",
-                      fontWeight:700,
-                      letterSpacing:"0.1em",
-                      textTransform:"uppercase",
-                      borderBottom:"1px solid var(--v-bdr2)",
-                      marginBottom:"6px"
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "3px",
+                      boxSizing: "border-box",
+                      borderBottom: "1px solid var(--v-bdr2)",
+                      marginBottom: "6px",
+                      paddingBottom: "6px"
                     }}>
-                      {!playlistSearchQ && <div style={{ width: "22px", flexShrink: 0 }} />}
-                      <div style={{ width: "30px", flexShrink: 0, textAlign: "center" }}>#</div>
-                      <div style={{ width: "50px", flexShrink: 0, marginLeft: "14px" }} />
-                      <div style={{ flex: 1, minWidth: 0, paddingLeft: "14px" }}>Title</div>
-                      <div style={{ width: "150px", textAlign: "right", paddingRight: "12px" }}>Duration</div>
+                      {!playlistSearchQ && playlistSortBy === 'default' && (
+                        <div style={{ width: "22px", flexShrink: 0 }} />
+                      )}
+                      <div style={{
+                        flex: 1,
+                        minWidth: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "12px",
+                        padding: "0 12px",
+                        color: "var(--v-fg3)",
+                        fontSize: "10px",
+                        fontWeight: 700,
+                        letterSpacing: "0.1em",
+                        textTransform: "uppercase"
+                      }}>
+                        {isTrackMultiSelectActive && <div style={{ width: "22px", flexShrink: 0 }} />}
+                        <div style={{ width: "28px", flexShrink: 0, textAlign: "center" }}>#</div>
+                        <div style={{ width: "40px", flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>Title</div>
+                        <div style={{ width: "120px", flexShrink: 0, textAlign: "right" }}>Duration</div>
+                      </div>
                     </div>
                     {filteredTracks.length === 0 ? (
                       <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"110px",color:"var(--v-fg3)",gap:"7px"}}>

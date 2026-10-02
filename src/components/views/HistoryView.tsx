@@ -361,7 +361,7 @@ const HistoryTrackRow = React.memo(({
           transition: 'opacity 0.1s ease'
         }}
         onMouseEnter={e => { e.currentTarget.style.color = '#e05555'; e.currentTarget.style.opacity = '1'; }}
-        onMouseLeave={e => { e.currentTarget.style.color = 'var(--v-fg3)'; e.currentTarget.style.opacity = '0.7'; }}
+        onMouseLeave={e => { e.currentTarget.style.color = 'var(--v-fg3)'; e.currentTarget.style.opacity = isHovered ? '0.7' : '0'; }}
       >
         <X size={14} />
       </button>
@@ -715,6 +715,28 @@ export const HistoryView: React.FC<HistoryViewProps> = React.memo(({
               </button>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Table Column Header */}
+      {filteredHistory.length > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          padding: '8px 12px',
+          color: 'var(--v-fg3)',
+          fontSize: '11px',
+          fontWeight: 700,
+          letterSpacing: '0.1em',
+          textTransform: 'uppercase',
+          borderBottom: '1px solid var(--v-bdr2)',
+          marginBottom: '6px'
+        }}>
+          <div style={{ width: '24px', flexShrink: 0, textAlign: 'center' }}>#</div>
+          <div style={{ width: '38px', flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>Title</div>
+          <div style={{ width: '160px', flexShrink: 0, textAlign: 'right', paddingRight: '4px' }}>Played / Duration</div>
         </div>
       )}
 

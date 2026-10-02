@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Heart,
   Download,
@@ -140,6 +140,18 @@ export const PlayerBar: React.FC<PlayerBarProps> = React.memo(({
   const [showRemainingTime, setShowRemainingTime] = useState(false);
   const [hoverPct, setHoverPct] = useState<number | null>(null);
   const [isHoveringVolume, setIsHoveringVolume] = useState(false);
+  const sleepContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showSleepPopover) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (sleepContainerRef.current && !sleepContainerRef.current.contains(e.target as Node)) {
+        setShowSleepPopover(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, [showSleepPopover, setShowSleepPopover]);
 
   const calculateProgressPercent = customCalculateProgress || (() => {
     const total = trackDurationSeconds || parseDurationToSeconds(currentTrack?.duration || '0:00');
@@ -218,6 +230,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = React.memo(({
                 alignItems: "center",
                 gap: "8px",
                 minWidth: 0,
+                flex: 1,
                 animation: "fadeIn 0.25s ease both"
               }}
             >
@@ -611,7 +624,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = React.memo(({
                     <div
                       className="v-progress-tooltip"
                       style={{
-                        left: `${tooltipPct ?? 0}%`,
+                        left: `${Math.min(97, Math.max(3, tooltipPct ?? 0))}%`,
                         opacity: (hoverPct !== null || isDraggingProgress) ? 1 : undefined,
                         transform: (hoverPct !== null || isDraggingProgress) ? 'translateX(-50%) translateY(0)' : undefined
                       }}
@@ -670,7 +683,7 @@ export const PlayerBar: React.FC<PlayerBarProps> = React.memo(({
           onMouseLeave={e=>{e.currentTarget.style.color=showLyrics?"var(--v-accent)":"rgba(255, 255, 255, 0.4)";}}>
           <Mic2 size={16}/>
         </button>
-        <div style={{position:"relative",flexShrink:0}} onClick={e => e.stopPropagation()}>
+        <div ref={sleepContainerRef} style={{position:"relative",flexShrink:0}} onClick={e => e.stopPropagation()}>
           <button onClick={() => setShowSleepPopover(o => !o)} title={sleepTimer > 0 ? `Sleep in ${Math.ceil(sleepTimer/60)}m` : 'Sleep Timer'}
             style={{background:"none",border:"none",cursor:"pointer",color:sleepTimer>0?"var(--v-accent)":showSleepPopover?"#e2ddd9":"rgba(255, 255, 255, 0.4)",flexShrink:0,display:"flex",padding:"3px",transition:"all .12s ease",transform:showSleepPopover?"scale(1.15)":"none"}}
             onMouseEnter={e=>{e.currentTarget.style.color=sleepTimer>0?"var(--v-accent)":"rgba(255, 255, 255, 0.9)";}}
