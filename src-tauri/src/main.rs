@@ -353,9 +353,17 @@ fn sanitize_stream_url(url: &str) -> Result<String, String> {
 }
 
 fn sanitize_file_path(path: &str) -> Result<std::path::PathBuf, String> {
+    let unescaped = if path.contains('%') {
+        urlencoding::decode(path)
+            .map(|c| c.into_owned())
+            .unwrap_or_else(|_| path.to_string())
+    } else {
+        path.to_string()
+    };
     #[allow(unused_mut)]
     let mut expanded = expand_tilde(
-        path.trim_start_matches("local://")
+        unescaped
+            .trim_start_matches("local://")
             .trim_start_matches("file://")
             .trim(),
     );
@@ -3912,7 +3920,12 @@ async fn get_audio_metadata(path: String) -> Result<AudioMetadata, String> {
 #[tauri::command]
 async fn get_audio_cover(path: String) -> Result<Option<String>, String> {
     tokio::task::spawn_blocking(move || {
-        let resolved = expand_tilde(&path);
+        let clean = path
+            .trim()
+            .trim_start_matches("local://")
+            .trim_start_matches("file://")
+            .trim();
+        let resolved = expand_tilde(clean);
         let p = std::path::PathBuf::from(&resolved);
         if let Some(uri) = metadata::extract_cover_art_data_uri(&p) {
             return Ok(Some(uri));
@@ -3921,6 +3934,7 @@ async fn get_audio_cover(path: String) -> Result<Option<String>, String> {
         // Fallback 1: Extract attached picture stream via ffmpeg on resolved path
         let output = Command::new(bin_ffmpeg())
             .args([
+                "-nostdin",
                 "-i",
                 &resolved,
                 "-map",
@@ -4082,8 +4096,10 @@ async fn get_waveform_thumbnail(path: String) -> Result<Vec<f32>, String> {
         let p_str = p.to_string_lossy();
         let output = Command::new(bin_ffmpeg())
             .args([
+                "-nostdin",
                 "-i",
                 p_str.as_ref(),
+                "-vn",
                 "-ac",
                 "1",
                 "-ar",
@@ -4773,8 +4789,9 @@ fn start_mpv_event_listener(app_handle: tauri::AppHandle) {
                                             .lock()
                                             .unwrap_or_else(|p| p.into_inner());
                                         state.eof_reached = false;
-                                        state.position = 0.0;
-                                        state.playing = false;
+                                        if !state.paused {
+                                            state.playing = true;
+                                        }
                                     }
                                     let s_clone = current_playback_state()
                                         .lock()
@@ -4807,41 +4824,50 @@ fn parse_f64_from_response(response: &str) -> Result<f64, String> {
 }
 
 fn parse_lrc_string(lrc_text: &str, duration: f64) -> Option<String> {
-    let mut lines: Vec<serde_json::Value> = Vec::new();
-    for line in lrc_text.lines() {
-        let line = line.trim();
+    let mut timed_lines: Vec<(f64, String)> = Vec::new();
+    for raw_line in lrc_text.lines() {
+        let line = raw_line.trim();
         if line.is_empty() {
             continue;
         }
-        if let Some(rest) = line.strip_prefix('[') {
-            if let Some(end) = rest.find(']') {
-                let ts = &rest[..end];
-                let text = rest[end + 1..].trim();
 
-                let secs: f64 = if let Some(colon) = ts.find(':') {
-                    let min_part = &ts[..colon];
-                    let sec_part = &ts[colon + 1..];
+        let mut remainder = line;
+        let mut timestamps = Vec::new();
+
+        while remainder.starts_with('[') {
+            if let Some(end) = remainder.find(']') {
+                let tag = &remainder[1..end];
+                if let Some(colon) = tag.find(':') {
+                    let min_part = &tag[..colon];
+                    let sec_part = &tag[colon + 1..];
                     if !min_part.is_empty() && min_part.chars().all(|c| c.is_ascii_digit()) {
                         if let (Ok(mins), Ok(s)) =
                             (min_part.parse::<f64>(), sec_part.parse::<f64>())
                         {
-                            mins * 60.0 + s
-                        } else {
-                            continue;
+                            timestamps.push(mins * 60.0 + s);
                         }
-                    } else {
-                        continue;
                     }
-                } else {
-                    continue;
-                };
-                if !text.is_empty() {
-                    lines.push(serde_json::json!({"time": secs, "text": text}));
                 }
+                remainder = remainder[end + 1..].trim_start();
+            } else {
+                break;
+            }
+        }
+
+        let clean_text = remainder.trim();
+        if !clean_text.is_empty() && !timestamps.is_empty() {
+            for ts in timestamps {
+                timed_lines.push((ts, clean_text.to_string()));
             }
         }
     }
-    if !lines.is_empty() {
+
+    if !timed_lines.is_empty() {
+        timed_lines.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+        let lines: Vec<serde_json::Value> = timed_lines
+            .into_iter()
+            .map(|(time, text)| serde_json::json!({"time": time, "text": text}))
+            .collect();
         return Some(serde_json::to_string(&lines).unwrap_or_default());
     }
 
@@ -4970,6 +4996,50 @@ async fn fetch_lyrics(
                         if let Some(parsed) = parse_lrc_string(plain, duration) {
                             let _ = db::cache_lyrics(&title, &artist, &parsed);
                             return Ok(parsed);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. Fallback: Query NetEase Cloud Music if LRCLIB had no lyrics
+    if src != "netease" {
+        let q = format!("{} {}", title.trim(), artist.trim());
+        let encoded_q = urlencoding::encode(&q);
+        let netease_search_url = format!(
+            "https://music.163.com/api/search/get/web?s={}&type=1&offset=0&total=true&limit=1",
+            encoded_q
+        );
+        if let Ok(resp) = client
+            .get(&netease_search_url)
+            .header("User-Agent", "Mozilla/5.0")
+            .send()
+            .await
+        {
+            if let Ok(json) = resp.json::<serde_json::Value>().await {
+                if let Some(song_id) = json
+                    .pointer("/result/songs/0/id")
+                    .and_then(|id| id.as_i64())
+                {
+                    let lyric_url = format!(
+                        "https://music.163.com/api/song/lyric?id={}&lv=-1&kv=-1&tv=-1",
+                        song_id
+                    );
+                    if let Ok(l_resp) = client
+                        .get(&lyric_url)
+                        .header("User-Agent", "Mozilla/5.0")
+                        .send()
+                        .await
+                    {
+                        if let Ok(l_json) = l_resp.json::<serde_json::Value>().await {
+                            if let Some(lrc) = l_json.pointer("/lrc/lyric").and_then(|s| s.as_str())
+                            {
+                                if let Some(parsed) = parse_lrc_string(lrc, duration) {
+                                    let _ = db::cache_lyrics(&title, &artist, &parsed);
+                                    return Ok(parsed);
+                                }
+                            }
                         }
                     }
                 }
@@ -6568,6 +6638,23 @@ Couldn't look you in the eye
     }
 
     #[test]
+    fn test_parse_lrc_multi_timestamps() {
+        let lrc = r#"
+[00:10.50][00:30.00]When you were here before
+[00:20.00]Middle line
+"#;
+        let res = parse_lrc_string(lrc, 120.0).expect("should parse lrc");
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&res).unwrap();
+        assert_eq!(parsed.len(), 3);
+        assert_eq!(parsed[0]["text"], "When you were here before");
+        assert_eq!(parsed[0]["time"], 10.5);
+        assert_eq!(parsed[1]["text"], "Middle line");
+        assert_eq!(parsed[1]["time"], 20.0);
+        assert_eq!(parsed[2]["text"], "When you were here before");
+        assert_eq!(parsed[2]["time"], 30.0);
+    }
+
+    #[test]
     fn test_sanitize_file_path_valid() {
         #[cfg(unix)]
         {
@@ -6578,6 +6665,10 @@ Couldn't look you in the eye
             let res_file = sanitize_file_path("file:///tmp/test.mp3");
             assert!(res_file.is_ok());
             assert_eq!(res_file.unwrap(), std::path::PathBuf::from("/tmp/test.mp3"));
+
+            let res_encoded = sanitize_file_path("file:///tmp/My%20Music/song.mp3");
+            assert!(res_encoded.is_ok());
+            assert_eq!(res_encoded.unwrap(), std::path::PathBuf::from("/tmp/My Music/song.mp3"));
 
             let res_disc = sanitize_file_path("/tmp/Pink Floyd (Disc 1..2)/track.mp3");
             assert!(res_disc.is_ok());

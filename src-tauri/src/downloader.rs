@@ -277,21 +277,29 @@ pub async fn download_audio_stream_chunked(
     // 4. Fetch cover art bytes if available
     let mut cover_bytes: Option<Vec<u8>> = None;
     if let Some(ref c_url) = cover_url {
-        if c_url.starts_with("http://") || c_url.starts_with("https://") {
-            if let Ok(c_res) = client.get(c_url).send().await {
+        let trimmed_c = c_url.trim();
+        if trimmed_c.starts_with("http://") || trimmed_c.starts_with("https://") {
+            if let Ok(c_res) = client.get(trimmed_c).send().await {
                 if let Ok(bytes) = c_res.bytes().await {
                     cover_bytes = Some(bytes.to_vec());
                 }
             }
+        } else if let Some(b64_part) = trimmed_c.strip_prefix("data:").and_then(|s| s.split(";base64,").nth(1)) {
+            use base64::Engine;
+            if let Ok(bytes) = base64::engine::general_purpose::STANDARD.decode(b64_part.trim()) {
+                cover_bytes = Some(bytes);
+            }
         } else {
-            let local_path = if let Some(stripped) = c_url.strip_prefix("file://") {
+            let local_path = if let Some(stripped) = trimmed_c.strip_prefix("file://") {
                 #[cfg(windows)]
                 let p = stripped.trim_start_matches('/');
                 #[cfg(not(windows))]
                 let p = stripped;
                 PathBuf::from(p)
+            } else if let Some(stripped) = trimmed_c.strip_prefix("local://") {
+                PathBuf::from(stripped)
             } else {
-                PathBuf::from(c_url)
+                PathBuf::from(trimmed_c)
             };
             if let Ok(bytes) = std::fs::read(local_path) {
                 cover_bytes = Some(bytes);
