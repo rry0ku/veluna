@@ -36,6 +36,9 @@ import {
   findDuplicateTracks,
   fetchArtistYouTubeTracks,
   globalArtistAvatarCache,
+  isValidCover,
+  normalizeCoverUrl,
+  getPlaylistCover as getSharedPlaylistCover,
 } from './utils';
 import { getStarterRecommendations } from './constants';
 
@@ -555,11 +558,11 @@ export function App() {
 
   const getTrackCover = useCallback((track: Track | null | undefined) => {
     if (!track) return '';
-    if (track.cover && track.cover.trim()) return track.cover.trim();
+    if (isValidCover(track.cover)) return normalizeCoverUrl(track.cover);
     if (track.url?.startsWith('local://')) {
       const path = track.url.slice(8);
       const found = localTracks.find(lt => lt.path === path);
-      if (found && found.cover) return found.cover;
+      if (found && isValidCover(found.cover)) return normalizeCoverUrl(found.cover);
     }
     const ytMatch = track.url?.match(/(?:v=|youtu\.be\/|\/v\/|\/embed\/|\/shorts\/)([a-zA-Z0-9_-]{11})/);
     if (ytMatch) {
@@ -607,7 +610,7 @@ export function App() {
     reorderPlaylists,
   } = usePlaylists(showToast);
 
-  const getPlaylistCover = useCallback((p: Playlist) => p.id === 'p1' ? null : (p.customCover || (p.tracks.find(t => t.cover)?.cover || null)), []);
+  const getPlaylistCover = useCallback((p: Playlist) => getSharedPlaylistCover(p), []);
 
   const [startupNav, setStartupNavState] = useState<string>(() => loadLS('vg_startupNav', 'home'));
   const setStartupNav = useCallback((nav: string) => {
@@ -1140,7 +1143,8 @@ export function App() {
       if (delta > 2 || lastRpcProgressRef.current === 0 || stateChanged) {
         lastRpcProgressRef.current = progressSeconds;
         lastRpcStateRef.current = stateSig;
-        const coverUrl = currentTrack.cover && !currentTrack.cover.startsWith('data:') && !currentTrack.cover.startsWith('blob:') ? currentTrack.cover : null;
+        const resolvedCover = getTrackCover(currentTrack);
+        const coverUrl = resolvedCover && !resolvedCover.startsWith('data:') && !resolvedCover.startsWith('blob:') && !resolvedCover.startsWith('local://') ? resolvedCover : null;
         const trackUrl = currentTrack.url && currentTrack.url.startsWith('http') ? currentTrack.url : null;
         const now = Math.floor(Date.now() / 1000);
         const remainingSecs = Math.max(0, trackDurationSeconds - progressSeconds);

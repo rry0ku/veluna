@@ -6051,6 +6051,37 @@ fn watch_download_folder(app: tauri::AppHandle, path: String) -> Result<(), Stri
     Ok(())
 }
 
+fn normalize_discord_cover(url: &str) -> String {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    // 1. Google usercontent (YouTube Music covers):
+    // Replace sizing parameters with =s512-c to enforce a 1:1 square crop without bars
+    if trimmed.contains("googleusercontent.com") {
+        if let Some(base) = trimmed.split('=').next() {
+            if !base.is_empty() && base != trimmed {
+                return format!("{}=s512-c", base);
+            }
+        }
+        return format!("{}=s512-c", trimmed);
+    }
+
+    // 2. YouTube video thumbnails (i.ytimg.com or img.youtube.com):
+    // Standard YouTube thumbnails are 16:9 or 4:3. Use wsrv.nl proxy to crop to a 1:1 square
+    // (w=512&h=512&fit=cover) so Discord renders a full square cover without pillarbox/letterbox side bars.
+    if trimmed.contains("i.ytimg.com") || trimmed.contains("img.youtube.com") {
+        let clean_yt = if trimmed.contains("hqdefault.jpg") {
+            trimmed.replace("hqdefault.jpg", "mqdefault.jpg")
+        } else {
+            trimmed.to_string()
+        };
+        return format!("https://wsrv.nl/?url={}&w=512&h=512&fit=cover", urlencoding::encode(&clean_yt));
+    }
+
+    trimmed.to_string()
+}
+
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 fn update_discord_rpc(
@@ -6097,13 +6128,14 @@ fn update_discord_rpc(
             if !safe_artist.is_empty() {
                 act = act.state(&safe_artist);
             }
+            let formatted_cover = cover_url.as_deref().map(normalize_discord_cover);
             let mut assets = activity::Assets::new()
                 .small_image("icon")
                 .small_text("Veluna");
             if show_cover.unwrap_or(true) {
-                if let Some(ref url) = cover_url {
-                    if !url.trim().is_empty() {
-                        assets = assets.large_image(url);
+                if let Some(ref cover) = formatted_cover {
+                    if !cover.is_empty() {
+                        assets = assets.large_image(cover);
                     }
                 }
             }
@@ -6752,6 +6784,31 @@ Couldn't look you in the eye
         assert_eq!(
             resolve_naming_template(Some("custom_unknown")),
             "%(artist,uploader)s - %(title)s.%(ext)s"
+        );
+    }
+
+    #[test]
+    fn test_normalize_discord_cover() {
+        // Google usercontent should enforce =s512-c square crop
+        let google_url = "https://lh3.googleusercontent.com/ABC123xyz=w544-h544-l90-rj";
+        assert_eq!(
+            normalize_discord_cover(google_url),
+            "https://lh3.googleusercontent.com/ABC123xyz=s512-c"
+        );
+
+        // YouTube thumbnails should use wsrv.nl square crop
+        let yt_url = "https://i.ytimg.com/vi/kYJqW3R2r-U/hqdefault.jpg";
+        let expected = format!(
+            "https://wsrv.nl/?url={}&w=512&h=512&fit=cover",
+            urlencoding::encode("https://i.ytimg.com/vi/kYJqW3R2r-U/mqdefault.jpg")
+        );
+        assert_eq!(normalize_discord_cover(yt_url), expected);
+
+        // Blank or non-YouTube URLs stay clean
+        assert_eq!(normalize_discord_cover(""), "");
+        assert_eq!(
+            normalize_discord_cover("https://example.com/cover.jpg"),
+            "https://example.com/cover.jpg"
         );
     }
 }

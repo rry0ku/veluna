@@ -293,9 +293,46 @@ export function parseTrackMeta(rawTitle: string, rawArtist?: string | null): { t
   };
 }
 
+export function normalizeCoverUrl(url: string | null | undefined): string {
+  if (!url) return '';
+  let trimmed = url.trim();
+  if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
+    trimmed = trimmed.slice(1, -1).trim();
+  }
+  if (trimmed.startsWith('//')) {
+    return 'https:' + trimmed;
+  }
+  return trimmed;
+}
+
+export function isValidCover(url: unknown): url is string {
+  if (typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (
+    !trimmed ||
+    trimmed === 'null' ||
+    trimmed === 'undefined' ||
+    trimmed === 'NA' ||
+    trimmed === 'n/a' ||
+    trimmed === '[object Object]' ||
+    trimmed === 'none'
+  ) {
+    return false;
+  }
+  return (
+    trimmed.startsWith('http://') ||
+    trimmed.startsWith('https://') ||
+    trimmed.startsWith('//') ||
+    trimmed.startsWith('data:image/') ||
+    trimmed.startsWith('local://') ||
+    trimmed.startsWith('file://') ||
+    trimmed.startsWith('/')
+  );
+}
+
 export function getTrackCoverUrl(track: { cover?: string | null; url?: string | null } | null | undefined): string {
   if (!track) return '';
-  if (track.cover && track.cover.trim()) return track.cover.trim();
+  if (isValidCover(track.cover)) return normalizeCoverUrl(track.cover);
   if (track.url) {
     const ytMatch = track.url.match(/(?:v=|youtu\.be\/|\/v\/|\/embed\/|\/shorts\/)([a-zA-Z0-9_-]{11})/);
     if (ytMatch) {
@@ -305,27 +342,79 @@ export function getTrackCoverUrl(track: { cover?: string | null; url?: string | 
   return '';
 }
 
+export function getPlaylistCovers(
+  playlist: { id?: string; customCover?: string | null; tracks?: Array<{ cover?: string | null; url?: string | null }> } | null | undefined
+): string[] {
+  if (!playlist || playlist.id === 'p1') return [];
+  if (isValidCover(playlist.customCover)) return [normalizeCoverUrl(playlist.customCover)];
+  if (!playlist.tracks || playlist.tracks.length === 0) return [];
+
+  const covers: string[] = [];
+  // First attempt: scan tracks for up to 4 distinct valid covers
+  for (const t of playlist.tracks) {
+    const cover = getTrackCoverUrl(t);
+    if (isValidCover(cover) && !covers.includes(cover)) {
+      covers.push(cover);
+      if (covers.length === 4) break;
+    }
+  }
+
+  // If fewer than 4 distinct covers found but playlist has 4+ tracks with covers,
+  // fill remaining slots so the 4-track collage can be displayed
+  if (covers.length > 0 && covers.length < 4 && playlist.tracks.length >= 4) {
+    for (const t of playlist.tracks) {
+      const cover = getTrackCoverUrl(t);
+      if (isValidCover(cover)) {
+        covers.push(cover);
+        if (covers.length === 4) break;
+      }
+    }
+  }
+
+  return covers;
+}
+
+export function getPlaylistCover(playlist: { id?: string; customCover?: string | null; tracks?: Array<{ cover?: string | null; url?: string | null }> } | null | undefined): string | null {
+  const covers = getPlaylistCovers(playlist);
+  return covers.length > 0 ? covers[0] : null;
+}
+
 export function handleThumbnailError(e: React.SyntheticEvent<HTMLImageElement, Event>) {
   const img = e.currentTarget;
   const currentSrc = img.src || '';
 
-  const ytMatch = currentSrc.match(/(?:i\.ytimg\.com|img\.youtube\.com)\/vi\/([a-zA-Z0-9_-]{11})\/([a-z0-9_]+)\.jpg/i);
+  // 1. YouTube thumbnail cascade (maxresdefault / hq720 / sddefault -> hqdefault -> mqdefault -> default)
+  const ytMatch = currentSrc.match(/(?:i\.ytimg\.com|img\.youtube\.com)\/(?:vi|vi_webp)\/([a-zA-Z0-9_-]{11})\/([a-zA-Z0-9_]+)/i);
   if (ytMatch) {
     const id = ytMatch[1];
-    const quality = ytMatch[2];
+    const quality = ytMatch[2].toLowerCase();
 
-    if (quality === 'mqdefault') {
+    if (quality === 'maxresdefault' || quality === 'hq720' || quality === 'sddefault') {
       img.src = `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
       return;
     } else if (quality === 'hqdefault') {
-      img.src = `https://img.youtube.com/vi/${id}/mqdefault.jpg`;
+      img.src = `https://i.ytimg.com/vi/${id}/mqdefault.jpg`;
       return;
-    } else if (quality === 'default') {
-      img.src = `https://img.youtube.com/vi/${id}/hqdefault.jpg`;
+    } else if (quality === 'mqdefault') {
+      img.src = `https://i.ytimg.com/vi/${id}/default.jpg`;
       return;
+    }
+    img.style.display = 'none';
+    return;
+  }
+
+  // 2. Google usercontent / YouTube Music image sizing cascade
+  if (currentSrc.includes('googleusercontent.com') && (currentSrc.includes('=w') || currentSrc.includes('=s'))) {
+    if (!currentSrc.includes('=w120')) {
+      const baseUrl = currentSrc.split(/=[ws]/)[0];
+      if (baseUrl && baseUrl !== currentSrc) {
+        img.src = `${baseUrl}=w120-h120-l90-rj`;
+        return;
+      }
     }
   }
 
+  // 3. Fallback: hide the broken image so native broken image icons/question marks never show
   img.style.display = 'none';
 }
 

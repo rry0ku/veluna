@@ -15,6 +15,8 @@ import {
   History,
 } from 'lucide-react';
 import { Playlist, CtxMenu, SettingsTab, NavView } from '../../types';
+import { getTrackGradient } from '../../utils';
+import { PlaylistCoverArt } from '../PlaylistCoverArt';
 
 interface SidebarProps {
   activeNav: string;
@@ -53,7 +55,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   openPlaylistId,
   setOpenPlaylistId,
   openCtx,
-  getPlaylistCover: customGetPlaylistCover,
+  getPlaylistCover: _customGetPlaylistCover,
   setIsPlaylistModalOpen,
   setNewPlaylistName,
   setNewPlaylistDesc,
@@ -62,7 +64,6 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   handleImportPlaylistM3u,
 }) => {
   const navigateTo = setActiveNav || customNavigateTo || (() => {});
-  const getPlaylistCover = customGetPlaylistCover || ((p: Playlist) => p.id === 'p1' ? null : (p.customCover || p.tracks.find(t => t.cover)?.cover || null));
   const [sidebarPlaylistsExpanded, setSidebarPlaylistsExpanded] = useState(true);
   const [isPlaylistMenuOpen, setIsPlaylistMenuOpen] = useState(false);
   const playlistMenuRef = useRef<HTMLDivElement>(null);
@@ -224,7 +225,6 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
               <div style={{display:"flex",flexDirection:"column",gap:"2px",paddingBottom:"8px"}}>
                 {playlists.map(pl => {
                   const isOpen = openPlaylistId === pl.id && (activeNav === 'playlists' || activeNav === 'library');
-                  const cover = getPlaylistCover(pl);
                   const isLiked = pl.id === 'p1' || pl.id === 'yt_liked';
                   return (
                     <button key={pl.id}
@@ -232,10 +232,12 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
                       onContextMenu={e => openCtx(e, { type: 'sidebar-playlist', playlist: pl })}
                       title={pl.name}
                       className={`v-pl-item${isOpen?' v-pl-item--active':''}`}>
-                      <div className="v-pl-item__art" style={isLiked ? { background: 'linear-gradient(135deg, rgba(224, 85, 85, 0.25) 0%, rgba(140, 30, 80, 0.15) 100%)', borderColor: 'rgba(224, 85, 85, 0.2)' } : undefined}>
-                        {cover ? <img src={cover} style={{width:"100%",height:"100%",objectFit:"cover"}} alt=""/>
-                          : isLiked ? <Heart size={14} style={{color:'#e05555',fill:'rgba(224,85,85,0.3)'}}/>
-                          : <ListMusic size={14} style={{color:isOpen?'var(--v-accent)':'#8a807c'}} />}
+                      <div className="v-pl-item__art" style={isLiked ? { background: 'linear-gradient(135deg, rgba(224, 85, 85, 0.25) 0%, rgba(140, 30, 80, 0.15) 100%)', borderColor: 'rgba(224, 85, 85, 0.2)', position: 'relative' } : { position: 'relative', background: getTrackGradient(pl.name) }}>
+                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          {isLiked ? <Heart size={14} style={{ color: '#e05555', fill: 'rgba(224,85,85,0.3)' }} />
+                            : <ListMusic size={14} style={{ color: isOpen ? 'var(--v-accent)' : '#ffffff' }} />}
+                        </div>
+                        <PlaylistCoverArt playlist={pl} />
                       </div>
                       <div className="v-sidebar-pl-info" style={{display:'flex',flexDirection:'column',gap:'1px',flex:1,minWidth:0}}>
                         <span style={{fontSize:'12.5px',fontWeight:isOpen?700:500,color:isOpen?'#ffffff':isLiked?'#e2ddd9':'#a8a29e',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',transition:'color .15s ease'}}>{pl.name}</span>

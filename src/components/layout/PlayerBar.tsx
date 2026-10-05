@@ -188,11 +188,13 @@ export const PlayerBar: React.FC<PlayerBarProps> = React.memo(({
       <div className="v-player-left" style={{display:"flex",alignItems:"center",gap:"12px",minWidth:0,maxWidth:"35%",flexShrink:0}}>
         {currentTrack ? (
           <>
-            <div style={{
-              position:"relative",width:"56px",height:"56px",borderRadius:"12px",overflow:"hidden",border:"1px solid rgba(255,255,255,0.07)",flexShrink:0,cursor:"pointer",
-              background: getTrackGradient(currentTrack.title, currentTrack.artist),
-              display:"flex",alignItems:"center",justifyContent:"center"
-            }}
+            <div
+              className="v-player-art"
+              style={{
+                position:"relative",width:"56px",height:"56px",borderRadius:"12px",overflow:"hidden",border:"1px solid rgba(255,255,255,0.07)",flexShrink:0,cursor:"pointer",
+                background: getTrackGradient(currentTrack.title, currentTrack.artist),
+                display:"flex",alignItems:"center",justifyContent:"center"
+              }}
               onClick={()=>{ if(!currentTrack.url.startsWith('local://') && setInfoModalTrack) setInfoModalTrack(currentTrack); }}
               onContextMenu={e=>{ if(!currentTrack.url.startsWith('local://')) openCtx(e,{type:'track',track:currentTrack}); }}
               onMouseEnter={e=>{ const ov=e.currentTarget.querySelector<HTMLElement>('.art-ov'); if(ov) ov.style.opacity='1'; }}
@@ -205,7 +207,14 @@ export const PlayerBar: React.FC<PlayerBarProps> = React.memo(({
                   <img
                     src={coverSrc}
                     alt={currentTrack.title}
-                    style={{position: 'absolute', inset: 0, width:"100%",height:"100%",objectFit:"cover"}}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                      transform: typeof coverSrc === 'string' && (coverSrc.includes('ytimg.com') || coverSrc.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none'
+                    }}
                     onError={handleThumbnailError}
                   />
                 );

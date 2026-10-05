@@ -215,11 +215,23 @@ export const QueuePanel: React.FC<QueuePanelProps> = React.memo(({
                   alignItems: 'center',
                   justifyContent: 'center'
                 }}>
-                  {getTrackCoverUrl(currentTrack) ? (
-                    <img src={getTrackCoverUrl(currentTrack)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={handleThumbnailError} alt="" />
-                  ) : (
-                    <FileMusic size={16} style={{ color: 'var(--v-fg2)' }} />
-                  )}
+                  {(() => {
+                    const cover = getTrackCoverUrl(currentTrack);
+                    if (!cover) return <FileMusic size={16} style={{ color: 'var(--v-fg2)' }} />;
+                    return (
+                      <img
+                        src={cover}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          transform: typeof cover === 'string' && (cover.includes('ytimg.com') || cover.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none',
+                        }}
+                        onError={handleThumbnailError}
+                        alt=""
+                      />
+                    );
+                  })()}
                   {isLoadingTrack ? (
                     <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <svg width="16" height="16" viewBox="0 0 24 24" style={{ animation: 'spin 0.9s cubic-bezier(0.4, 0, 0.2, 1) infinite' }}>
@@ -324,7 +336,25 @@ export const QueuePanel: React.FC<QueuePanelProps> = React.memo(({
                             display: "flex", alignItems: "center", justifyContent: "center"
                           }}>
                             <Music size={12} style={{ position: 'absolute', color: 'rgba(255,255,255,0.25)' }} />
-                            {getTrackCoverUrl(track) && <img src={getTrackCoverUrl(track)} style={{ position: 'absolute', inset: 0, width: "100%", height: "100%", objectFit: "cover" }} onError={handleThumbnailError} alt="" />}
+                            {(() => {
+                              const cover = getTrackCoverUrl(track);
+                              if (!cover) return null;
+                              return (
+                                <img
+                                  src={cover}
+                                  style={{
+                                    position: 'absolute',
+                                    inset: 0,
+                                    width: "100%",
+                                    height: "100%",
+                                    objectFit: "cover",
+                                    transform: typeof cover === 'string' && (cover.includes('ytimg.com') || cover.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none',
+                                  }}
+                                  onError={handleThumbnailError}
+                                  alt=""
+                                />
+                              );
+                            })()}
                           </div>
                           <div className="v-queue-play-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff' }}>
                             <Play size={12} fill="currentColor" />
@@ -396,7 +426,25 @@ export const QueuePanel: React.FC<QueuePanelProps> = React.memo(({
                             display: "flex", alignItems: "center", justifyContent: "center"
                           }}>
                             <Music size={12} style={{ position: 'absolute', color: 'rgba(255,255,255,0.25)' }} />
-                            {getTrackCoverUrl(track) && <img src={getTrackCoverUrl(track)} style={{ position: 'absolute', inset: 0, width: "100%", height: "100%", objectFit: "cover" }} onError={handleThumbnailError} alt="" />}
+                            {(() => {
+                              const cover = getTrackCoverUrl(track);
+                              if (!cover) return null;
+                              return (
+                                <img
+                                  src={cover}
+                                  style={{
+                                    position: 'absolute',
+                                    inset: 0,
+                                    width: "100%",
+                                    height: "100%",
+                                    objectFit: "cover",
+                                    transform: typeof cover === 'string' && (cover.includes('ytimg.com') || cover.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none',
+                                  }}
+                                  onError={handleThumbnailError}
+                                  alt=""
+                                />
+                              );
+                            })()}
                           </div>
                           <div className="v-queue-play-overlay" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff' }}>
                             <Play size={12} fill="currentColor" />

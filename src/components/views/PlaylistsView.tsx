@@ -19,7 +19,8 @@ import {
   Layers,
 } from 'lucide-react';
 import { Track, Playlist, CtxMenu } from '../../types';
-import { getTrackGradient, saveLS, cleanArtist, parseDurationToSeconds, findDuplicateTracks, getTrackCoverUrl, handleThumbnailError } from '../../utils';
+import { getTrackGradient, saveLS, cleanArtist, parseDurationToSeconds, findDuplicateTracks, getTrackCoverUrl, handleThumbnailError, getPlaylistCover as defaultGetPlaylistCover } from '../../utils';
+import { PlaylistCoverArt } from '../PlaylistCoverArt';
 import { TrackRow } from '../TrackRow';
 import { ThemedSelect } from '../ThemedSelect';
 import { BatchActionBar } from '../BatchActionBar';
@@ -171,12 +172,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
     clearTrackSelection();
   }, [openPlaylistId, clearTrackSelection]);
 
-  const getPlaylistCover = customGetPlaylistCover || ((playlist: Playlist) => {
-    if (playlist.id === 'p1') return null;
-    if (playlist.customCover) return playlist.customCover;
-    const firstWithCover = playlist.tracks.find(t => getTrackCoverUrl(t));
-    return firstWithCover ? getTrackCoverUrl(firstWithCover) : null;
-  });
+  const getPlaylistCover = customGetPlaylistCover || defaultGetPlaylistCover;
 
   const playAll = customPlayAll || ((list: Track[]) => {
     if (list.length > 0) handlePlayInContext(list[0], list);
@@ -297,7 +293,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
               width:"140px",
               height:"140px",
               borderRadius:"16px",
-              background:openPlaylist.id==="p1"?"linear-gradient(135deg,rgba(140,30,30,0.4) 0%,rgba(140,30,30,0.1) 100%)":"var(--v-bg3)",
+              background:openPlaylist.id==="p1"?"linear-gradient(135deg,rgba(140,30,30,0.4) 0%,rgba(140,30,30,0.1) 100%)":getTrackGradient(openPlaylist.name),
               border:"1px solid var(--v-bdr3)",
               boxShadow:"0 20px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.02)",
               display:"flex",
@@ -325,11 +321,9 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                 }
               }}>
               <div style={{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',background:openPlaylist.id==='p1'?'linear-gradient(135deg,rgba(140,30,30,0.4) 0%,rgba(140,30,30,0.1) 100%)':'transparent'}}>
-                {openPlaylist.id==='p1'?<Heart size={56} style={{color:'#e05555',fill:'rgba(224,85,85,0.25)'}}/>:<ListMusic size={56} style={{color:'var(--v-fg3)'}}/>}
+                {openPlaylist.id==='p1'?<Heart size={56} style={{color:'#e05555',fill:'rgba(224,85,85,0.25)'}}/>:<ListMusic size={56} style={{color:'rgba(255,255,255,0.7)'}}/>}
               </div>
-              {getPlaylistCover(openPlaylist) && (
-                <img src={getPlaylistCover(openPlaylist)!} style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover"}} onError={e=>{e.currentTarget.style.display='none';}} alt=""/>
-              )}
+              <PlaylistCoverArt playlist={openPlaylist} />
               {openPlaylist.id !== 'p1' && (
                 <div className="pl-cover-ov" style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.65)",opacity:0,display:"flex",alignItems:"center",justifyContent:"center",gap:"10px",transition:"opacity .15s",zIndex:5}}>
                   <ImagePlus size={24} style={{color:"var(--v-fg)"}}/>
@@ -981,7 +975,6 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
               {playlistViewMode === 'grid' ? (
                 <div style={{display:"grid",gap:"20px",gridTemplateColumns:"repeat(auto-fill, minmax(170px, 1fr))"}}>
                   {playlists.map((pl, plIdx) => {
-                    const cover = getPlaylistCover(pl);
                     const isDragTarget = dragOverPlaylistCardIdx === plIdx && dragPlaylistCardIdx.current !== null && dragPlaylistCardIdx.current !== plIdx;
                     const isSelected = selectedPlaylistIds.includes(pl.id);
                     const toggleSelect = () => {
@@ -1085,11 +1078,9 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                           <div style={{position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
                             {pl.id === 'p1' || pl.id === 'yt_liked'
                               ? <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,rgba(140,30,30,0.4) 0%,rgba(140,30,30,0.1) 100%)"}}><Heart size={22} style={{color:"#e05555",fill:"rgba(220,60,60,0.25)"}}/></div>
-                              : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(135deg,rgba(255,255,255,0.03) 0%,rgba(255,255,255,0.01) 100%)"}}><ListMusic size={24} style={{color:"var(--v-fg3)"}}/></div>}
+                              : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",background: getTrackGradient(pl.name)}}><ListMusic size={24} style={{color:"rgba(255,255,255,0.7)"}}/></div>}
                           </div>
-                          {cover && (
-                            <img src={cover} style={{position: "absolute", inset: 0, width:"100%",height:"100%",objectFit:"cover"}} onError={e => { e.currentTarget.style.display = 'none'; }} alt=""/>
-                          )}
+                          <PlaylistCoverArt playlist={pl} />
                           {!isPlaylistMultiSelect && (
                             <div className="pl-hover-overlay" style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.6)",opacity:0,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .25s ease",zIndex:5}}>
                               <button onClick={e=>{e.stopPropagation();playAll(pl.tracks);}}
@@ -1121,7 +1112,6 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
               ) : (
                 <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
                   {playlists.map((pl, plIdx) => {
-                    const cover = getPlaylistCover(pl);
                     const isDragTarget = dragOverPlaylistCardIdx === plIdx && dragPlaylistCardIdx.current !== null && dragPlaylistCardIdx.current !== plIdx;
                     const isSelected = selectedPlaylistIds.includes(pl.id);
                     const toggleSelect = () => {
@@ -1243,17 +1233,17 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                             overflow: "hidden",
                             flexShrink: 0,
                             position: "relative",
-                            background: "rgba(255,255,255,0.02)",
+                            background: pl.id === 'p1' || pl.id === 'yt_liked'
+                              ? "linear-gradient(135deg, rgba(224, 85, 85, 0.25) 0%, rgba(140, 30, 80, 0.15) 100%)"
+                              : getTrackGradient(pl.name),
                           }}
                         >
                           <div style={{position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center'}}>
                             {pl.id === 'p1' || pl.id === 'yt_liked'
                               ? <Heart size={14} style={{color:"#e05555",fill:"rgba(220,60,60,0.25)"}}/>
-                              : <ListMusic size={16} style={{color:"var(--v-fg3)"}}/>}
+                              : <ListMusic size={16} style={{color:"rgba(255,255,255,0.7)"}}/>}
                           </div>
-                          {cover && (
-                            <img src={cover} style={{position: "absolute", inset: 0, width:"100%",height:"100%",objectFit:"cover"}} onError={e => { e.currentTarget.style.display = 'none'; }} alt=""/>
-                          )}
+                          <PlaylistCoverArt playlist={pl} />
                         </div>
                         <div style={{flex: 1, minWidth: 0}}>
                           <div style={{fontSize:"13.5px",fontWeight:600,color:"#e2ddd9",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pl.name}</div>

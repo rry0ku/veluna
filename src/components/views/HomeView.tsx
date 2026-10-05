@@ -24,6 +24,7 @@ import { GENRES, matchGenreTrack } from '../../constants';
 import { invoke } from '@tauri-apps/api/core';
 import { getTrackGradient, cleanArtist, globalArtistAvatarCache, getTrackCoverUrl, handleThumbnailError } from '../../utils';
 import { TrackRow, TrackRowSkeleton } from '../TrackRow';
+import { PlaylistCoverArt } from '../PlaylistCoverArt';
 import { VirtualTrackList } from '../VirtualTrackList';
 import { BatchActionBar } from '../BatchActionBar';
 import { ThemedSelect } from '../ThemedSelect';
@@ -2075,7 +2076,6 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                   >
                     {playlists.map(pl => {
                       const isLiked = pl.id === 'p1';
-                      const cover = isLiked ? null : (pl.customCover || pl.tracks?.find(t => t.cover)?.cover || null);
                       return (
                         <div
                           key={pl.id}
@@ -2100,7 +2100,7 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                             width: '36px',
                             height: '36px',
                             borderRadius: '6px',
-                            background: isLiked ? 'linear-gradient(135deg, rgba(224,85,85,0.12) 0%, rgba(255,255,255,0.02) 100%)' : 'rgba(255,255,255,0.025)',
+                            background: isLiked ? 'linear-gradient(135deg, rgba(224,85,85,0.12) 0%, rgba(255,255,255,0.02) 100%)' : getTrackGradient(pl.name),
                             border: '1px solid rgba(255,255,255,0.05)',
                             display: 'flex',
                             alignItems: 'center',
@@ -2109,13 +2109,14 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                             overflow: 'hidden',
                             position: 'relative'
                           }}>
-                            {cover ? (
-                              <img src={cover} alt={pl.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            ) : isLiked ? (
-                              <Heart size={14} style={{ color: '#e05555', fill: 'rgba(220,60,60,0.15)' }} />
-                            ) : (
-                              <ListMusic size={14} style={{ color: 'var(--v-fg2)' }} />
-                            )}
+                            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              {isLiked ? (
+                                <Heart size={14} style={{ color: '#e05555', fill: 'rgba(220,60,60,0.15)' }} />
+                              ) : (
+                                <ListMusic size={14} style={{ color: 'rgba(255,255,255,0.7)' }} />
+                              )}
+                            </div>
+                            <PlaylistCoverArt playlist={pl} />
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{
