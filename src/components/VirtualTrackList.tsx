@@ -12,16 +12,6 @@ interface VirtualTrackListProps<T> {
   keyExtractor?: (item: T, index: number) => string | number;
 }
 
-function getOffsetRelativeToScrollParent(el: HTMLElement, parent: HTMLElement | null): number {
-  let top = 0;
-  let curr: HTMLElement | null = el;
-  while (curr && curr !== parent && curr !== document.body) {
-    top += curr.offsetTop;
-    curr = curr.offsetParent as HTMLElement | null;
-  }
-  return top;
-}
-
 export function VirtualTrackList<T>({
   items,
   itemHeight = 56,
@@ -51,9 +41,9 @@ export function VirtualTrackList<T>({
       if (!containerRef.current) return;
       
       const zoom = getZoomFactor();
-      const parentScrollTop = scrollParent ? scrollParent.scrollTop : (window.scrollY / zoom);
-      const initialContainerTop = getOffsetRelativeToScrollParent(containerRef.current, scrollParent);
-      const relativeTop = parentScrollTop - initialContainerTop;
+      const parentRect = scrollParent ? scrollParent.getBoundingClientRect() : { top: 0 };
+      const containerRect = containerRef.current.getBoundingClientRect();
+      const relativeTop = (parentRect.top - containerRect.top) / zoom;
       const viewportH = scrollParent ? scrollParent.clientHeight : (window.innerHeight / zoom);
 
       setScrollState({

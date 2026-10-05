@@ -89,6 +89,9 @@ export function useLyrics(currentTrack: Track | null, trackDurationSeconds: numb
 
   useEffect(() => {
     lastScrolledLyricIdxRef.current = -1;
+    if (lyricsScrollContainerRef.current) {
+      lyricsScrollContainerRef.current.removeAttribute('data-scrolled');
+    }
   }, [currentTrack?.url, showLyrics]);
 
   useEffect(() => {

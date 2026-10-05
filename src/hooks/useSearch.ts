@@ -93,13 +93,20 @@ export function useSearch(showToast?: (msg: string) => void, cacheEnabled: boole
           const duration = parts[2]?.trim() || '0:00';
           const id = parts[3]?.trim() || '';
           if (!id || id === 'NA') return null;
+          let cleanId = id;
+          if (id.includes('youtube.com') || id.includes('youtu.be') || id.startsWith('http')) {
+            const match = id.match(/(?:watch\?.*v=|embed\/|shorts\/|^)([a-zA-Z0-9_-]{11})/);
+            if (match && match[1]) {
+              cleanId = match[1];
+            }
+          }
           return {
             id: i,
             title: meta.title || parts[0]?.trim() || 'Unknown Track',
             artist: meta.artist || 'YouTube',
             duration: duration || '0:00',
-            url: id.startsWith('http') ? id : `https://youtube.com/watch?v=${id}`,
-            cover: `https://i.ytimg.com/vi/${id}/mqdefault.jpg`,
+            url: id.startsWith('http') ? id : `https://youtube.com/watch?v=${cleanId}`,
+            cover: cleanId.startsWith('http') ? '' : `https://i.ytimg.com/vi/${cleanId}/mqdefault.jpg`,
             mediaType
           };
         }).filter((t): t is Track => t !== null);

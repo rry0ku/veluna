@@ -283,8 +283,7 @@ export function useAudioPlayer({
       fadeIntervalRef.current = null;
     }
     playlistContextRef.current = null;
-    setQueue([]);
-    queueRef.current = [];
+    if (setLyricsData) setLyricsData(null);
     setCurrentLocalPath(local.path);
     currentLocalPathRef.current = local.path;
     
@@ -347,6 +346,7 @@ export function useAudioPlayer({
       await invoke('play_local_file', { path: local.path });
       await invoke('set_volume', { volume });
       await invoke('set_playback_speed', { speed: playbackSpeed });
+      invoke('set_equalizer', { bass: eq.bass, mid: eq.mid, treble: eq.treble }).catch(() => {});
       
       setTimeout(async () => {
         try {
@@ -367,7 +367,7 @@ export function useAudioPlayer({
       setLoadingTrackUrlSync(null);
       setIsLoadingTrackSync(false);
     }
-  }, [volume, playbackSpeed, setPlayHistory, setQuickPicks, setIsPlayingSync, setIsLoadingTrackSync, setLoadingTrackUrlSync, setQueue]);
+  }, [volume, playbackSpeed, eq, setPlayHistory, setQuickPicks, setIsPlayingSync, setIsLoadingTrackSync, setLoadingTrackUrlSync, setLyricsData]);
 
   const handlePlayInContext = useCallback((track: Track, contextList: Track[]) => {
     localTracksListRef.current = [];
@@ -545,6 +545,15 @@ export function useAudioPlayer({
     const track = currentTrackRef.current;
     const isLocal = track?.url?.startsWith('local://') || currentLocalPathRef.current !== null;
 
+    const q = queueRef.current;
+    if (q.length > 0) {
+      const [next, ...rest] = q;
+      queueRef.current = rest;
+      setQueue(rest);
+      await handlePlayTrack(next, true);
+      return;
+    }
+
     if (isLocal) {
       const list = localTracksListRef.current;
       const idx = localTrackIndexRef.current;
@@ -561,15 +570,6 @@ export function useAudioPlayer({
         localTrackIndexRef.current = 0;
         handlePlayLocalTrack(list[0], list, 0);
       }
-      return;
-    }
-
-    const q = queueRef.current;
-    if (q.length > 0) {
-      const [next, ...rest] = q;
-      queueRef.current = rest;
-      setQueue(rest);
-      await handlePlayTrack(next, true);
       return;
     }
 
@@ -665,9 +665,10 @@ export function useAudioPlayer({
       return;
     }
 
-    if (playHistory.length > 0) {
-      const [prev, ...rest] = playHistory;
-      setPlayHistory(rest);
+    const prevIdx = playHistory.findIndex(t => t.url !== track?.url);
+    if (prevIdx !== -1) {
+      const prev = playHistory[prevIdx];
+      setPlayHistory(playHistory.slice(prevIdx + 1));
       await handlePlayTrack(prev, true);
     } else {
       await invoke('seek_audio', { time: 0 }).catch(() => {});

@@ -190,11 +190,40 @@ export function usePlaylists(showToast?: (msg: string) => void) {
       if (f) {
         const r = new FileReader();
         r.onload = ev => {
-          const d = ev.target?.result as string;
-          if (d) {
-            setPlaylists(p => p.map(x => x.id === pid ? { ...x, customCover: d } : x));
+          const raw = ev.target?.result as string;
+          if (!raw) return;
+          const img = new Image();
+          img.onload = () => {
+            const maxDim = 512;
+            let { width, height } = img;
+            if (width > maxDim || height > maxDim) {
+              if (width > height) {
+                height = Math.round((height * maxDim) / width);
+                width = maxDim;
+              } else {
+                width = Math.round((width * maxDim) / height);
+                height = maxDim;
+              }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.drawImage(img, 0, 0, width, height);
+              const compressed = canvas.toDataURL('image/jpeg', 0.85);
+              setPlaylists(p => p.map(x => x.id === pid ? { ...x, customCover: compressed } : x));
+              if (showToast) showToast('Cover updated');
+            } else {
+              setPlaylists(p => p.map(x => x.id === pid ? { ...x, customCover: raw } : x));
+              if (showToast) showToast('Cover updated');
+            }
+          };
+          img.onerror = () => {
+            setPlaylists(p => p.map(x => x.id === pid ? { ...x, customCover: raw } : x));
             if (showToast) showToast('Cover updated');
-          }
+          };
+          img.src = raw;
         };
         r.readAsDataURL(f);
       }
