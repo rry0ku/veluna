@@ -31,7 +31,7 @@ import {
   User,
 } from 'lucide-react';
 import { Track, LocalTrack, Playlist, CtxMenu, AudioInfo } from '../../types';
-import { getTrackGradient, cleanArtist, areTrackUrlsEqual } from '../../utils';
+import { getTrackGradient, cleanArtist, areTrackUrlsEqual, getTrackCoverUrl, handleThumbnailError } from '../../utils';
 import { isProtectedPlaylist } from '../../hooks/usePlaylists';
 import { CopyButton } from '../Modals';
 
@@ -230,8 +230,28 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
             <div className="v-ctx custom-scrollbar" style={{ position: 'fixed', zIndex: 9999, width: `${menuWidth}px`, top: `${top}px`, left: `${left}px` }} onClick={e => e.stopPropagation()}>
               <div className="v-ctx__header">
                 <div className="v-ctx__art" style={{ position: 'relative', background: getTrackGradient(track.title, track.artist), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Music size={14} style={{ position: 'absolute', color: 'rgba(255,255,255,0.2)' }} />
-                  {track.cover && <img src={track.cover} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+                  <Music className="fallback-music-icon" size={14} style={{ position: 'absolute', color: 'rgba(255,255,255,0.2)', display: track.cover ? 'none' : 'block' }} />
+                  {track.cover && (
+                    <img
+                      src={track.cover}
+                      alt=""
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        transform: (track.cover.includes('ytimg.com') || track.cover.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none'
+                      }}
+                      onError={e => {
+                        handleThumbnailError(e);
+                        if (e.currentTarget.style.display === 'none') {
+                          const icon = e.currentTarget.parentElement?.querySelector('.fallback-music-icon');
+                          if (icon) (icon as HTMLElement).style.display = 'block';
+                        }
+                      }}
+                    />
+                  )}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--v-fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{track.title}</div>
@@ -278,8 +298,28 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
                   alignItems: 'center',
                   justifyContent: 'center'
                 }}>
-                  <Music size={14} style={{ position: 'absolute', color: 'rgba(255,255,255,0.2)' }} />
-                  {track.cover && <img src={track.cover} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+                  <Music className="fallback-music-icon" size={14} style={{ position: 'absolute', color: 'rgba(255,255,255,0.2)', display: track.cover ? 'none' : 'block' }} />
+                  {track.cover && (
+                    <img
+                      src={track.cover}
+                      alt=""
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        transform: (track.cover.includes('ytimg.com') || track.cover.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none'
+                      }}
+                      onError={e => {
+                        handleThumbnailError(e);
+                        if (e.currentTarget.style.display === 'none') {
+                          const icon = e.currentTarget.parentElement?.querySelector('.fallback-music-icon');
+                          if (icon) (icon as HTMLElement).style.display = 'block';
+                        }
+                      }}
+                    />
+                  )}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--v-fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{track.title}</div>
@@ -480,6 +520,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
         const ytUrl = ytId ? `https://youtube.com/watch?v=${ytId}` : infoModalTrack.url;
         const isYt = !!ytId;
         const trackAudioInfo = infoModalTrack.url === currentTrack?.url ? audioInfo : null;
+        const modalCover = getTrackCoverUrl(infoModalTrack) || infoModalTrack.cover;
 
         return (
           <div
@@ -492,8 +533,22 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
             >
               {/* Hero */}
               <div style={{ position: 'relative', height: '160px', width: '100%', flexShrink: 0, overflow: 'hidden' }}>
-                {infoModalTrack.cover ? (
-                  <img src={infoModalTrack.cover} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0.3, transform: 'scale(1.15)', filter: 'blur(4px)' }} onError={e => { e.currentTarget.style.display = 'none'; }} alt="" />
+                {modalCover ? (
+                  <img
+                    src={modalCover}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      opacity: 0.3,
+                      transform: (modalCover.includes('ytimg.com') || modalCover.includes('googleusercontent.com')) ? 'scale(1.4)' : 'scale(1.15)',
+                      filter: 'blur(4px)'
+                    }}
+                    onError={handleThumbnailError}
+                    alt=""
+                  />
                 ) : (
                   <div style={{ position: 'absolute', inset: 0, background: getTrackGradient(infoModalTrack.title, infoModalTrack.artist), opacity: 0.4 }} />
                 )}
@@ -505,9 +560,27 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
                   <X size={12} />
                 </button>
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', paddingBottom: '16px' }}>
-                  <div style={{ width: '88px', height: '88px', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 12px 32px rgba(0,0,0,0.7), 0 0 0 1px var(--v-bdr2)', background: getTrackGradient(infoModalTrack.title, infoModalTrack.artist), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Music size={24} style={{ color: 'rgba(255,255,255,0.2)', position: 'absolute' }} />
-                    {infoModalTrack.cover && <img src={infoModalTrack.cover} style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { e.currentTarget.style.display = 'none'; }} alt="" />}
+                  <div style={{ width: '88px', height: '88px', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 12px 32px rgba(0,0,0,0.7), 0 0 0 1px var(--v-bdr2)', background: getTrackGradient(infoModalTrack.title, infoModalTrack.artist), display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative' }}>
+                    <Music className="fallback-music-icon" size={24} style={{ color: 'rgba(255,255,255,0.25)', position: 'absolute', display: modalCover ? 'none' : 'block' }} />
+                    {modalCover && (
+                      <img
+                        src={modalCover}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          transform: (modalCover.includes('ytimg.com') || modalCover.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none'
+                        }}
+                        onError={e => {
+                          handleThumbnailError(e);
+                          if (e.currentTarget.style.display === 'none') {
+                            const icon = e.currentTarget.parentElement?.querySelector('.fallback-music-icon');
+                            if (icon) (icon as HTMLElement).style.display = 'block';
+                          }
+                        }}
+                        alt=""
+                      />
+                    )}
                   </div>
                 </div>
               </div>

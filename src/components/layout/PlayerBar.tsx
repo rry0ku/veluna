@@ -199,24 +199,33 @@ export const PlayerBar: React.FC<PlayerBarProps> = React.memo(({
               onContextMenu={e=>{ if(!currentTrack.url.startsWith('local://')) openCtx(e,{type:'track',track:currentTrack}); }}
               onMouseEnter={e=>{ const ov=e.currentTarget.querySelector<HTMLElement>('.art-ov'); if(ov) ov.style.opacity='1'; }}
               onMouseLeave={e=>{ const ov=e.currentTarget.querySelector<HTMLElement>('.art-ov'); if(ov) ov.style.opacity='0'; }}>
-              <FileMusic size={18} style={{position: 'absolute', color:"rgba(255,255,255,0.25)"}}/>
               {(() => {
                 const coverSrc = getTrackCover(currentTrack) || currentTrack.cover;
-                if (!coverSrc) return null;
                 return (
-                  <img
-                    src={coverSrc}
-                    alt={currentTrack.title}
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "cover",
-                      transform: typeof coverSrc === 'string' && (coverSrc.includes('ytimg.com') || coverSrc.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none'
-                    }}
-                    onError={handleThumbnailError}
-                  />
+                  <>
+                    <FileMusic className="v-player-fallback-icon" size={18} style={{position: 'absolute', color:"rgba(255,255,255,0.25)", display: coverSrc ? 'none' : 'block'}}/>
+                    {coverSrc && (
+                      <img
+                        src={coverSrc}
+                        alt={currentTrack.title}
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                          transform: typeof coverSrc === 'string' && (coverSrc.includes('ytimg.com') || coverSrc.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none'
+                        }}
+                        onError={e => {
+                          handleThumbnailError(e);
+                          if (e.currentTarget.style.display === 'none') {
+                            const icon = e.currentTarget.parentElement?.querySelector('.v-player-fallback-icon');
+                            if (icon) (icon as HTMLElement).style.display = 'block';
+                          }
+                        }}
+                      />
+                    )}
+                  </>
                 );
               })()}
               {isLoadingTrack

@@ -335,24 +335,33 @@ export const QueuePanel: React.FC<QueuePanelProps> = React.memo(({
                             background: getTrackGradient(track.title, track.artist),
                             display: "flex", alignItems: "center", justifyContent: "center"
                           }}>
-                            <Music size={12} style={{ position: 'absolute', color: 'rgba(255,255,255,0.25)' }} />
                             {(() => {
                               const cover = getTrackCoverUrl(track);
-                              if (!cover) return null;
                               return (
-                                <img
-                                  src={cover}
-                                  style={{
-                                    position: 'absolute',
-                                    inset: 0,
-                                    width: "100%",
-                                    height: "100%",
-                                    objectFit: "cover",
-                                    transform: typeof cover === 'string' && (cover.includes('ytimg.com') || cover.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none',
-                                  }}
-                                  onError={handleThumbnailError}
-                                  alt=""
-                                />
+                                <>
+                                  <Music className="queue-fallback-icon" size={12} style={{ position: 'absolute', color: 'rgba(255,255,255,0.25)', display: cover ? 'none' : 'block' }} />
+                                  {cover && (
+                                    <img
+                                      src={cover}
+                                      style={{
+                                        position: 'absolute',
+                                        inset: 0,
+                                        width: "100%",
+                                        height: "100%",
+                                        objectFit: "cover",
+                                        transform: typeof cover === 'string' && (cover.includes('ytimg.com') || cover.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none',
+                                      }}
+                                      onError={e => {
+                                        handleThumbnailError(e);
+                                        if (e.currentTarget.style.display === 'none') {
+                                          const icon = e.currentTarget.parentElement?.querySelector('.queue-fallback-icon');
+                                          if (icon) (icon as HTMLElement).style.display = 'block';
+                                        }
+                                      }}
+                                      alt=""
+                                    />
+                                  )}
+                                </>
                               );
                             })()}
                           </div>
@@ -425,24 +434,33 @@ export const QueuePanel: React.FC<QueuePanelProps> = React.memo(({
                             background: getTrackGradient(track.title, track.artist),
                             display: "flex", alignItems: "center", justifyContent: "center"
                           }}>
-                            <Music size={12} style={{ position: 'absolute', color: 'rgba(255,255,255,0.25)' }} />
                             {(() => {
                               const cover = getTrackCoverUrl(track);
-                              if (!cover) return null;
                               return (
-                                <img
-                                  src={cover}
-                                  style={{
-                                    position: 'absolute',
-                                    inset: 0,
-                                    width: "100%",
-                                    height: "100%",
-                                    objectFit: "cover",
-                                    transform: typeof cover === 'string' && (cover.includes('ytimg.com') || cover.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none',
-                                  }}
-                                  onError={handleThumbnailError}
-                                  alt=""
-                                />
+                                <>
+                                  <Music className="queue-fallback-icon" size={12} style={{ position: 'absolute', color: 'rgba(255,255,255,0.25)', display: cover ? 'none' : 'block' }} />
+                                  {cover && (
+                                    <img
+                                      src={cover}
+                                      style={{
+                                        position: 'absolute',
+                                        inset: 0,
+                                        width: "100%",
+                                        height: "100%",
+                                        objectFit: "cover",
+                                        transform: typeof cover === 'string' && (cover.includes('ytimg.com') || cover.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none',
+                                      }}
+                                      onError={e => {
+                                        handleThumbnailError(e);
+                                        if (e.currentTarget.style.display === 'none') {
+                                          const icon = e.currentTarget.parentElement?.querySelector('.queue-fallback-icon');
+                                          if (icon) (icon as HTMLElement).style.display = 'block';
+                                        }
+                                      }}
+                                      alt=""
+                                    />
+                                  )}
+                                </>
                               );
                             })()}
                           </div>

@@ -102,26 +102,35 @@ export const TrackRow = React.memo(({
       alignItems: 'center',
       justifyContent: 'center'
     }}>
-      <Music size={16} style={{position: 'absolute', color: 'rgba(255,255,255,0.25)'}} />
       {(() => {
         const coverSrc = getTrackCoverUrl(track);
-        if (!coverSrc) return null;
         return (
-          <img
-            src={coverSrc}
-            alt={track.title}
-            style={{
-              position: 'absolute',
-              inset: 0,
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              transform: typeof coverSrc === 'string' && (coverSrc.includes('ytimg.com') || coverSrc.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none'
-            }}
-            onError={handleThumbnailError}
-            loading="lazy"
-            decoding="async"
-          />
+          <>
+            <Music className="track-fallback-icon" size={16} style={{position: 'absolute', color: 'rgba(255,255,255,0.25)', display: coverSrc ? 'none' : 'block'}} />
+            {coverSrc && (
+              <img
+                src={coverSrc}
+                alt={track.title}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                  transform: typeof coverSrc === 'string' && (coverSrc.includes('ytimg.com') || coverSrc.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none'
+                }}
+                onError={e => {
+                  handleThumbnailError(e);
+                  if (e.currentTarget.style.display === 'none') {
+                    const icon = e.currentTarget.parentElement?.querySelector('.track-fallback-icon');
+                    if (icon) (icon as HTMLElement).style.display = 'block';
+                  }
+                }}
+                loading="lazy"
+                decoding="async"
+              />
+            )}
+          </>
         );
       })()}
     </div>
