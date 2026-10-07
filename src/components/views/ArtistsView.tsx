@@ -396,14 +396,18 @@ export const ArtistsView: React.FC<ArtistsViewProps> = React.memo(({
                         flexShrink: 0
                       }}
                     >
-                      <Music size={32} style={{ color: 'rgba(255, 255, 255, 0.2)', position: 'absolute' }} />
+                      <Music className="artist-fallback-icon" size={32} style={{ color: 'rgba(255, 255, 255, 0.2)', position: 'absolute', display: item.avatar ? 'none' : 'block' }} />
                       {item.avatar && (
                         <img
                           src={item.avatar}
                           alt={item.name}
                           referrerPolicy="no-referrer"
                           style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }}
-                          onError={e => { e.currentTarget.style.display = 'none'; }}
+                          onError={e => {
+                            e.currentTarget.style.display = 'none';
+                            const fallback = e.currentTarget.parentElement?.querySelector('.artist-fallback-icon');
+                            if (fallback) (fallback as HTMLElement).style.display = 'block';
+                          }}
                           loading="eager"
                           decoding="async"
                         />
@@ -537,30 +541,35 @@ export const ArtistsView: React.FC<ArtistsViewProps> = React.memo(({
                       flexShrink: 0
                     }}
                   >
-                    <Music size={32} style={{ color: 'rgba(255, 255, 255, 0.25)', position: 'absolute' }} />
                     {(() => {
                       const isTrackCover = (url?: string) => !url || url.includes('/vi/') || url.includes('mqdefault') || url.includes('hqdefault');
                       const avatarSrc = (!isTrackCover(artist.avatar) ? artist.avatar : undefined) || globalArtistAvatarCache.get(artist.name.toLowerCase());
-                      if (!avatarSrc) return null;
                       return (
-                        <img
-                          src={avatarSrc}
-                          alt={artist.name}
-                          referrerPolicy="no-referrer"
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                            position: 'absolute',
-                            inset: 0,
-                            borderRadius: '50%'
-                          }}
-                          onError={e => {
-                            e.currentTarget.style.display = 'none';
-                          }}
-                          loading="eager"
-                          decoding="async"
-                        />
+                        <>
+                          <Music className="artist-fallback-icon" size={32} style={{ color: 'rgba(255, 255, 255, 0.25)', position: 'absolute', display: avatarSrc ? 'none' : 'block' }} />
+                          {avatarSrc && (
+                            <img
+                              src={avatarSrc}
+                              alt={artist.name}
+                              referrerPolicy="no-referrer"
+                              style={{
+                                width: '100%',
+                                height: '100%',
+                                objectFit: 'cover',
+                                position: 'absolute',
+                                inset: 0,
+                                borderRadius: '50%'
+                              }}
+                              onError={e => {
+                                e.currentTarget.style.display = 'none';
+                                const fallback = e.currentTarget.parentElement?.querySelector('.artist-fallback-icon');
+                                if (fallback) (fallback as HTMLElement).style.display = 'block';
+                              }}
+                              loading="eager"
+                              decoding="async"
+                            />
+                          )}
+                        </>
                       );
                     })()}
                   </div>

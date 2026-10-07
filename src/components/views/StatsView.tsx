@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { BarChart2, Clock, ListMusic, Music, Play } from 'lucide-react';
 import { Track, Playlist, NavView } from '../../types';
 import { GENRES, matchGenreTrack } from '../../constants';
-import { getTrackGradient, cleanArtist, saveLS, globalArtistAvatarCache } from '../../utils';
+import { getTrackGradient, cleanArtist, saveLS, globalArtistAvatarCache, handleThumbnailError } from '../../utils';
 
 interface StatsViewProps {
   listenSecs: Record<string, number>;
@@ -434,8 +434,23 @@ export const StatsView: React.FC<StatsViewProps> = React.memo(({
                     alignItems: 'center',
                     justifyContent: 'center'
                   }}>
-                    <Music size={16} style={{position: 'absolute', color: 'rgba(255,255,255,0.25)'}} />
-                    {track.cover && <img src={track.cover} alt="" style={{position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover'}} onError={e => { e.currentTarget.style.display = 'none'; }} loading="lazy"/>}
+                    <Music className="track-fallback-icon" size={16} style={{position: 'absolute', color: 'rgba(255,255,255,0.25)', display: track.cover ? 'none' : 'block'}} />
+                    {track.cover && (
+                      <img
+                        src={track.cover}
+                        alt=""
+                        style={{
+                          position: 'absolute',
+                          inset: 0,
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          transform: typeof track.cover === 'string' && (track.cover.includes('ytimg.com') || track.cover.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none'
+                        }}
+                        onError={handleThumbnailError}
+                        loading="lazy"
+                      />
+                    )}
                   </div>
                   <div className="v-track__info">
                     <div className="v-track__title">{track.title}</div>
@@ -577,8 +592,23 @@ export const StatsView: React.FC<StatsViewProps> = React.memo(({
                   alignItems: 'center',
                   justifyContent: 'center'
                 }}>
-                  <Music size={16} style={{position: 'absolute', color: 'rgba(255,255,255,0.25)'}} />
-                  {track.cover && <img src={track.cover} alt="" style={{position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover'}} onError={e => { e.currentTarget.style.display = 'none'; }} loading="lazy"/>}
+                  <Music className="track-fallback-icon" size={16} style={{position: 'absolute', color: 'rgba(255,255,255,0.25)', display: track.cover ? 'none' : 'block'}} />
+                  {track.cover && (
+                    <img
+                      src={track.cover}
+                      alt=""
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        transform: typeof track.cover === 'string' && (track.cover.includes('ytimg.com') || track.cover.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none'
+                      }}
+                      onError={handleThumbnailError}
+                      loading="lazy"
+                    />
+                  )}
                 </div>
                 <div className="v-track__info">
                   <div className="v-track__title">{track.title}</div>

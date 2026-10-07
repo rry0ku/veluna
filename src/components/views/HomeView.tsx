@@ -358,7 +358,7 @@ const ArtistSpotlightCard: React.FC<{
             position: 'relative'
           }}
         >
-          <Music size={18} style={{ color: 'rgba(255,255,255,0.3)', position: 'absolute' }} />
+          <Music className="artist-fallback-icon" size={18} style={{ color: 'rgba(255,255,255,0.3)', position: 'absolute', display: avatar ? 'none' : 'block' }} />
           {avatar ? (
             <img
               src={avatar}
@@ -367,6 +367,8 @@ const ArtistSpotlightCard: React.FC<{
               style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }}
               onError={e => {
                 e.currentTarget.style.display = 'none';
+                const fallback = e.currentTarget.parentElement?.querySelector('.artist-fallback-icon');
+                if (fallback) (fallback as HTMLElement).style.display = 'block';
               }}
               loading="eager"
               decoding="async"
@@ -1169,22 +1171,30 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                           justifyContent: 'center',
                           border: '1px solid rgba(255, 255, 255, 0.04)'
                         }}>
-                          <Music size={14} style={{ position: 'absolute', color: 'rgba(255,255,255,0.2)' }} />
-                          {getTrackCover(track) && (
-                            <img
-                              src={getTrackCover(track)}
-                              alt={track.title}
-                              style={{
-                                position: 'absolute',
-                                inset: 0,
-                                width: '100%',
-                                height: '100%',
-                                objectFit: 'cover'
-                              }}
-                              onError={handleThumbnailError}
-                              loading="lazy"
-                            />
-                          )}
+                          {(() => {
+                            const cover = getTrackCover(track);
+                            return (
+                              <>
+                                <Music className="track-fallback-icon" size={14} style={{ position: 'absolute', color: 'rgba(255,255,255,0.2)', display: cover ? 'none' : 'block' }} />
+                                {cover && (
+                                  <img
+                                    src={cover}
+                                    alt={track.title}
+                                    style={{
+                                      position: 'absolute',
+                                      inset: 0,
+                                      width: '100%',
+                                      height: '100%',
+                                      objectFit: 'cover',
+                                      transform: typeof cover === 'string' && (cover.includes('ytimg.com') || cover.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none'
+                                    }}
+                                    onError={handleThumbnailError}
+                                    loading="lazy"
+                                  />
+                                )}
+                              </>
+                            );
+                          })()}
                           {isCardLoading ? (
                             <div style={{
                               position: 'absolute',
@@ -1345,22 +1355,30 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                         justifyContent: 'center',
                         border: '1px solid rgba(255, 255, 255, 0.04)'
                       }}>
-                        <Music size={14} style={{ position: 'absolute', color: 'rgba(255,255,255,0.2)' }} />
-                        {getTrackCover(track) && (
-                          <img
-                            src={getTrackCover(track)}
-                            alt={track.title}
-                            style={{
-                              position: 'absolute',
-                              inset: 0,
-                              width: '100%',
-                              height: '100%',
-                              objectFit: 'cover'
-                            }}
-                            onError={handleThumbnailError}
-                            loading="lazy"
-                          />
-                        )}
+                        {(() => {
+                          const cover = getTrackCover(track);
+                          return (
+                            <>
+                              <Music className="track-fallback-icon" size={14} style={{ position: 'absolute', color: 'rgba(255,255,255,0.2)', display: cover ? 'none' : 'block' }} />
+                              {cover && (
+                                <img
+                                  src={cover}
+                                  alt={track.title}
+                                  style={{
+                                    position: 'absolute',
+                                    inset: 0,
+                                    width: '100%',
+                                    height: '100%',
+                                    objectFit: 'cover',
+                                    transform: typeof cover === 'string' && (cover.includes('ytimg.com') || cover.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none'
+                                  }}
+                                  onError={handleThumbnailError}
+                                  loading="lazy"
+                                />
+                              )}
+                            </>
+                          );
+                        })()}
                         {isCardLoading ? (
                            <div style={{
                              position: 'absolute',
@@ -1738,22 +1756,30 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                               flexShrink: 0,
                               border: '1px solid rgba(255,255,255,0.05)'
                             }}>
-                              <Music size={12} style={{ position: 'absolute', color: 'rgba(255,255,255,0.2)' }} />
-                              {getTrackCover(track) && (
-                                <img
-                                  src={getTrackCover(track)}
-                                  alt={track.title}
-                                  style={{
-                                    position: 'absolute',
-                                    inset: 0,
-                                    width: '100%',
-                                    height: '100%',
-                                    objectFit: 'cover'
-                                  }}
-                                  onError={handleThumbnailError}
-                                  loading="lazy"
-                                />
-                              )}
+                              {(() => {
+                                const cover = getTrackCover(track);
+                                return (
+                                  <>
+                                    <Music className="track-fallback-icon" size={12} style={{ position: 'absolute', color: 'rgba(255,255,255,0.2)', display: cover ? 'none' : 'block' }} />
+                                    {cover && (
+                                      <img
+                                        src={cover}
+                                        alt={track.title}
+                                        style={{
+                                          position: 'absolute',
+                                          inset: 0,
+                                          width: '100%',
+                                          height: '100%',
+                                          objectFit: 'cover',
+                                          transform: typeof cover === 'string' && (cover.includes('ytimg.com') || cover.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none'
+                                        }}
+                                        onError={handleThumbnailError}
+                                        loading="lazy"
+                                      />
+                                    )}
+                                  </>
+                                );
+                              })()}
                               {isActive && isPlaying && (
                                 <div style={{
                                   position: 'absolute',
@@ -1890,22 +1916,30 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                               flexShrink: 0,
                               border: '1px solid rgba(255,255,255,0.05)'
                             }}>
-                              <Music size={12} style={{ position: 'absolute', color: 'rgba(255,255,255,0.2)' }} />
-                              {getTrackCover(track) && (
-                                <img
-                                  src={getTrackCover(track)}
-                                  alt=""
-                                  style={{
-                                    position: 'absolute',
-                                    inset: 0,
-                                    width: '100%',
-                                    height: '100%',
-                                    objectFit: 'cover'
-                                  }}
-                                  onError={handleThumbnailError}
-                                  loading="lazy"
-                                />
-                              )}
+                              {(() => {
+                                const cover = getTrackCover(track);
+                                return (
+                                  <>
+                                    <Music className="track-fallback-icon" size={12} style={{ position: 'absolute', color: 'rgba(255,255,255,0.2)', display: cover ? 'none' : 'block' }} />
+                                    {cover && (
+                                      <img
+                                        src={cover}
+                                        alt=""
+                                        style={{
+                                          position: 'absolute',
+                                          inset: 0,
+                                          width: '100%',
+                                          height: '100%',
+                                          objectFit: 'cover',
+                                          transform: typeof cover === 'string' && (cover.includes('ytimg.com') || cover.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none'
+                                        }}
+                                        onError={handleThumbnailError}
+                                        loading="lazy"
+                                      />
+                                    )}
+                                  </>
+                                );
+                              })()}
                               {isActive && isPlaying && (
                                 <div style={{
                                   position: 'absolute',
@@ -2230,13 +2264,18 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                             position: 'relative',
                             border: '1px solid rgba(255,255,255,0.08)'
                           }}>
-                            <Music size={13} style={{ position: 'absolute', color: 'rgba(255,255,255,0.25)' }} />
+                            <Music className="artist-fallback-icon" size={13} style={{ position: 'absolute', color: 'rgba(255,255,255,0.25)', display: artist.avatar ? 'none' : 'block' }} />
                             {artist.avatar && (
                               <img
                                 src={artist.avatar}
                                 alt={artist.name}
                                 referrerPolicy="no-referrer"
                                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                onError={e => {
+                                  e.currentTarget.style.display = 'none';
+                                  const fallback = e.currentTarget.parentElement?.querySelector('.artist-fallback-icon');
+                                  if (fallback) (fallback as HTMLElement).style.display = 'block';
+                                }}
                               />
                             )}
                           </div>

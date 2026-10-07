@@ -416,6 +416,12 @@ export function handleThumbnailError(e: React.SyntheticEvent<HTMLImageElement, E
 
   // 3. Fallback: hide the broken image so native broken image icons/question marks never show
   img.style.display = 'none';
+  const fallback = img.parentElement?.querySelector<HTMLElement>(
+    '.fallback-music-icon, .track-fallback-icon, .v-player-fallback-icon, .queue-fallback-icon, .artist-fallback-icon'
+  );
+  if (fallback) {
+    fallback.style.display = 'block';
+  }
 }
 
 export const getTrackGradient = (title?: string | null, artist?: string | null): string => {

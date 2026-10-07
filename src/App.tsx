@@ -39,6 +39,7 @@ import {
   isValidCover,
   normalizeCoverUrl,
   getPlaylistCover as getSharedPlaylistCover,
+  handleThumbnailError,
 } from './utils';
 import { getStarterRecommendations } from './constants';
 
@@ -3341,15 +3342,29 @@ export function App() {
                             justifyContent: 'center'
                           }}
                         >
-                          <Music size={14} style={{ position: 'absolute', color: 'rgba(255,255,255,0.25)' }} />
-                          {getTrackCover(t) && (
-                            <img
-                              src={getTrackCover(t)}
-                              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
-                              onError={e => { e.currentTarget.style.display = 'none'; }}
-                              alt=""
-                            />
-                          )}
+                          {(() => {
+                            const cover = getTrackCover(t);
+                            return (
+                              <>
+                                <Music className="track-fallback-icon" size={14} style={{ position: 'absolute', color: 'rgba(255,255,255,0.25)', display: cover ? 'none' : 'block' }} />
+                                {cover && (
+                                  <img
+                                    src={cover}
+                                    style={{
+                                      position: 'absolute',
+                                      inset: 0,
+                                      width: '100%',
+                                      height: '100%',
+                                      objectFit: 'cover',
+                                      transform: typeof cover === 'string' && (cover.includes('ytimg.com') || cover.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none'
+                                    }}
+                                    onError={handleThumbnailError}
+                                    alt=""
+                                  />
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
 
                         <div style={{ flex: 1, minWidth: 0 }}>

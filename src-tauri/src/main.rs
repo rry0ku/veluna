@@ -6071,7 +6071,11 @@ fn normalize_discord_cover(url: &str) -> String {
     // Standard YouTube thumbnails are 16:9 or 4:3. Use wsrv.nl proxy to crop to a 1:1 square
     // (w=512&h=512&fit=cover) so Discord renders a full square cover without pillarbox/letterbox side bars.
     if trimmed.contains("i.ytimg.com") || trimmed.contains("img.youtube.com") {
-        let clean_yt = if trimmed.contains("hqdefault.jpg") {
+        let clean_yt = if trimmed.contains("maxresdefault.jpg") {
+            trimmed.replace("maxresdefault.jpg", "mqdefault.jpg")
+        } else if trimmed.contains("sddefault.jpg") {
+            trimmed.replace("sddefault.jpg", "mqdefault.jpg")
+        } else if trimmed.contains("hqdefault.jpg") {
             trimmed.replace("hqdefault.jpg", "mqdefault.jpg")
         } else {
             trimmed.to_string()
@@ -6803,6 +6807,9 @@ Couldn't look you in the eye
             urlencoding::encode("https://i.ytimg.com/vi/kYJqW3R2r-U/mqdefault.jpg")
         );
         assert_eq!(normalize_discord_cover(yt_url), expected);
+
+        let yt_maxres = "https://i.ytimg.com/vi/kYJqW3R2r-U/maxresdefault.jpg";
+        assert_eq!(normalize_discord_cover(yt_maxres), expected);
 
         // Blank or non-YouTube URLs stay clean
         assert_eq!(normalize_discord_cover(""), "");

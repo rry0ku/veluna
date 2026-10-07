@@ -1318,7 +1318,7 @@ kbd {
   justify-content: center;
   border: 1px solid var(--v-bdr2);
 }
-.v-library-recent-art img { width: 100%; height: 100%; object-fit: cover; }
+.v-library-recent-art img { width: 100%; height: 100%; object-fit: cover; transform: scale(1.35); }
 .v-library-recent-title { font-size: 13px; font-weight: 700; color: var(--v-fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .v-library-recent-artist { font-size: 11px; color: var(--v-fg2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 2px; opacity: 0.8; }
 .v-library-recent-play {

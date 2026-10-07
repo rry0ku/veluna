@@ -810,7 +810,7 @@ async fn fetch_liked_songs_innertube(
 
 fn is_valid_youtube_video_id(s: &str) -> bool {
     let len = s.len();
-    (len >= 8 && len <= 16) && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+    (8..=16).contains(&len) && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
 }
 
 fn extract_video_id_from_url_str(s: &str) -> Option<String> {

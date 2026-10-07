@@ -253,7 +253,7 @@ export const ArtistView: React.FC<ArtistViewProps> = React.memo(({
               border: '3px solid rgba(255, 255, 255, 0.12)'
             }}
           >
-            <Music size={36} style={{ color: 'rgba(255, 255, 255, 0.25)', position: 'absolute' }} />
+            <Music className="artist-fallback-icon" size={36} style={{ color: 'rgba(255, 255, 255, 0.25)', position: 'absolute', display: avatarUrl ? 'none' : 'block' }} />
             {avatarUrl && (
               <img
                 src={avatarUrl}
@@ -266,7 +266,11 @@ export const ArtistView: React.FC<ArtistViewProps> = React.memo(({
                   position: 'absolute',
                   inset: 0
                 }}
-                onError={e => { e.currentTarget.style.display = 'none'; }}
+                onError={e => {
+                  e.currentTarget.style.display = 'none';
+                  const fallback = e.currentTarget.parentElement?.querySelector('.artist-fallback-icon');
+                  if (fallback) (fallback as HTMLElement).style.display = 'block';
+                }}
                 loading="eager"
                 decoding="async"
               />
@@ -668,7 +672,7 @@ export const ArtistView: React.FC<ArtistViewProps> = React.memo(({
                       flexShrink: 0
                     }}
                   >
-                    <Music size={22} style={{ color: 'rgba(255, 255, 255, 0.25)', position: 'absolute' }} />
+                    <Music className="artist-fallback-icon" size={22} style={{ color: 'rgba(255, 255, 255, 0.25)', position: 'absolute', display: avatar ? 'none' : 'block' }} />
                     {avatar && (
                       <img
                         src={avatar}
@@ -681,7 +685,11 @@ export const ArtistView: React.FC<ArtistViewProps> = React.memo(({
                           inset: 0,
                           borderRadius: '50%'
                         }}
-                        onError={e => { e.currentTarget.style.display = 'none'; }}
+                        onError={e => {
+                          e.currentTarget.style.display = 'none';
+                          const fallback = e.currentTarget.parentElement?.querySelector('.artist-fallback-icon');
+                          if (fallback) (fallback as HTMLElement).style.display = 'block';
+                        }}
                         loading="lazy"
                         decoding="async"
                       />

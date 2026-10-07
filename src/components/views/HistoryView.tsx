@@ -172,12 +172,19 @@ const HistoryTrackRow = React.memo(({
         position: 'relative',
         border: '1px solid rgba(255,255,255,0.06)'
       }}>
-        <Music size={14} style={{ position: 'absolute', color: 'rgba(255,255,255,0.2)' }} />
+        <Music className="track-fallback-icon" size={14} style={{ position: 'absolute', color: 'rgba(255,255,255,0.2)', display: cover ? 'none' : 'block' }} />
         {cover && (
           <img
             src={cover}
             alt={track.title}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              position: 'absolute',
+              inset: 0,
+              transform: typeof cover === 'string' && (cover.includes('ytimg.com') || cover.includes('googleusercontent.com')) ? 'scale(1.35)' : 'none'
+            }}
             onError={handleThumbnailError}
             loading="lazy"
           />
