@@ -479,7 +479,7 @@ export const DownloadsPanel = React.memo(function DownloadsPanel({
           <div>
             <VirtualTrackList
               items={filtered}
-              itemHeight={56}
+              itemHeight={52}
               keyExtractor={(track) => track.path}
               renderItem={(track, i) => {
                 const trackObj = toTrack(track);
@@ -508,7 +508,7 @@ export const DownloadsPanel = React.memo(function DownloadsPanel({
                     onContextMenu={e => onCtx?.(e, track)}
                   >
                     {isDragOver && <div style={{position:"absolute",top:0,left:0,right:0,height:"1.5px",background:"rgba(226,221,217,0.5)",borderRadius:"1px",zIndex:10,pointerEvents:"none"}} />}
-                    {!searchQ && !isMultiSelectActive && (
+                    {!searchQ && downloadsSortBy === 'default' && !isMultiSelectActive && (
                       <div style={{width:"14px",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,cursor:"grab",opacity:isHov?0.5:0,transition:"opacity .12s"}}
                         onMouseDown={e => {
                           e.preventDefault();
@@ -596,10 +596,10 @@ export const DownloadsPanel = React.memo(function DownloadsPanel({
                   clearSelection();
                 }}
                 onAddToPlaylist={() => {}}
-                onDeleteSelected={() => {
+                onDeleteSelected={async () => {
                   const selected = filtered.filter(t => selectedUrls.has(`local://${t.path}`));
-                  selected.forEach(t => onDeleteLocalTrack(t));
-                  scan();
+                  await Promise.all(selected.map(t => onDeleteLocalTrack(t)));
+                  await scan();
                   showToast?.(`Deleted ${selected.length} offline tracks`);
                   clearSelection();
                 }}

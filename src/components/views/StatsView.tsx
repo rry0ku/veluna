@@ -4,6 +4,7 @@ import { BarChart2, Clock, ListMusic, Music, Play } from 'lucide-react';
 import { Track, Playlist, NavView } from '../../types';
 import { GENRES, matchGenreTrack } from '../../constants';
 import { getTrackGradient, cleanArtist, saveLS, globalArtistAvatarCache, handleThumbnailError } from '../../utils';
+import { dbClearListeningStats } from '../../services/db';
 
 interface StatsViewProps {
   listenSecs: Record<string, number>;
@@ -221,7 +222,7 @@ export const StatsView: React.FC<StatsViewProps> = React.memo(({
       label: chartDaysCount === 7
         ? d.toLocaleDateString('en', { weekday: 'short' })
         : d.getDate().toString(),
-      count: (dailyPlays[key] as number) || 0
+      count: Number(dailyPlays[key]) || 0
     };
   });
   const maxDay = Math.max(...days.map(d => d.count), 1);
@@ -236,6 +237,7 @@ export const StatsView: React.FC<StatsViewProps> = React.memo(({
         setFirstSeen({}); saveLS('vg_firstSeen', {});
         setPlayHistory([]); saveLS('vg_playHistory', []);
         setListeningHistory([]); saveLS('vg_listeningHistory', []);
+        dbClearListeningStats().catch(() => {});
         showToast('Stats reset');
       }
     });
@@ -486,7 +488,7 @@ export const StatsView: React.FC<StatsViewProps> = React.memo(({
                         onArtistClick(artist, thumb);
                       } else {
                         setSearchQuery(artist);
-                        searchMusic(artist);
+                        searchMusic(artist).catch(() => {});
                         setActiveNav('home');
                       }
                     }}

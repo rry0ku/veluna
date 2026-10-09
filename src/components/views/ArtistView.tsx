@@ -44,7 +44,7 @@ interface ArtistViewProps {
   prefetchOnHover: (url: string) => void;
   getTrackCover?: (track: Track) => string | null;
   showToast: (msg: string) => void;
-  addToQueue?: (track: Track) => void;
+  addToQueue?: (tracks: Track | Track[], silent?: boolean) => void;
   playlists?: Playlist[];
   onAddToPlaylist?: (playlistId: string, trackUrls: string[]) => void;
 }
@@ -570,7 +570,7 @@ export const ArtistView: React.FC<ArtistViewProps> = React.memo(({
             <div style={{ marginTop: '4px' }}>
               <VirtualTrackList
                 items={topTracks}
-                itemHeight={56}
+                itemHeight={52}
                 keyExtractor={(track) => track.id || track.url}
                 renderItem={(track, i) => (
                   <TrackRow
@@ -729,8 +729,8 @@ export const ArtistView: React.FC<ArtistViewProps> = React.memo(({
             if (selectedTracks.length > 0) handlePlayInContext(selectedTracks[0], selectedTracks);
           }}
           onQueueSelected={() => {
-            if (addToQueue) selectedTracks.forEach(t => addToQueue(t));
-            showToast(`Added ${selectedTracks.length} tracks to queue`);
+            if (addToQueue) addToQueue(selectedTracks);
+            else showToast(`Added ${selectedTracks.length} tracks to queue`);
             multiSelect.clearSelection();
           }}
           onAddToPlaylist={(playlistId) => {

@@ -60,6 +60,7 @@ interface DbPlaylistRaw {
   name: string;
   description?: string;
   custom_cover?: string | null;
+  updated_at?: number | null;
   tracks?: DbPlaylistTrackRaw[];
 }
 
@@ -77,6 +78,7 @@ export async function dbGetPlaylists(): Promise<Playlist[]> {
       name: p.name,
       description: p.description || '',
       customCover: p.custom_cover || undefined,
+      updatedAt: p.updated_at ? p.updated_at * 1000 : undefined,
       tracks: (p.tracks || []).map((t, idx) => ({
         id: typeof t.id === 'number' ? t.id : (Number(t.id) || idx),
         title: t.title || 'Unknown',

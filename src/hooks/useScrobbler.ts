@@ -69,6 +69,9 @@ export function useScrobbler({
   const trackStartTimeRef = useRef<number>(Math.floor(Date.now() / 1000));
   const previousProgressRef = useRef<number>(0);
 
+  const accumulatedListeningRef = useRef<number>(0);
+  const lastProgressTimeRef = useRef<number>(Date.now());
+
   useEffect(() => {
     const trackUrl = currentTrack?.url || null;
     if (trackUrl !== currentTrackUrlRef.current) {
@@ -77,17 +80,28 @@ export function useScrobbler({
       hasScrobbledRef.current = false;
       trackStartTimeRef.current = Math.floor(Date.now() / 1000);
       previousProgressRef.current = 0;
+      accumulatedListeningRef.current = 0;
+      lastProgressTimeRef.current = Date.now();
     }
   }, [currentTrack?.url]);
 
   useEffect(() => {
-    if (previousProgressRef.current > 30 && progressSeconds < 3) {
+    const now = Date.now();
+    const elapsedWall = (now - lastProgressTimeRef.current) / 1000;
+    lastProgressTimeRef.current = now;
+
+    if (isPlaying && elapsedWall > 0 && elapsedWall < 3) {
+      accumulatedListeningRef.current += elapsedWall;
+    }
+
+    if (previousProgressRef.current > 5 && progressSeconds < 2) {
       hasSentNowPlayingRef.current = false;
       hasScrobbledRef.current = false;
       trackStartTimeRef.current = Math.floor(Date.now() / 1000);
+      accumulatedListeningRef.current = 0;
     }
     previousProgressRef.current = progressSeconds;
-  }, [progressSeconds]);
+  }, [progressSeconds, isPlaying]);
 
   useEffect(() => {
     if (!isPlaying || !currentTrack || hasSentNowPlayingRef.current) return;
@@ -122,7 +136,8 @@ export function useScrobbler({
 
     const threshold = dur > 0 ? Math.min(dur * 0.5, 240) : 30;
 
-    if (progressSeconds >= threshold) {
+    // Both playhead position AND actual accumulated listening time must satisfy the threshold
+    if (progressSeconds >= threshold && accumulatedListeningRef.current >= threshold * 0.8) {
       hasScrobbledRef.current = true;
       const startTime = Math.floor(Date.now() / 1000) - Math.floor(progressSeconds);
 

@@ -389,6 +389,7 @@ export function App() {
     onTrackPlayed: recordTrackPlayed,
     onListeningStep: recordListeningStep,
     showToast,
+    isOnline,
   });
 
   const handlePlayTrack = useCallback((track: Track, fromQueue?: boolean) => {
@@ -536,9 +537,12 @@ export function App() {
   const previousNavRef = useRef<NavView>('home');
   const activeArtistQueryIdRef = useRef<number>(0);
 
+  const cancelledUrlsRef = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     const unlistenPromise = listen<{ url: string; percent: number; status: string; error?: string }>('download_progress', (event) => {
       const { url, percent, status, error } = event.payload;
+      if (cancelledUrlsRef.current.has(url)) return;
       setDownloadingTracks(p => ({ ...p, [url]: percent }));
       setActiveDownloads(prev => prev.map(item => {
         if (item.url === url) {
@@ -1221,8 +1225,9 @@ export function App() {
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement).tagName;
-      const isInput = tag === 'INPUT' || tag === 'TEXTAREA';
+      const target = e.target as HTMLElement;
+      const tag = target.tagName;
+      const isInput = tag === 'INPUT' || tag === 'TEXTAREA' || Boolean(target.closest('button, [role="combobox"], [role="slider"]'));
 
       if (e.ctrlKey || e.metaKey) {
         if (e.code === 'KeyF' || e.key === 'f' || e.key === 'F') {
@@ -1376,8 +1381,8 @@ export function App() {
       setShowHistory(false);
       setShowSleepPopover(false);
     };
-    window.addEventListener('click', h);
-    return () => window.removeEventListener('click', h);
+    window.addEventListener('click', h, { capture: true });
+    return () => window.removeEventListener('click', h, { capture: true });
   }, [setShowHistory, setShowSleepPopover]);
 
   useEffect(() => {
@@ -1479,6 +1484,7 @@ export function App() {
   }, [showToast]);
 
   const handleCancelDownload = useCallback(async (url: string) => {
+    cancelledUrlsRef.current.add(url);
     try { await invoke('cancel_download', { url }); } catch {}
     setDownloadingTracks(p => { const n = { ...p }; delete n[url]; return n; });
     setActiveDownloads(prev => prev.filter(d => d.url !== url));
@@ -1486,6 +1492,7 @@ export function App() {
   }, [showToast]);
 
   const handleDownload = useCallback(async (track: Track, section?: string) => {
+    cancelledUrlsRef.current.delete(track.url);
     if (downloadingTracks[track.url] !== undefined) {
       handleCancelDownload(track.url);
       return;
@@ -1822,7 +1829,7 @@ export function App() {
         a.href = url;
         a.download = 'veluna_backup.json';
         a.click();
-        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
         showToast('Backup saved');
       }
     } catch (e) {
@@ -1915,8 +1922,8 @@ export function App() {
           invoke('set_volume', { volume: vol }).catch(() => {});
         }
 
-        const spd = data.playbackSpeed || data.vg_playbackSpeed;
-        if (spd) setPlaybackSpeedState(ls('vg_playbackSpeed', Number(spd)));
+        const spd = data.playbackSpeed || data.speed || data.vg_speed || data.vg_playbackSpeed;
+        if (spd) setPlaybackSpeedState(ls('vg_speed', Number(spd)));
 
         const cf = data.crossfadeSeconds !== undefined ? data.crossfadeSeconds : data.vg_crossfade;
         if (cf !== undefined) ls('vg_crossfade', Number(cf));
@@ -1924,19 +1931,19 @@ export function App() {
         const shuf = data.shuffle !== undefined ? data.shuffle : data.vg_shuffle;
         if (shuf !== undefined) setShuffle(ls('vg_shuffle', Boolean(shuf)));
 
-        const rep = data.repeatMode || data.vg_repeatMode;
-        if (rep) setRepeatMode(ls('vg_repeatMode', rep));
+        const rep = data.repeatMode || data.repeat || data.vg_repeat || data.vg_repeatMode;
+        if (rep) setRepeatMode(ls('vg_repeat', rep));
 
         if (data.eq) setEqState(ls('vg_eq', data.eq));
 
-        const loudnorm = data.loudnormEnabled !== undefined ? data.loudnormEnabled : data.vg_loudnormEnabled;
-        if (loudnorm !== undefined) setLoudnormEnabledState(ls('vg_loudnormEnabled', Boolean(loudnorm)));
+        const loudnorm = data.loudnormEnabled !== undefined ? data.loudnormEnabled : (data.loudnorm !== undefined ? data.loudnorm : (data.vg_loudnorm !== undefined ? data.vg_loudnorm : data.vg_loudnormEnabled));
+        if (loudnorm !== undefined) setLoudnormEnabledState(ls('vg_loudnorm', Boolean(loudnorm)));
 
         const skipSil = data.skipSilence !== undefined ? data.skipSilence : data.vg_skipSilence;
         if (skipSil !== undefined) setSkipSilenceState(ls('vg_skipSilence', Boolean(skipSil)));
 
-        const autoPlay = data.autoplayEnabled !== undefined ? data.autoplayEnabled : data.vg_autoplayEnabled;
-        if (autoPlay !== undefined) setAutoplayEnabled(ls('vg_autoplayEnabled', Boolean(autoPlay)));
+        const autoPlay = data.autoplayEnabled !== undefined ? data.autoplayEnabled : (data.autoplay !== undefined ? data.autoplay : (data.vg_autoplay !== undefined ? data.vg_autoplay : data.vg_autoplayEnabled));
+        if (autoPlay !== undefined) setAutoplayEnabled(ls('vg_autoplay', Boolean(autoPlay)));
 
         const thm = data.theme || data.vg_theme;
         if (thm) setTheme(ls('vg_theme', thm));
@@ -1948,10 +1955,13 @@ export function App() {
         if (acc) setAccentColor(ls('vg_accentColor', acc));
 
         const scale = data.uiScale !== undefined ? data.uiScale : data.vg_uiScale;
-        if (scale !== undefined) setUiScale(ls('vg_uiScale', Number(scale)));
+        if (scale !== undefined) {
+          const clampedScale = Math.max(-5, Math.min(5, Number(scale) || 0));
+          setUiScale(ls('vg_uiScale', clampedScale));
+        }
 
-        const perf = data.performanceMode !== undefined ? data.performanceMode : data.vg_performanceMode;
-        if (perf !== undefined) setPerformanceMode(ls('vg_performanceMode', Boolean(perf)));
+        const perf = data.performanceMode !== undefined ? data.performanceMode : (data.perfMode !== undefined ? data.perfMode : (data.vg_perfMode !== undefined ? data.vg_perfMode : data.vg_performanceMode));
+        if (perf !== undefined) setPerformanceMode(ls('vg_perfMode', Boolean(perf)));
 
         const stNav = data.startupNav || data.vg_startupNav;
         if (stNav) setStartupNav(ls('vg_startupNav', stNav));
@@ -2261,6 +2271,16 @@ export function App() {
             showToast={showToast}
             addToQueue={addToQueue}
             playlists={playlists}
+            onAddToPlaylist={(playlistId, trackUrls) => {
+              const tracksToAdd = (artistPageData?.topTracks || []).filter(t => trackUrls.includes(t.url));
+              setPlaylists(prev => prev.map(p => {
+                if (p.id !== playlistId) return p;
+                const existingUrls = new Set(p.tracks.map(t => t.url));
+                const newTracks = tracksToAdd.filter(t => !existingUrls.has(t.url));
+                return { ...p, tracks: [...p.tracks, ...newTracks] };
+              }));
+              showToast(`Added ${tracksToAdd.length} tracks to playlist`);
+            }}
           />
         )}
 
@@ -2613,6 +2633,7 @@ export function App() {
         setAddToPlaylistTrack={setAddToPlaylistTrack}
         setMetadataEditingTrack={setMetadataEditingTrack}
         showToast={showToast}
+        playlistContextRef={playlistContextRef}
         onArtistClick={openArtistPage}
       />
 

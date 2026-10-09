@@ -16,7 +16,7 @@ interface QueuePanelProps {
   playlistContextRef: React.MutableRefObject<{ tracks: Track[]; index: number } | null>;
   handlePlayTrack: (track: Track, fromQueue?: boolean) => Promise<void>;
   clearQueue: () => void;
-  removeFromQueue: (url: string) => void;
+  removeFromQueue: (indexOrUrl: number | string) => void;
   moveQueueItem: (from: number, to: number) => void;
   openCtx: (e: React.MouseEvent, menu: Omit<CtxMenu, 'x' | 'y'>) => void;
   setPlaylists: React.Dispatch<React.SetStateAction<Playlist[]>>;
@@ -287,10 +287,21 @@ export const QueuePanel: React.FC<QueuePanelProps> = React.memo(({
                             setDragOverQueueIdx(i);
                           }
                         }}
-                        onContextMenu={e => openCtx(e, { type: 'queue-track', track })}
+                        onContextMenu={e => openCtx(e, { type: 'queue-track', track, queueIndex: i })}
                       >
                         {dragOverQueueIdx === i && dragQueueIdx.current !== null && dragQueueIdx.current !== i && (
-                          <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "1.5px", background: "var(--v-accent)", borderRadius: "1px", zIndex: 10, pointerEvents: "none" }} />
+                          <div style={{
+                            position: "absolute",
+                            top: dragQueueIdx.current < i ? "auto" : 0,
+                            bottom: dragQueueIdx.current < i ? 0 : "auto",
+                            left: 0,
+                            right: 0,
+                            height: "1.5px",
+                            background: "var(--v-accent)",
+                            borderRadius: "1px",
+                            zIndex: 10,
+                            pointerEvents: "none"
+                          }} />
                         )}
                         <div
                           style={{ width: "20px", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
@@ -324,7 +335,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = React.memo(({
                           style={{ position: 'relative', width: '36px', height: '36px', borderRadius: '6px', overflow: 'hidden', flexShrink: 0, cursor: 'pointer' }}
                           onClick={() => {
                             if (dragQueueIdx.current === null) {
-                              removeFromQueue(track.url);
+                              removeFromQueue(i);
                               handlePlayTrack(track, true);
                             }
                           }}
@@ -373,7 +384,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = React.memo(({
                           style={{ flex: 1, minWidth: 0, cursor: "pointer", marginLeft: '10px' }}
                           onClick={() => {
                             if (dragQueueIdx.current === null) {
-                              removeFromQueue(track.url);
+                              removeFromQueue(i);
                               handlePlayTrack(track, true);
                             }
                           }}
@@ -393,7 +404,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = React.memo(({
                           </span>
                           <div className="v-queue-actions" style={{ alignItems: 'center', gap: '4px' }}>
                             <button
-                              onClick={e => { e.stopPropagation(); removeFromQueue(track.url); }}
+                              onClick={e => { e.stopPropagation(); removeFromQueue(i); }}
                               title="Remove from queue"
                               style={{ padding: "4px", border: "none", background: "none", cursor: "pointer", color: "var(--v-fg3)", borderRadius: "4px", display: "flex", transition: "color .12s" }}
                               onMouseEnter={e => { e.currentTarget.style.color = "#b05555"; }}
@@ -426,7 +437,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = React.memo(({
                         <div
                           className="v-queue-cover-container"
                           style={{ position: 'relative', width: '36px', height: '36px', borderRadius: '6px', overflow: 'hidden', flexShrink: 0, cursor: 'pointer' }}
-                          onClick={() => handlePlayTrack(track, true)}
+                          onClick={() => handlePlayTrack(track, false)}
                         >
                           <div style={{
                             width: "100%", height: "100%", border: "1px solid rgba(255,255,255,0.05)",
@@ -470,7 +481,7 @@ export const QueuePanel: React.FC<QueuePanelProps> = React.memo(({
                         </div>
                         <div
                           style={{ flex: 1, minWidth: 0, cursor: "pointer", marginLeft: '10px' }}
-                          onClick={() => handlePlayTrack(track, true)}
+                          onClick={() => handlePlayTrack(track, false)}
                         >
                           <div style={{ fontSize: "12.5px", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--v-fg2)" }}>
                             {track.title}

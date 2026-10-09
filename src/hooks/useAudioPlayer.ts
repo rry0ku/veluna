@@ -24,6 +24,7 @@ interface UseAudioPlayerProps {
   onListeningStep?: (url: string, secs: number) => void;
   showToast: (msg: string) => void;
   setLyricsData?: (data: LyricsData | null) => void;
+  isOnline?: boolean;
 }
 
 export function useAudioPlayer({
@@ -45,6 +46,7 @@ export function useAudioPlayer({
   onListeningStep,
   showToast,
   setLyricsData,
+  isOnline = true,
 }: UseAudioPlayerProps) {
   const [currentTrack, setCurrentTrack] = useState<Track | null>(() => loadLS('vg_lastTrack', null));
   const currentTrackRef = useRef<Track | null>(currentTrack);
@@ -75,6 +77,11 @@ export function useAudioPlayer({
   const [repeatMode, setRepeatMode] = useState<RepeatMode>(() => loadLS('vg_repeat', 'off'));
   const repeatModeRef = useRef<RepeatMode>(repeatMode);
 
+  const isOnlineRef = useRef(isOnline);
+  useEffect(() => {
+    isOnlineRef.current = isOnline;
+  }, [isOnline]);
+
   const playlistContextRef = useRef<{ tracks: Track[]; index: number } | null>(null);
   const localTracksListRef = useRef<LocalTrack[]>([]);
   const localTrackIndexRef = useRef<number>(0);
@@ -94,6 +101,7 @@ export function useAudioPlayer({
   const volumeRef = useRef<HTMLDivElement | null>(null);
   const endDetectedRef = useRef(false);
   const lastTrackEndTimeRef = useRef<number>(0);
+  const lastSeekTimeRef = useRef<number>(0);
   const isCrossfadingRef = useRef(false);
   const fadeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const codecPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -423,13 +431,14 @@ export function useAudioPlayer({
 
   const handleTrackEnd = useCallback(() => {
     const now = performance.now();
-    if (now - lastTrackEndTimeRef.current < 2500) return;
+    if (now - lastTrackEndTimeRef.current < 500) return;
     lastTrackEndTimeRef.current = now;
     endDetectedRef.current = true;
     isCrossfadingRef.current = false;
     if (fadeIntervalRef.current) {
       clearInterval(fadeIntervalRef.current);
       fadeIntervalRef.current = null;
+      invoke('set_volume', { volume: currentVolumeRef.current }).catch(() => {});
     }
     const track = currentTrackRef.current;
     const repeat = repeatModeRef.current;
@@ -463,25 +472,23 @@ export function useAudioPlayer({
     }
 
     // 3. Local playlist context
-    if (isLocal) {
+    if (isLocal && localTracksListRef.current.length > 0) {
       const list = localTracksListRef.current;
       const idx = localTrackIndexRef.current;
-      if (list.length > 0) {
-        let nextIdx: number;
-        if (shuffle) {
-          do { nextIdx = Math.floor(Math.random() * list.length); } while (nextIdx === idx && list.length > 1);
-        } else {
-          nextIdx = idx + 1;
-        }
-        if (nextIdx < list.length) {
-          localTrackIndexRef.current = nextIdx;
-          setTimeout(() => handlePlayLocalTrack(list[nextIdx], list, nextIdx), 0);
-          return;
-        } else if (repeat === 'all') {
-          localTrackIndexRef.current = 0;
-          setTimeout(() => handlePlayLocalTrack(list[0], list, 0), 0);
-          return;
-        }
+      let nextIdx: number;
+      if (shuffle) {
+        do { nextIdx = Math.floor(Math.random() * list.length); } while (nextIdx === idx && list.length > 1);
+      } else {
+        nextIdx = idx + 1;
+      }
+      if (nextIdx < list.length) {
+        localTrackIndexRef.current = nextIdx;
+        setTimeout(() => handlePlayLocalTrack(list[nextIdx], list, nextIdx), 0);
+        return;
+      } else if (repeat === 'all') {
+        localTrackIndexRef.current = 0;
+        setTimeout(() => handlePlayLocalTrack(list[0], list, 0), 0);
+        return;
       }
       setIsPlayingSync(false);
       return;
@@ -490,6 +497,11 @@ export function useAudioPlayer({
     // 4. Online playlist context
     const ctx = playlistContextRef.current;
     if (ctx && ctx.tracks.length > 0) {
+      if (!isOnlineRef.current) {
+        setIsPlayingSync(false);
+        showToast('Cannot stream while offline. Switch to Offline library to play saved tracks.');
+        return;
+      }
       let nextIdx: number;
       if (shuffle) {
         do { nextIdx = Math.floor(Math.random() * ctx.tracks.length); }
@@ -509,7 +521,7 @@ export function useAudioPlayer({
     }
 
     // 5. Autoplay recommendation radio if enabled
-    if (autoplayEnabled && track) {
+    if (autoplayEnabled && track && isOnlineRef.current) {
       setIsLoadingTrack(true);
       fetchAutoplayTracks(track).then((recs) => {
         if (currentTrackRef.current?.url !== track.url) return;
@@ -557,6 +569,12 @@ export function useAudioPlayer({
     if (isLocal) {
       const list = localTracksListRef.current;
       const idx = localTrackIndexRef.current;
+      if (list.length === 1) {
+        if (repeatModeRef.current === 'all') {
+          handlePlayLocalTrack(list[0], list, 0);
+        }
+        return;
+      }
       let nextIdx: number;
       if (shuffle) {
         do { nextIdx = Math.floor(Math.random() * list.length); } while (nextIdx === idx && list.length > 1);
@@ -721,7 +739,7 @@ export function useAudioPlayer({
       'mpv_playback_state',
       event => {
         const s = event.payload;
-        if (isDraggingProgressRef.current) return;
+        if (isDraggingProgressRef.current || performance.now() - lastSeekTimeRef.current < 250) return;
 
         const prevPos = progressSecondsRef.current;
         progressSecondsRef.current = s.position;
@@ -764,8 +782,8 @@ export function useAudioPlayer({
 
         const curCrossfade = crossfadeSecondsRef.current;
         const curVol = currentVolumeRef.current;
-        if (!s.eof_reached && !endDetectedRef.current && !isCrossfadingRef.current && s.position > 3 && s.duration > 0
-            && curCrossfade > 0 && s.position >= s.duration - curCrossfade - 0.5
+        if (curCrossfade > 0 && !s.eof_reached && !endDetectedRef.current && !isCrossfadingRef.current && s.position > 3 && s.duration > 0
+            && s.position >= s.duration - curCrossfade - 0.5
             && s.position < s.duration - 0.2) {
           isCrossfadingRef.current = true;
           const fadeSteps = Math.max(1, Math.round(curCrossfade * 5));
@@ -788,7 +806,7 @@ export function useAudioPlayer({
           return;
         }
 
-        if (s.eof_reached && s.position > 3) {
+        if (s.eof_reached && (s.position > 0.5 || s.duration < 3)) {
           handleTrackEndRef.current();
           return;
         }
@@ -846,6 +864,15 @@ export function useAudioPlayer({
 
     return () => {
       active = false;
+      if (fadeIntervalRef.current) {
+        clearInterval(fadeIntervalRef.current);
+        fadeIntervalRef.current = null;
+        invoke('set_volume', { volume: currentVolumeRef.current }).catch(() => {});
+      }
+      if (codecPollRef.current) {
+        clearInterval(codecPollRef.current);
+        codecPollRef.current = null;
+      }
       unlistenState?.();
       unlistenEnd?.();
       unlistenStarted?.();
@@ -872,6 +899,7 @@ export function useAudioPlayer({
   const updateProgressFromEvent = useCallback((clientX: number) => {
     if (!progressRef.current || !currentTrackRef.current) return undefined;
     const rect = progressRef.current.getBoundingClientRect();
+    if (!rect.width || rect.width <= 0) return undefined;
     const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const total = trackDurationRef.current || parseDurationToSeconds(currentTrackRef.current.duration);
     const t = total * pct;
@@ -880,13 +908,33 @@ export function useAudioPlayer({
     return t;
   }, []);
 
+  const volumeIpcRafRef = useRef<number | null>(null);
+  const pendingVolumeRef = useRef<number | null>(null);
+
   const updateVolumeFromEvent = useCallback((clientX: number) => {
     if (!volumeRef.current) return;
     const rect = volumeRef.current.getBoundingClientRect();
+    if (!rect.width || rect.width <= 0) return;
     const v = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
     setVolume(v);
-    invoke('set_volume', { volume: v }).catch(() => {});
+    pendingVolumeRef.current = v;
+    if (volumeIpcRafRef.current === null) {
+      volumeIpcRafRef.current = requestAnimationFrame(() => {
+        volumeIpcRafRef.current = null;
+        if (pendingVolumeRef.current !== null) {
+          invoke('set_volume', { volume: pendingVolumeRef.current }).catch(() => {});
+        }
+      });
+    }
   }, [setVolume]);
+
+  useEffect(() => {
+    return () => {
+      if (volumeIpcRafRef.current !== null) {
+        cancelAnimationFrame(volumeIpcRafRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     const el = volumeRef.current;
@@ -911,6 +959,7 @@ export function useAudioPlayer({
     const onUp = async (e: MouseEvent) => {
       if (isDraggingProgressRef.current) {
         const t = updateProgressFromEvent(e.clientX);
+        lastSeekTimeRef.current = performance.now();
         if (t !== undefined) await invoke('seek_audio', { time: t }).catch(() => {});
         isDraggingProgressRef.current = false;
         setIsDraggingProgress(false);
@@ -951,20 +1000,19 @@ export function useAudioPlayer({
   useEffect(() => {
     if (sleepTimer <= 0) return;
     const interval = setInterval(() => {
-      sleepTimerRef.current -= 1;
-      if (sleepTimerRef.current <= 0) {
-        clearInterval(interval);
-        setSleepTimer(0);
-        invoke('pause_audio').catch(() => {});
-        setIsPlayingSync(false);
-        showToastRef.current('Sleep timer expired: Playback stopped');
-      } else {
-        setSleepTimer(sleepTimerRef.current);
-      }
+      setSleepTimer(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          invoke('pause_audio').catch(() => {});
+          setIsPlayingSync(false);
+          showToastRef.current('Sleep timer expired: Playback stopped');
+          return 0;
+        }
+        return prev - 1;
+      });
     }, 1000);
     return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sleepTimer > 0, setIsPlayingSync]);
+  }, [sleepTimer > 0, sleepTimer, setIsPlayingSync]);
 
   const prefetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prefetchedSetRef = useRef<Set<string>>(new Set());

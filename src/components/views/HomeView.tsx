@@ -261,10 +261,10 @@ const ArtistSpotlightCard: React.FC<{
     const key = artistName.toLowerCase();
     const cached = globalArtistAvatarCache.get(key);
     if (cached && !isTrackCover(cached)) return cached;
-    const followed = followedArtists.find(a => a.name.toLowerCase() === key && a.avatar && !isTrackCover(a.avatar));
+    const followed = followedArtists.find(a => a?.name && a.name.toLowerCase() === key && a.avatar && !isTrackCover(a.avatar));
     if (followed?.avatar) return followed.avatar;
     try {
-      const thumbs = JSON.parse(localStorage.getItem('vg_artist_thumbs') || '{}');
+      const thumbs = JSON.parse(localStorage.getItem('vg_artistThumbs') || '{}');
       if (thumbs[key] && !isTrackCover(thumbs[key])) return thumbs[key];
     } catch {}
     return '';
@@ -300,9 +300,9 @@ const ArtistSpotlightCard: React.FC<{
         if (foundPfp) {
           globalArtistAvatarCache.set(key, foundPfp);
           try {
-            const thumbs = JSON.parse(localStorage.getItem('vg_artist_thumbs') || '{}');
+            const thumbs = JSON.parse(localStorage.getItem('vg_artistThumbs') || '{}');
             thumbs[key] = foundPfp;
-            localStorage.setItem('vg_artist_thumbs', JSON.stringify(thumbs));
+            localStorage.setItem('vg_artistThumbs', JSON.stringify(thumbs));
           } catch {}
           if (!isCancelled) {
             setAvatar(foundPfp);
@@ -1455,6 +1455,54 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
 
             <div className="v-home-split-layout">
               <div className="v-home-main-col">
+                {activeGenres.length === 0 && localTracks && localTracks.length > 0 && (
+                  <div className="shelf-group" style={{ position: 'relative', animation: 'fadeUp 0.22s cubic-bezier(0.2,0,0,1) 100ms both' }}>
+                    <div className="v-section-head" style={{ marginBottom: '14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <VelunaGenreIcon id="electronic" size={20} style={{ color: 'var(--v-accent)', flexShrink: 0 }} />
+                        <div>
+                          <h2 style={{ fontSize: '12.5px', fontWeight: 800, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'var(--v-fg)', margin: 0 }}>
+                            Local Library Tracks
+                          </h2>
+                          <p style={{ fontSize: '11px', color: 'var(--v-fg3)', margin: '2px 0 0 0', fontWeight: 500 }}>
+                            From your downloaded offline collection
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="shelf-scroll-container" style={{ display: 'flex', gap: '14px', overflowX: 'auto', paddingBottom: '10px' }}>
+                      {localTracks.slice(0, 15).map((lt, ltIdx) => {
+                        const trackObj: Track = {
+                          id: ltIdx,
+                          title: lt.title,
+                          artist: lt.artist || 'Local Artist',
+                          duration: lt.duration || '0:00',
+                          url: `local://${lt.path}`,
+                          cover: lt.cover || '',
+                        };
+                        const isActive = currentTrack?.url === trackObj.url;
+                        return (
+                          <div
+                            key={lt.path}
+                            onClick={() => handlePlayInContext(trackObj, localTracks.map((l, li) => ({ id: li, title: l.title, artist: l.artist || 'Local Artist', duration: l.duration || '0:00', url: `local://${l.path}`, cover: l.cover || '' })))}
+                            className={`v-card${isActive ? ' v-card--active' : ''}`}
+                            style={{ flexShrink: 0, width: '160px', cursor: 'pointer' }}
+                          >
+                            <div style={{ position: 'relative', aspectRatio: '1', width: '100%', borderRadius: '8px', overflow: 'hidden', background: getTrackGradient(trackObj.title, trackObj.artist), display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '8px' }}>
+                              {trackObj.cover ? (
+                                <img src={trackObj.cover} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                              ) : (
+                                <Music size={24} style={{ color: 'rgba(255,255,255,0.3)' }} />
+                              )}
+                            </div>
+                            <div className="v-card__title" style={{ color: isActive ? 'var(--v-accent)' : 'var(--v-fg)', lineHeight: 1.3 }}>{trackObj.title}</div>
+                            {cleanArtist(trackObj.artist) && <div className="v-card__artist">{cleanArtist(trackObj.artist)}</div>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
                 {activeGenres.map((genre, gIdx) => {
                   const genreTracks = genreScores[genre.id].tracks.slice(0, 10);
                   return (
@@ -2509,7 +2557,11 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                       <span style={{fontSize:'11px',color:'#8a807c',fontWeight:600}}>Uploaded:</span>
                       <ThemedSelect
                         value={searchDateFilter ?? 'all'}
-                        onChange={v => setSearchDateFilter(v as SearchDateFilter)}
+                        onChange={v => {
+                          const nextFilter = v as SearchDateFilter;
+                          setSearchDateFilter(nextFilter);
+                          searchMusic();
+                        }}
                         compact
                         minWidth="100px"
                         options={[
@@ -2569,7 +2621,7 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                   <div style={{marginTop:"4px"}}>
                     <VirtualTrackList
                       items={activeTracks}
-                      itemHeight={56}
+                      itemHeight={52}
                       keyExtractor={(track) => track.id || track.url}
                       renderItem={(track, i) => (
                         <TrackRow
@@ -2632,7 +2684,12 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                           }
                           clearSelection();
                         }}
-                        onCreatePlaylistWithSelected={(name) => {
+                        onCreatePlaylistWithSelected={(rawName) => {
+                          const name = rawName.trim();
+                          if (!name) {
+                            showToast?.('Playlist name cannot be empty');
+                            return;
+                          }
                           const selected = activeTracks.filter(t => selectedUrls.has(t.url) && !t.url.startsWith('local://'));
                           if (selected.length === 0) {
                             showToast?.('Offline tracks cannot be added to playlists');
@@ -2641,7 +2698,7 @@ export const HomeView: React.FC<HomeViewProps> = React.memo(({
                           }
                           if (_setPlaylists) {
                             const newPl: Playlist = {
-                              id: `pl-${Date.now()}`,
+                              id: `p-${Date.now()}`,
                               name,
                               description: '',
                               tracks: selected,

@@ -31,7 +31,8 @@ export function useTheme() {
     document.documentElement.setAttribute('data-theme', theme);
     saveLS('vg_theme', theme);
     if (theme === 'custom') {
-      const bg0 = customBgColor;
+      const isValidHex = /^#([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/.test(customBgColor);
+      const bg0 = isValidHex ? customBgColor : '#0c0b0b';
       const bg0Rgb = hexToRgb(bg0);
       const bg1 = lightenColor(bg0, 2);
       const bg2 = lightenColor(bg0, 4);

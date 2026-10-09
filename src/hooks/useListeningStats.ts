@@ -85,10 +85,10 @@ export function useListeningStats() {
 
     setListeningHistory(prev => {
       if (prev.length === 0) return prev;
+      const idx = prev.findIndex(item => item && item.url === url);
+      if (idx === -1) return prev;
       const next = [...prev];
-      if (next[0] && next[0].url === url) {
-        next[0] = { ...next[0], secs: next[0].secs + secs };
-      }
+      next[idx] = { ...next[idx], secs: next[idx].secs + secs };
       return next;
     });
 
@@ -135,7 +135,7 @@ export function useListeningStats() {
     };
     setPlaybackHistory(prev => {
       const filtered = prev.filter(item => item && item.track && item.track.url !== track.url);
-      const next = [histEntry, ...filtered].slice(0, 5000);
+      const next = [histEntry, ...filtered].slice(0, 200);
       saveLS('vg_playbackHistory', next);
       return next;
     });
@@ -165,9 +165,9 @@ export function useListeningStats() {
     saveLS('vg_playHistory', []);
   }, []);
 
-  const removePlaybackHistoryItem = useCallback((id: string) => {
+  const removePlaybackHistoryItem = useCallback((idOrUrl: string) => {
     setPlaybackHistory(prev => {
-      const next = prev.filter(item => item.id !== id);
+      const next = prev.filter(item => item.id !== idOrUrl && item.track?.url !== idOrUrl);
       saveLS('vg_playbackHistory', next);
       return next;
     });

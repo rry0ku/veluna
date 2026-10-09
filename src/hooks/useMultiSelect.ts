@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Track } from '../types';
 
 export function useMultiSelect() {
@@ -35,15 +35,20 @@ export function useMultiSelect() {
     setLastSelectedIndex(null);
   }, []);
 
+  const selectedUrlsRef = useRef(selectedUrls);
+  useEffect(() => {
+    selectedUrlsRef.current = selectedUrls;
+  }, [selectedUrls]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && selectedUrls.size > 0) {
+      if (e.key === 'Escape' && selectedUrlsRef.current.size > 0) {
         clearSelection();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedUrls.size, clearSelection]);
+  }, [clearSelection]);
 
   const selectAll = useCallback((tracks: Track[]) => {
     setSelectedUrls(new Set(tracks.map(t => t.url)));

@@ -1,6 +1,7 @@
 import React from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
+  Languages,
   Loader2,
   Mic2,
   Music,
@@ -15,7 +16,7 @@ import {
   VolumeX,
   X,
 } from 'lucide-react';
-import { Track, RepeatMode, LyricsData } from '../../types';
+import { Track, RepeatMode, LyricsData, LyricLine } from '../../types';
 import { formatTime, parseTrackMeta, parseArtistParts, handleThumbnailError } from '../../utils';
 
 interface LyricsViewProps {
@@ -79,14 +80,20 @@ export const LyricsView: React.FC<LyricsViewProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [showLyrics, setShowLyrics]);
 
+  const [showPhonetics, setShowPhonetics] = React.useState(false);
+
   if (!showLyrics || !currentTrack) return null;
 
   const lines = lyricsData?.lines || [];
-  let currentIdx = lines.length > 0 ? lines.length - 1 : 0;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].time > progressSeconds) {
-      currentIdx = Math.max(0, i - 1);
-      break;
+  const hasPhonetics = lines.some(l => Boolean(l.roma && l.roma.trim()));
+  let currentIdx = -1;
+  if (lines.length > 0 && lines[0].time <= progressSeconds) {
+    currentIdx = lines.length - 1;
+    for (let i = 0; i < lines.length; i++) {
+      if (lines[i].time > progressSeconds) {
+        currentIdx = Math.max(0, i - 1);
+        break;
+      }
     }
   }
   const pct = trackDurationSeconds > 0 ? Math.min((progressSeconds / trackDurationSeconds) * 100, 100) : 0;
@@ -201,16 +208,22 @@ export const LyricsView: React.FC<LyricsViewProps> = ({
           <div className="slider-track" style={{position:"relative",width:"100%",height:"4px",borderRadius:"2px",cursor:"pointer",background:"rgba(255,255,255,0.18)"}}
             onMouseDown={e => {
               const track = e.currentTarget as HTMLElement;
-              const update = (clientX: number) => {
+              let targetSeekTime: number | null = null;
+              const calcTime = (clientX: number) => {
                 const rect = track.getBoundingClientRect();
-                const t = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * (trackDurationSeconds || 0);
-                invoke('seek_audio', { time: t }).catch(() => {});
+                if (rect.width <= 0) return 0;
+                return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * (trackDurationSeconds || 0);
               };
-              update(e.clientX);
-              const onMove = (ev: MouseEvent) => update(ev.clientX);
+              targetSeekTime = calcTime(e.clientX);
+              const onMove = (ev: MouseEvent) => {
+                targetSeekTime = calcTime(ev.clientX);
+              };
               const onUp = () => {
                 document.removeEventListener('mousemove', onMove);
                 document.removeEventListener('mouseup', onUp);
+                if (targetSeekTime !== null) {
+                  invoke('seek_audio', { time: targetSeekTime }).catch(() => {});
+                }
               };
               document.addEventListener('mousemove', onMove);
               document.addEventListener('mouseup', onUp);
@@ -305,15 +318,27 @@ export const LyricsView: React.FC<LyricsViewProps> = ({
             <div className="slider-track" style={{position:"relative",width:"100%",height:"3px",borderRadius:"2px",cursor:"pointer",background:"rgba(255,255,255,0.18)"}}
               onMouseDown={e => {
                 const track = e.currentTarget as HTMLElement;
-                const update = (clientX: number) => {
+                let targetVol: number | null = null;
+                const calcVol = (clientX: number) => {
                   const rect = track.getBoundingClientRect();
-                  const v = Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
-                  setVolume(v);
-                  invoke('set_volume', { volume: v }).catch(() => {});
+                  if (rect.width <= 0) return 0;
+                  return Math.max(0, Math.min(100, ((clientX - rect.left) / rect.width) * 100));
                 };
-                update(e.clientX);
-                const onMove = (ev: MouseEvent) => update(ev.clientX);
-                const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+                const v = calcVol(e.clientX);
+                setVolume(v);
+                targetVol = v;
+                const onMove = (ev: MouseEvent) => {
+                  const nextV = calcVol(ev.clientX);
+                  setVolume(nextV);
+                  targetVol = nextV;
+                };
+                const onUp = () => {
+                  document.removeEventListener('mousemove', onMove);
+                  document.removeEventListener('mouseup', onUp);
+                  if (targetVol !== null) {
+                    invoke('set_volume', { volume: targetVol }).catch(() => {});
+                  }
+                };
                 document.addEventListener('mousemove', onMove);
                 document.addEventListener('mouseup', onUp);
               }}>
@@ -339,9 +364,35 @@ export const LyricsView: React.FC<LyricsViewProps> = ({
           </div>
         ) : lines.length > 0 ? (
           <div style={{position:"relative",height:"100%"}}>
+            {hasPhonetics && (
+              <div style={{position:"absolute",top:"20px",right:"24px",zIndex:20}}>
+                <button
+                  onClick={() => setShowPhonetics(p => !p)}
+                  title={showPhonetics ? "Switch to original lyrics" : "Show phonetic / romanized lyrics"}
+                  style={{
+                    display:"flex",
+                    alignItems:"center",
+                    gap:"6px",
+                    padding:"6px 14px",
+                    borderRadius:"9999px",
+                    fontSize:"12px",
+                    fontWeight:700,
+                    letterSpacing:"0.02em",
+                    cursor:"pointer",
+                    border:"1px solid rgba(255,255,255,0.18)",
+                    background: showPhonetics ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.08)",
+                    color: showPhonetics ? "#ffffff" : "rgba(255,255,255,0.7)",
+                    transition:"all 0.15s ease"
+                  }}
+                >
+                  <Languages size={14} />
+                  {showPhonetics ? "Phonetic: ON" : "Phonetic: OFF"}
+                </button>
+              </div>
+            )}
             <div style={{height:"100%",overflowY:"auto",padding:"calc(50vh - 40px) 44px",scrollbarWidth:"none",boxSizing:"border-box"}}
               ref={lyricsScrollContainerRef}>
-              {lines.map((line: { time: number; text: string }, idx: number) => {
+              {lines.map((line: LyricLine, idx: number) => {
                 const isCurrent = idx === currentIdx;
                 const isPast = idx < currentIdx;
                 const distance = Math.abs(idx - currentIdx);
@@ -367,6 +418,21 @@ export const LyricsView: React.FC<LyricsViewProps> = ({
                       textShadow: 'none',
                     }}>
                     {line.text || '\u00A0'}
+                    {showPhonetics && line.roma && (
+                      <span
+                        style={{
+                          display: 'block',
+                          fontSize: isCurrent ? 'clamp(1rem, 1.8vw, 1.25rem)' : 'clamp(0.85rem, 1.4vw, 1.05rem)',
+                          fontWeight: 500,
+                          opacity: isCurrent ? 0.9 : 0.65,
+                          marginTop: '4px',
+                          letterSpacing: '0.01em',
+                          color: isCurrent ? '#ffffff' : 'inherit',
+                        }}
+                      >
+                        {line.roma}
+                      </span>
+                    )}
                   </p>
                 );
               })}

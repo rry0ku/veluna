@@ -172,13 +172,15 @@ pub fn update_windows_smtc(meta: &crate::MprisMetadata) {
     } else {
         let raw = meta.cover_url.trim();
         if raw.starts_with("file:///") {
-            Some(format!("file://{}", raw.trim_start_matches("file:///")))
-        } else if raw.starts_with("file://") {
             Some(raw.to_string())
+        } else if raw.starts_with("file://") {
+            let stripped = raw.trim_start_matches("file://");
+            Some(format!("file:///{}", stripped.trim_start_matches('/')))
         } else if raw.starts_with("http://") || raw.starts_with("https://") {
             Some(raw.to_string())
         } else if std::path::Path::new(raw).is_file() {
-            Some(format!("file://{}", raw))
+            let p_str = raw.replace('\\', "/");
+            Some(format!("file:///{}", p_str.trim_start_matches('/')))
         } else {
             None
         }

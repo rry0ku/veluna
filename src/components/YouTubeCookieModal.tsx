@@ -64,16 +64,22 @@ export const YouTubeCookieModal: React.FC<YouTubeCookieModalProps> = ({
 
   // Listen to Tauri sync progress events
   useEffect(() => {
+    let active = true;
     let unlisten: (() => void) | null = null;
     listen<any>('youtube_sync_progress', (event) => {
-      if (event.payload) {
+      if (active && event.payload) {
         setSyncProgress(event.payload);
       }
     }).then((fn) => {
-      unlisten = fn;
+      if (active) {
+        unlisten = fn;
+      } else {
+        fn();
+      }
     });
 
     return () => {
+      active = false;
       if (unlisten) unlisten();
     };
   }, []);
@@ -118,7 +124,6 @@ export const YouTubeCookieModal: React.FC<YouTubeCookieModalProps> = ({
     if (isLoading || step === 'syncing') {
       await handleCancelSync();
     } else {
-      invoke('clear_youtube_cookies').catch(() => {});
       setCookieInput('');
       onClose();
     }

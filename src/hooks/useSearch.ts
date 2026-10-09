@@ -79,6 +79,11 @@ export function useSearch(showToast?: (msg: string) => void, cacheEnabled: boole
       const dateArg = searchDateFilter === 'all' ? undefined : searchDateFilter;
       const [resMusic, resVideo] = isUrl 
         ? await Promise.all([invoke<string>('search_youtube', { query: q, dateFilter: dateArg }).catch(() => ''), Promise.resolve('')])
+        : searchSource === 'youtube'
+        ? await Promise.all([
+            Promise.resolve(''),
+            invoke<string>('search_youtube', { query: q, dateFilter: dateArg }).catch(() => '')
+          ])
         : await Promise.all([
             invoke<string>('search_youtube', { query: `${q} music`, dateFilter: dateArg }).catch(() => ''),
             invoke<string>('search_youtube', { query: `${q} video`, dateFilter: dateArg }).catch(() => '')
@@ -101,7 +106,7 @@ export function useSearch(showToast?: (msg: string) => void, cacheEnabled: boole
             }
           }
           return {
-            id: i,
+            id: Date.now() + Math.floor(Math.random() * 1000000) + i,
             title: meta.title || parts[0]?.trim() || 'Unknown Track',
             artist: meta.artist || 'YouTube',
             duration: duration || '0:00',

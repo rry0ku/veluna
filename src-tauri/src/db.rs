@@ -23,6 +23,7 @@ pub struct DbPlaylist {
     pub name: String,
     pub description: String,
     pub custom_cover: Option<String>,
+    pub updated_at: Option<i64>,
     pub tracks: Vec<DbTrack>,
 }
 
@@ -236,18 +237,21 @@ pub fn save_playlist(p: DbPlaylist) -> Result<(), String> {
     })
 }
 
+type PlaylistRow = (String, String, String, Option<String>, Option<i64>);
+
 pub fn get_all_playlists() -> Result<Vec<DbPlaylist>, String> {
     with_db(|conn| {
         let mut stmt = conn.prepare(
-            "SELECT id, name, description, custom_cover FROM playlists ORDER BY updated_at DESC",
+            "SELECT id, name, description, custom_cover, updated_at FROM playlists ORDER BY updated_at DESC",
         )?;
-        let playlist_rows: Vec<(String, String, String, Option<String>)> = stmt
+        let playlist_rows: Vec<PlaylistRow> = stmt
             .query_map([], |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1)?,
                     row.get::<_, String>(2)?,
                     row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<i64>>(4)?,
                 ))
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -258,7 +262,7 @@ pub fn get_all_playlists() -> Result<Vec<DbPlaylist>, String> {
              FROM playlist_tracks WHERE playlist_id = ?1 ORDER BY position ASC",
         )?;
 
-        for (id, name, description, custom_cover) in playlist_rows {
+        for (id, name, description, custom_cover, updated_at) in playlist_rows {
             let tracks = track_stmt
                 .query_map(params![id], |row| {
                     Ok(DbTrack {
@@ -278,6 +282,7 @@ pub fn get_all_playlists() -> Result<Vec<DbPlaylist>, String> {
                 name,
                 description,
                 custom_cover,
+                updated_at,
                 tracks,
             });
         }
@@ -455,7 +460,7 @@ pub fn search_library_fts(query: &str) -> Result<Vec<DbSearchResult>, String> {
 
     let fts_query = tokens
         .iter()
-        .map(|tok| format!("\"{}\"*", tok.replace('"', "")))
+        .map(|tok| format!("{}*", tok))
         .collect::<Vec<_>>()
         .join(" ");
 
@@ -475,20 +480,41 @@ pub fn search_library_fts(query: &str) -> Result<Vec<DbSearchResult>, String> {
     })
 }
 
+pub fn index_local_tracks_fts_batch(
+    tracks: &[(&str, &str, &str, &str)],
+) -> Result<(), String> {
+    if tracks.is_empty() {
+        return Ok(());
+    }
+    with_db_mut(|conn| {
+        let tx = conn.transaction()?;
+        {
+            let mut del_stmt = tx.prepare_cached("DELETE FROM library_fts WHERE path = ?1")?;
+            let mut ins_stmt = tx.prepare_cached(
+                "INSERT INTO library_fts (title, artist, album, path) VALUES (?1, ?2, ?3, ?4)",
+            )?;
+            for (title, artist, album, path) in tracks {
+                del_stmt.execute(params![path])?;
+                ins_stmt.execute(params![title, artist, album, path])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    })
+}
+
 pub fn index_local_track_fts(
     title: &str,
     artist: &str,
     album: &str,
     path: &str,
 ) -> Result<(), String> {
+    index_local_tracks_fts_batch(&[(title, artist, album, path)])
+}
+
+pub fn remove_local_track_fts(path: &str) -> Result<(), String> {
     with_db_mut(|conn| {
-        let tx = conn.transaction()?;
-        tx.execute("DELETE FROM library_fts WHERE path = ?1", params![path])?;
-        tx.execute(
-            "INSERT INTO library_fts (title, artist, album, path) VALUES (?1, ?2, ?3, ?4)",
-            params![title, artist, album, path],
-        )?;
-        tx.commit()?;
+        conn.execute("DELETE FROM library_fts WHERE path = ?1", params![path])?;
         Ok(())
     })
 }

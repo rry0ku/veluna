@@ -286,7 +286,7 @@ export async function submitLastFmScrobble(
 
   if (!key || !secret) return { success: false, error: 'Missing Last.fm credentials' };
 
-  const { artist, title } = sanitizeTrackInfo(track);
+  const { artist, title, album } = sanitizeTrackInfo(track);
   if (!artist || !title || artist === 'Unknown Artist') {
     return { success: false, error: 'Missing valid artist or track title' };
   }
@@ -300,6 +300,10 @@ export async function submitLastFmScrobble(
     track: title,
     timestamp: timestamp.toString(),
   };
+
+  if (album) {
+    params.album = album;
+  }
 
   if (sk) {
     params.sk = sk;

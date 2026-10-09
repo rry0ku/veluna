@@ -697,8 +697,12 @@ export function getStarterRecommendations(preferences?: { languages?: string[]; 
     ];
   }
 
-  // Shuffle pool
-  const shuffled = [...pool].sort(() => 0.5 - Math.random());
+  // Fisher-Yates shuffle pool
+  const shuffled = [...pool];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
   
   // Prioritize tracks matching chosen favorite artists
   const favoriteArtists = (preferences?.artists || []).map(a => a.toLowerCase().trim()).filter(Boolean);

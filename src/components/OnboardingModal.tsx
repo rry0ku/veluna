@@ -119,14 +119,15 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   useEffect(() => {
     if (isOpen && !prevIsOpenRef.current) {
       setStep(1);
-      setSelectedCategories([]);
-      setSelectedArtists([]);
+      const initCats = Array.from(new Set([...(initialPreferences?.languages || []), ...(initialPreferences?.genres || [])]));
+      setSelectedCategories(initCats);
+      setSelectedArtists(initialPreferences?.artists || []);
       setArtistSearch('');
       setLiveArtists([]);
       setLiveSearching(false);
     }
     prevIsOpenRef.current = isOpen;
-  }, [isOpen]);
+  }, [isOpen, initialPreferences]);
 
   useEffect(() => {
     if (!isOpen) return;

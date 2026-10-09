@@ -105,7 +105,7 @@ fn build_tray(app: &AppHandle) -> Result<(), String> {
                 }
                 "show" => toggle_window(app),
                 "quit" => {
-                    let _ = crate::youtube_auth::clear_youtube_cookies_internal(app);
+                    crate::cleanup_all_active_downloads();
                     app.exit(0);
                 }
                 _ => {}

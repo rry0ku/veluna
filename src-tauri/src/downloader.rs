@@ -137,6 +137,8 @@ pub async fn download_audio_stream_chunked(
                     file.seek(SeekFrom::Start(start))
                         .map_err(|e| e.to_string())?;
 
+                    let mut last_emit = std::time::Instant::now();
+                    let mut last_pct = 0.0;
                     while let Some(chunk) = res.chunk().await.map_err(|e| e.to_string())? {
                         file.write_all(&chunk).map_err(|e| e.to_string())?;
                         let current = d_counter.fetch_add(chunk.len() as u64, Ordering::SeqCst)
@@ -144,15 +146,19 @@ pub async fn download_audio_stream_chunked(
                         let pct =
                             5.0 + ((current as f64 / total_bytes as f64) * 85.0).clamp(0.0, 85.0);
 
-                        let _ = app_h.emit(
-                            "download_progress",
-                            &DownloadProgressPayload {
-                                url: t_url.clone(),
-                                percent: pct,
-                                status: format!("Downloading ({:.0}%)", pct),
-                                error: None,
-                            },
-                        );
+                        if pct - last_pct >= 1.0 || last_emit.elapsed().as_millis() >= 150 {
+                            last_pct = pct;
+                            last_emit = std::time::Instant::now();
+                            let _ = app_h.emit(
+                                "download_progress",
+                                &DownloadProgressPayload {
+                                    url: t_url.clone(),
+                                    percent: pct,
+                                    status: format!("Downloading ({:.0}%)", pct),
+                                    error: None,
+                                },
+                            );
+                        }
                     }
                     file.flush().map_err(|e| e.to_string())?;
                     drop(file);
@@ -168,9 +174,11 @@ pub async fn download_audio_stream_chunked(
                     Ok(Ok(())) => {}
                     _ => {
                         all_ok = false;
-                        for remaining in pending_tasks {
+                        for remaining in &pending_tasks {
                             remaining.abort();
                         }
+                        // Wait for aborted tasks to exit and release file handles
+                        futures::future::join_all(pending_tasks).await;
                         break;
                     }
                 }

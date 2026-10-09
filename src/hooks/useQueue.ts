@@ -44,7 +44,9 @@ export function useQueue(showToast?: (msg: string) => void) {
       if (typeof indexOrUrl === 'number') {
         return prev.filter((_, idx) => idx !== indexOrUrl);
       }
-      return prev.filter(t => t.url !== indexOrUrl);
+      const targetIdx = prev.findIndex(t => t.url === indexOrUrl);
+      if (targetIdx === -1) return prev;
+      return prev.filter((_, idx) => idx !== targetIdx);
     });
   }, [setQueue]);
 

@@ -1339,9 +1339,11 @@ export function MetadataEditModal({
   const [isCloseHovered, setIsCloseHovered] = useState(false);
   const [isCancelHovered, setIsCancelHovered] = useState(false);
   const [isSaveHovered, setIsSaveHovered] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     const path = track.url.substring(8);
+    setErrorMessage(null);
     invoke<{ album: string }>('get_audio_metadata', { path })
       .then(m => {
         if (m.album) setAlbum(m.album);
@@ -1362,11 +1364,15 @@ export function MetadataEditModal({
   const handleSave = async () => {
     if (!title.trim()) return;
     setLoading(true);
+    setErrorMessage(null);
     try {
       await onSave(title.trim(), artist.trim(), album.trim());
       onClose();
-    } catch {}
-    setLoading(false);
+    } catch (e: any) {
+      setErrorMessage(e?.message || String(e) || 'Failed to update metadata');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -1398,6 +1404,11 @@ export function MetadataEditModal({
             <X size={15} />
           </button>
         </div>
+        {errorMessage && (
+          <div style={{ margin: "16px 24px 0", padding: "10px 14px", borderRadius: "8px", background: "rgba(224,85,85,0.12)", border: "1px solid rgba(224,85,85,0.3)", color: "#ff8080", fontSize: "12px", lineHeight: 1.4 }}>
+            {errorMessage}
+          </div>
+        )}
         <div style={{padding:"24px",display:"flex",flexDirection:"column",gap:"16px"}}>
           <div>
             <label style={{display:"block",fontSize:"10px",fontWeight:700,letterSpacing:"0.08em",textTransform:"uppercase",color:"#8a817c",marginBottom:"6px"}}>Title</label>
@@ -1525,13 +1536,11 @@ export function PlaylistDeleteConfirmModal({
       if (!isOpen || !modalData) return;
       if (e.key === 'Escape') {
         onClose();
-      } else if (e.key === 'Enter') {
-        onConfirmDelete();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, modalData, onClose, onConfirmDelete]);
+  }, [isOpen, modalData, onClose]);
 
   if (!isOpen || !modalData) return null;
 
@@ -1669,11 +1678,48 @@ export function ClipDownloadModal({
   const [endTime, setEndTime] = useState(initialEnd);
   const [error, setError] = useState<string | null>(null);
 
+  const parseTimestampSeconds = (str: string): number | null => {
+    const s = str.trim();
+    if (/^\d+(\.\d+)?$/.test(s)) {
+      return parseFloat(s);
+    }
+    const match = s.match(/^(\d+):([0-5]?\d)(?:\.(\d+))?$/);
+    if (match) {
+      const mins = parseInt(match[1], 10);
+      const secs = parseInt(match[2], 10);
+      const frac = match[3] ? parseFloat(`0.${match[3]}`) : 0;
+      return mins * 60 + secs + frac;
+    }
+    const hmsMatch = s.match(/^(\d+):([0-5]?\d):([0-5]?\d)(?:\.(\d+))?$/);
+    if (hmsMatch) {
+      const hrs = parseInt(hmsMatch[1], 10);
+      const mins = parseInt(hmsMatch[2], 10);
+      const secs = parseInt(hmsMatch[3], 10);
+      const frac = hmsMatch[4] ? parseFloat(`0.${hmsMatch[4]}`) : 0;
+      return hrs * 3600 + mins * 60 + secs + frac;
+    }
+    return null;
+  };
+
   const handleConfirm = () => {
     const s = startTime.trim();
     const e = endTime.trim();
     if (!s || !e) {
       setError('Start and end times are required');
+      return;
+    }
+    const startSec = parseTimestampSeconds(s);
+    const endSec = parseTimestampSeconds(e);
+    if (startSec === null) {
+      setError('Invalid start time format. Use SS, MM:SS, or HH:MM:SS');
+      return;
+    }
+    if (endSec === null) {
+      setError('Invalid end time format. Use SS, MM:SS, or HH:MM:SS');
+      return;
+    }
+    if (startSec >= endSec) {
+      setError('Start time must be strictly less than end time');
       return;
     }
     const section = `*${s}-${e}`;

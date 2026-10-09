@@ -45,7 +45,7 @@ interface PlaylistsViewProps {
   setPlaylistDeleteModal?: (modal: { ids: string[]; names: string[] } | null) => void;
   playlistSearchQ: string;
   setPlaylistSearchQ: (q: string) => void;
-  removeFromPlaylist?: (pid: string, url: string) => void;
+  removeFromPlaylist?: (pid: string, indexOrUrl: number | string) => void;
   currentTrack: Track | null;
   hoveredTrackUrl?: string | null;
   setHoveredTrackUrl?: (url: string | null) => void;
@@ -186,10 +186,13 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
     }
   });
 
-  const removeFromPlaylist = customRemoveFromPlaylist || ((pid: string, url: string) => {
+  const removeFromPlaylist = customRemoveFromPlaylist || ((pid: string, indexOrUrl: number | string) => {
     setPlaylists(prev => prev.map(p => {
       if (p.id !== pid) return p;
-      return { ...p, tracks: p.tracks.filter(t => t.url !== url) };
+      if (typeof indexOrUrl === 'number') {
+        return { ...p, tracks: p.tracks.filter((_, idx) => idx !== indexOrUrl) };
+      }
+      return { ...p, tracks: p.tracks.filter(t => t.url !== indexOrUrl) };
     }));
     showToast('Removed from playlist');
   });
@@ -209,6 +212,8 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
   const dragPlaylistIdx = useRef<number | null>(null);
   const dragOverPlaylistIdxRef = useRef<number | null>(null);
   const [dragOverPlaylistIdx, setDragOverPlaylistIdx] = useState<number | null>(null);
+  const playlistScrollRef = useRef<HTMLDivElement | null>(null);
+  const trackListContainerRef = useRef<HTMLDivElement | null>(null);
 
   const dragPlaylistCardIdx = useRef<number | null>(null);
   const dragOverPlaylistCardIdxRef = useRef<number | null>(null);
@@ -245,7 +250,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
   return (
     <>
       {openPlaylist ? (
-        <div className="flex-1 overflow-y-auto custom-scrollbar" style={{padding:"24px 30px 140px",zIndex:10,position:"relative"}}>
+        <div ref={playlistScrollRef} className="flex-1 overflow-y-auto custom-scrollbar" style={{padding:"24px 30px 140px",zIndex:10,position:"relative"}}>
           {getPlaylistCover(openPlaylist) ? (
             <div style={{
               position: "absolute",
@@ -518,7 +523,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                   </button>
                 )}
                 {!isProtectedPlaylist(openPlaylist.id) && (
-                  <button onClick={()=>{deletePlaylist(openPlaylist.id);setOpenPlaylistId(null);}}
+                  <button onClick={()=>{deletePlaylist(openPlaylist.id);}}
                     style={{
                       display:"flex",
                       alignItems:"center",
@@ -649,9 +654,10 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                         <p style={{fontSize:"13px",color:"var(--v-fg2)"}}>No results for "{playlistSearchQ}"</p>
                       </div>
                     ) : (
-                      <VirtualTrackList
+                      <div ref={trackListContainerRef}>
+                        <VirtualTrackList
                         items={filteredTracks}
-                        itemHeight={56}
+                        itemHeight={52}
                         keyExtractor={(t, i) => `${t.url}_${i}`}
                         renderItem={(t, i) => {
                           const origIdx = (playlistSortBy === 'default' && !playlistSearchQ) ? i : openPlaylist.tracks.indexOf(t);
@@ -680,13 +686,62 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                                     dragPlaylistIdx.current = origIdx;
                                     dragOverPlaylistIdxRef.current = origIdx;
                                     setDragOverPlaylistIdx(origIdx);
+
+                                    const scrollContainer = playlistScrollRef.current;
+                                    let lastClientY = e.clientY;
+                                    let autoScrollRaf: number | null = null;
+
+                                    const updateDragOverFromMouse = (clientY: number) => {
+                                      if (!trackListContainerRef.current) return;
+                                      const rect = trackListContainerRef.current.getBoundingClientRect();
+                                      const relativeY = clientY - rect.top;
+                                      const rowHeight = 52;
+                                      const targetIdx = Math.max(0, Math.min(filteredTracks.length - 1, Math.floor(relativeY / rowHeight)));
+                                      if (targetIdx !== dragOverPlaylistIdxRef.current) {
+                                        dragOverPlaylistIdxRef.current = targetIdx;
+                                        setDragOverPlaylistIdx(targetIdx);
+                                      }
+                                    };
+
+                                    const autoScrollLoop = () => {
+                                      if (dragPlaylistIdx.current === null || !scrollContainer) return;
+                                      const rect = scrollContainer.getBoundingClientRect();
+                                      const threshold = 50;
+                                      const maxSpeed = 16;
+
+                                      if (lastClientY < rect.top + threshold) {
+                                        const intensity = Math.max(0.1, (rect.top + threshold - lastClientY) / threshold);
+                                        scrollContainer.scrollTop -= Math.round(maxSpeed * intensity);
+                                        updateDragOverFromMouse(lastClientY);
+                                      } else if (lastClientY > rect.bottom - threshold) {
+                                        const intensity = Math.max(0.1, (lastClientY - (rect.bottom - threshold)) / threshold);
+                                        scrollContainer.scrollTop += Math.round(maxSpeed * intensity);
+                                        updateDragOverFromMouse(lastClientY);
+                                      }
+
+                                      autoScrollRaf = requestAnimationFrame(autoScrollLoop);
+                                    };
+
+                                    autoScrollRaf = requestAnimationFrame(autoScrollLoop);
+
+                                    const onMove = (moveEvt: MouseEvent) => {
+                                      lastClientY = moveEvt.clientY;
+                                      updateDragOverFromMouse(moveEvt.clientY);
+                                    };
+
                                     const onUp = () => {
+                                      if (autoScrollRaf !== null) {
+                                        cancelAnimationFrame(autoScrollRaf);
+                                        autoScrollRaf = null;
+                                      }
+                                      window.removeEventListener('mousemove', onMove);
+                                      window.removeEventListener('mouseup', onUp);
+
                                       const from = dragPlaylistIdx.current;
                                       const to = dragOverPlaylistIdxRef.current;
                                       dragPlaylistIdx.current = null;
                                       dragOverPlaylistIdxRef.current = null;
                                       setDragOverPlaylistIdx(null);
-                                      window.removeEventListener('mouseup', onUp);
                                       if (from === null || to === null || from === to) return;
                                       if (customMovePlaylistTrack) {
                                         customMovePlaylistTrack(from, to);
@@ -700,6 +755,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                                         }));
                                       }
                                     };
+                                    window.addEventListener('mousemove', onMove);
                                     window.addEventListener('mouseup', onUp);
                                   }}
                                 >
@@ -715,7 +771,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                                   track={enrichedTrack}
                                   index={i}
                                   showRemove
-                                  onRemove={() => removeFromPlaylist(openPlaylist.id, enrichedTrack.url)}
+                                  onRemove={() => removeFromPlaylist(openPlaylist.id, origIdx)}
                                   isActive={currentTrack?.url === enrichedTrack.url}
                                   isHovered={hoveredTrackUrl === enrichedTrack.url}
                                   isLoadingTrack={loadingTrackUrl === enrichedTrack.url || (currentTrack?.url === enrichedTrack.url && isLoadingTrack)}
@@ -738,6 +794,7 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                           );
                         }}
                       />
+                      </div>
                     )}
                   </div>
                   {isTrackMultiSelectActive && (
@@ -1062,8 +1119,9 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                               setDragPlaylistCardIdxState(null);
                               window.removeEventListener('mouseup', onUp);
                               if (from === null || to === null || from === to) return;
+                              if (from === 0 || to === 0) return; // p1 Liked Songs is pinned at 0
                               if (customMovePlaylist) {
-                                customMovePlaylist(from, to);
+                                customMovePlaylist(from - 1, to - 1);
                               } else {
                                 setPlaylists(prev => {
                                   const arr = [...prev];
@@ -1174,8 +1232,9 @@ export const PlaylistsView: React.FC<PlaylistsViewProps> = React.memo(({
                             setDragPlaylistCardIdxState(null);
                             window.removeEventListener('mouseup', onUp);
                             if (from === null || to === null || from === to) return;
+                            if (from === 0 || to === 0) return; // p1 Liked Songs is pinned at 0
                             if (customMovePlaylist) {
-                              customMovePlaylist(from, to);
+                              customMovePlaylist(from - 1, to - 1);
                             } else {
                               setPlaylists(prev => {
                                 const arr = [...prev];

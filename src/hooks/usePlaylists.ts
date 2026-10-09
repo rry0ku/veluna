@@ -38,8 +38,15 @@ export function usePlaylists(showToast?: (msg: string) => void) {
         const dbMap = new Map(dbPls.map(p => [p.id, p]));
         const updated = prev.map(p => {
           const dbPl = dbMap.get(p.id);
-          if (dbPl && dbPl.tracks.length > p.tracks.length) {
-            return dbPl;
+          if (dbPl) {
+            // Compare timestamps if available, otherwise prefer non-empty track lists
+            if (dbPl.updatedAt && p.updatedAt) {
+              if (dbPl.updatedAt > p.updatedAt) return dbPl;
+              return p;
+            }
+            if (dbPl.tracks.length > p.tracks.length) {
+              return dbPl;
+            }
           }
           return p;
         });
@@ -58,7 +65,14 @@ export function usePlaylists(showToast?: (msg: string) => void) {
   }, []);
 
   useEffect(() => {
-    saveLS('vg_playlists', playlists);
+    // Strip large data: image strings from localStorage to avoid 5MB quota exhaustion
+    const sanitizedForLS = playlists.map(p => {
+      if (p.customCover && p.customCover.startsWith('data:') && p.customCover.length > 8192) {
+        return { ...p, customCover: undefined };
+      }
+      return p;
+    });
+    saveLS('vg_playlists', sanitizedForLS);
     playlists.forEach(p => dbSavePlaylist(p));
   }, [playlists]);
 
@@ -79,7 +93,7 @@ export function usePlaylists(showToast?: (msg: string) => void) {
     const trimmedDesc = newPlaylistDesc.trim();
     setPlaylists(p => [
       ...p,
-      { id: `p${Date.now()}`, name: trimmedName, description: trimmedDesc, tracks: [] }
+      { id: `p${Date.now()}`, name: trimmedName, description: trimmedDesc, tracks: [], updatedAt: Date.now() }
     ]);
     setIsPlaylistModalOpen(false);
     setNewPlaylistName('');
@@ -116,8 +130,6 @@ export function usePlaylists(showToast?: (msg: string) => void) {
       if (p1 && !updated.some(p => p.id === 'p1')) {
         updated.unshift(p1);
       }
-      saveLS('vg_playlists', updated);
-      updated.forEach(p => dbSavePlaylist(p).catch(() => {}));
       return updated;
     });
     if (openPlaylistId && idSet.has(String(openPlaylistId))) {
@@ -133,7 +145,7 @@ export function usePlaylists(showToast?: (msg: string) => void) {
 
   const confirmRenamePlaylist = useCallback(() => {
     if (!renameVal.trim() || !renamingPlaylist || isProtectedPlaylist(renamingPlaylist.id)) return;
-    setPlaylists(p => p.map(x => x.id === renamingPlaylist.id ? { ...x, name: renameVal.trim(), description: renameDescVal.trim() } : x));
+    setPlaylists(p => p.map(x => x.id === renamingPlaylist.id ? { ...x, name: renameVal.trim(), description: renameDescVal.trim(), updatedAt: Date.now() } : x));
     setRenamingPlaylist(null);
     if (showToast) showToast('Playlist updated');
   }, [renameVal, renameDescVal, renamingPlaylist, setPlaylists, showToast]);
@@ -144,18 +156,14 @@ export function usePlaylists(showToast?: (msg: string) => void) {
       return;
     }
     setPlaylists(p => {
-      const updated = p.map(x => {
+      return p.map(x => {
         if (x.id !== 'p1') return x;
         const liked = x.tracks.some(y => areTrackUrlsEqual(y.url, t.url));
         const newTracks = liked
           ? x.tracks.filter(y => !areTrackUrlsEqual(y.url, t.url))
           : [...x.tracks, t];
-        return { ...x, tracks: newTracks };
+        return { ...x, tracks: newTracks, updatedAt: Date.now() };
       });
-      saveLS('vg_playlists', updated);
-      const p1 = updated.find(x => x.id === 'p1');
-      if (p1) dbSavePlaylist(p1).catch(() => {});
-      return updated;
     });
   }, [setPlaylists, showToast]);
 
@@ -265,16 +273,27 @@ export function usePlaylists(showToast?: (msg: string) => void) {
   }, [setPlaylists]);
 
   const saveQueueAsPlaylist = useCallback((queueTracks: Track[]) => {
-    if (queueTracks.length === 0) return;
+    const validTracks = queueTracks.filter(t => !t.url?.startsWith('local://'));
+    if (validTracks.length === 0) {
+      if (showToast) showToast(queueTracks.length > 0 ? 'Offline tracks cannot be saved into online playlists' : 'Queue is empty');
+      return;
+    }
     const name = `Queue - ${new Date().toLocaleDateString()}`;
     const newPlaylist: Playlist = {
       id: `p${Date.now()}`,
       name,
       description: 'Saved from active queue',
-      tracks: [...queueTracks]
+      tracks: [...validTracks],
+      updatedAt: Date.now(),
     };
     setPlaylists(prev => [...prev, newPlaylist]);
-    if (showToast) showToast('Queue saved as playlist');
+    if (showToast) {
+      if (validTracks.length < queueTracks.length) {
+        showToast(`Queue saved as playlist (${queueTracks.length - validTracks.length} offline tracks excluded)`);
+      } else {
+        showToast('Queue saved as playlist');
+      }
+    }
   }, [setPlaylists, showToast]);
 
   return {

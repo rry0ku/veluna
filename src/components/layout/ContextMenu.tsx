@@ -68,6 +68,7 @@ interface ContextMenuProps {
   setAddToPlaylistTrack: (track: Track | null) => void;
   setMetadataEditingTrack: (track: Track | null) => void;
   showToast: (msg: string) => void;
+  playlistContextRef?: React.MutableRefObject<{ tracks: Track[]; index: number } | null>;
   currentTrack?: Track | null;
   audioInfo?: AudioInfo | null;
   onArtistClick?: (artistName: string) => void;
@@ -106,6 +107,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
   setAddToPlaylistTrack,
   setMetadataEditingTrack,
   showToast,
+  playlistContextRef,
   currentTrack,
   audioInfo,
   onArtistClick,
@@ -181,7 +183,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
     setPlaylists(prev => prev.map(p => {
       if (p.id === pid) {
         pName = p.name;
-        if (p.tracks.some(t => t.url === track.url)) return p;
+        if (p.tracks.some(t => areTrackUrlsEqual(t.url, track.url))) return p;
         added = true;
         return { ...p, tracks: [...p.tracks, track] };
       }
@@ -227,7 +229,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
           const top = Math.max(12, Math.min(ctxMenu.y, maxTop));
 
           return (
-            <div className="v-ctx custom-scrollbar" style={{ position: 'fixed', zIndex: 9999, width: `${menuWidth}px`, top: `${top}px`, left: `${left}px` }} onClick={e => e.stopPropagation()}>
+            <div className="v-ctx custom-scrollbar" style={{ position: 'fixed', zIndex: 9999, width: `${menuWidth}px`, top: `${top}px`, left: `${left}px`, maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
               <div className="v-ctx__header">
                 <div className="v-ctx__art" style={{ position: 'relative', background: getTrackGradient(track.title, track.artist), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   <Music className="fallback-music-icon" size={14} style={{ position: 'absolute', color: 'rgba(255,255,255,0.2)', display: track.cover ? 'none' : 'block' }} />
@@ -289,7 +291,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
           };
 
           return (
-            <div className="v-ctx custom-scrollbar" style={{ position: 'fixed', zIndex: 9999, width: `${menuWidth}px`, top: `${top}px`, left: `${left}px` }} onClick={e => e.stopPropagation()}>
+            <div className="v-ctx custom-scrollbar" style={{ position: 'fixed', zIndex: 9999, width: `${menuWidth}px`, top: `${top}px`, left: `${left}px`, maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
               <div className="v-ctx__header">
                 <div className="v-ctx__art" style={{
                   position: 'relative',
@@ -360,7 +362,17 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
 
               {/* Queue specific action */}
               {ctxMenu.type === 'queue-track' && (
-                <button onClick={() => { setQueue(prev => prev.filter(t => t.url !== track.url)); setCtxMenu(null); }} className="v-ctx__item v-ctx__item--danger"><X size={14} /> Remove from Queue</button>
+                <button onClick={() => {
+                  setQueue(prev => {
+                    if (ctxMenu.queueIndex !== undefined && ctxMenu.queueIndex >= 0 && ctxMenu.queueIndex < prev.length) {
+                      return prev.filter((_, idx) => idx !== ctxMenu.queueIndex);
+                    }
+                    const targetIdx = prev.findIndex(t => t.url === track.url);
+                    if (targetIdx === -1) return prev;
+                    return prev.filter((_, idx) => idx !== targetIdx);
+                  });
+                  setCtxMenu(null);
+                }} className="v-ctx__item v-ctx__item--danger"><X size={14} /> Remove from Queue</button>
               )}
 
               <div className="v-ctx__sep" />
@@ -399,7 +411,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
           const left = Math.max(12, Math.min(ctxMenu.x, maxLeft));
           const top = Math.max(12, Math.min(ctxMenu.y, maxTop));
           return (
-            <div className="v-ctx custom-scrollbar" style={{ position: 'fixed', zIndex: 9999, width: `${menuWidth}px`, top: `${top}px`, left: `${left}px` }} onClick={e => e.stopPropagation()}>
+            <div className="v-ctx custom-scrollbar" style={{ position: 'fixed', zIndex: 9999, width: `${menuWidth}px`, top: `${top}px`, left: `${left}px`, maxHeight: 'calc(100vh - 32px)', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
               <div className="v-ctx__header">
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--v-fg)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{playlist.name}</div>
@@ -408,16 +420,20 @@ export const ContextMenu: React.FC<ContextMenuProps> = React.memo(({
               </div>
               <button className="v-ctx__item" onClick={() => {
                 if (playlist.tracks.length > 0) {
-                  handlePlayTrack(playlist.tracks[0]);
-                  setQueue(playlist.tracks.slice(1));
+                  if (playlistContextRef) {
+                    playlistContextRef.current = { tracks: playlist.tracks, index: 0 };
+                  }
+                  handlePlayTrack(playlist.tracks[0], false);
                 }
                 setCtxMenu(null);
               }}><Play size={13} /> Play All</button>
               <button className="v-ctx__item" onClick={() => {
                 const s = [...playlist.tracks].sort(() => Math.random() - 0.5);
                 if (s.length) {
-                  handlePlayTrack(s[0]);
-                  setQueue(s.slice(1));
+                  if (playlistContextRef) {
+                    playlistContextRef.current = { tracks: s, index: 0 };
+                  }
+                  handlePlayTrack(s[0], false);
                 }
                 setCtxMenu(null);
               }}><Shuffle size={13} /> Shuffle</button>

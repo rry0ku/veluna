@@ -226,7 +226,14 @@ export const TrackRow = React.memo(({
     prev.isDownloading === next.isDownloading &&
     prev.isSelected === next.isSelected &&
     prev.isMultiSelectActive === next.isMultiSelectActive &&
-    prev.showRemove === next.showRemove
+    prev.showRemove === next.showRemove &&
+    prev.onPlay === next.onPlay &&
+    prev.onLike === next.onLike &&
+    prev.onDownload === next.onDownload &&
+    prev.onCtx === next.onCtx &&
+    prev.onRemove === next.onRemove &&
+    prev.onSelectToggle === next.onSelectToggle &&
+    prev.onArtistClick === next.onArtistClick
   );
 });
 

@@ -751,7 +751,7 @@ export const HistoryView: React.FC<HistoryViewProps> = React.memo(({
       {filteredHistory.length > 0 ? (
         <VirtualTrackList
           items={filteredHistory}
-          itemHeight={56}
+          itemHeight={52}
           overscan={10}
           keyExtractor={(item) => item.id || item.track.url}
           renderItem={(item, index) => {
@@ -793,7 +793,7 @@ export const HistoryView: React.FC<HistoryViewProps> = React.memo(({
                 }}
                 onRemove={e => {
                   e.stopPropagation();
-                  onRemoveHistoryItem(item.id);
+                  onRemoveHistoryItem(track.url || item.id);
                 }}
                 onArtistClick={onArtistClick}
               />

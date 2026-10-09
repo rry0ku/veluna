@@ -39,7 +39,7 @@ export const ArtistsView: React.FC<ArtistsViewProps> = React.memo(({
   const activeQueryIdRef = useRef<number>(0);
 
   const followedSet = useMemo(() => {
-    return new Set(followedArtists.map(a => a.name.toLowerCase()));
+    return new Set(followedArtists.filter(a => a && typeof a.name === 'string').map(a => a.name.toLowerCase()));
   }, [followedArtists]);
 
   const executeSearch = useCallback(async (query: string) => {
@@ -543,7 +543,8 @@ export const ArtistsView: React.FC<ArtistsViewProps> = React.memo(({
                   >
                     {(() => {
                       const isTrackCover = (url?: string) => !url || url.includes('/vi/') || url.includes('mqdefault') || url.includes('hqdefault');
-                      const avatarSrc = (!isTrackCover(artist.avatar) ? artist.avatar : undefined) || globalArtistAvatarCache.get(artist.name.toLowerCase());
+                      const artistKey = (artist?.name || '').toLowerCase();
+                      const avatarSrc = (!isTrackCover(artist.avatar) ? artist.avatar : undefined) || (artistKey ? globalArtistAvatarCache.get(artistKey) : undefined);
                       return (
                         <>
                           <Music className="artist-fallback-icon" size={32} style={{ color: 'rgba(255, 255, 255, 0.25)', position: 'absolute', display: avatarSrc ? 'none' : 'block' }} />

@@ -6,6 +6,7 @@ import { loadLS, saveLS } from '../utils';
 export interface LyricLine {
   time: number;
   text: string;
+  roma?: string;
 }
 
 export interface LyricsData {
@@ -28,6 +29,7 @@ export function useLyrics(currentTrack: Track | null, trackDurationSeconds: numb
   const lyricsScrollContainerRef = useRef<HTMLDivElement | null>(null);
   const lastScrolledLyricIdxRef = useRef<number>(-1);
   const lastFetchedKeyRef = useRef<string>('');
+  const requestIdRef = useRef<number>(0);
 
   const setLyricsSource = useCallback((s: string) => {
     setLyricsSourceState(s);
@@ -44,6 +46,7 @@ export function useLyrics(currentTrack: Track | null, trackDurationSeconds: numb
     if (!force && lastFetchedKeyRef.current === key) return;
 
     lastFetchedKeyRef.current = key;
+    const currentReqId = ++requestIdRef.current;
     setLyricsLoading(true);
     setLyricsData(null);
 
@@ -56,6 +59,7 @@ export function useLyrics(currentTrack: Track | null, trackDurationSeconds: numb
       source: lyricsSource,
     })
       .then(raw => {
+        if (requestIdRef.current !== currentReqId) return;
         if (currentTrackRef.current?.url !== activeUrl) return;
         try {
           const lines: LyricLine[] = JSON.parse(raw);
@@ -65,14 +69,15 @@ export function useLyrics(currentTrack: Track | null, trackDurationSeconds: numb
         }
       })
       .catch(() => {
+        if (requestIdRef.current !== currentReqId) return;
         if (currentTrackRef.current?.url === activeUrl) {
           setLyricsData({ lines: [], title, artist });
         }
       })
       .finally(() => {
-        // Always clear loading — even if track changed, the new track needs a fresh fetch
-        // which will set its own loading state. Leaving it true causes a permanent spinner.
-        setLyricsLoading(false);
+        if (requestIdRef.current === currentReqId) {
+          setLyricsLoading(false);
+        }
       });
   // Depend on primitive fields, not the whole object — avoids refetch when track
   // re-renders with a new object reference but identical URL/title/artist.
@@ -94,19 +99,42 @@ export function useLyrics(currentTrack: Track | null, trackDurationSeconds: numb
     }
   }, [currentTrack?.url, showLyrics]);
 
+  const userScrolledUntilRef = useRef<number>(0);
+
+  useEffect(() => {
+    const el = lyricsScrollContainerRef.current;
+    if (!el) return;
+    const handleUserScroll = () => {
+      userScrolledUntilRef.current = Date.now() + 4000;
+    };
+    el.addEventListener('wheel', handleUserScroll, { passive: true });
+    el.addEventListener('touchmove', handleUserScroll, { passive: true });
+    return () => {
+      el.removeEventListener('wheel', handleUserScroll);
+      el.removeEventListener('touchmove', handleUserScroll);
+    };
+  }, [showLyrics]);
+
   useEffect(() => {
     if (!showLyrics || !lyricsScrollContainerRef.current) return;
     const lines = lyricsData?.lines || [];
     if (lines.length === 0) return;
-    let currentIdx = lines.length - 1;
-    for (let i = 0; i < lines.length; i++) {
-      if (lines[i].time > progressSeconds) {
-        currentIdx = Math.max(0, i - 1);
-        break;
+    let currentIdx = -1;
+    if (lines[0].time <= progressSeconds) {
+      currentIdx = lines.length - 1;
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].time > progressSeconds) {
+          currentIdx = Math.max(0, i - 1);
+          break;
+        }
       }
     }
     const el = lyricsScrollContainerRef.current;
-    if (currentIdx !== lastScrolledLyricIdxRef.current || !el.getAttribute('data-scrolled')) {
+    if (currentIdx !== -1 && (currentIdx !== lastScrolledLyricIdxRef.current || !el.getAttribute('data-scrolled'))) {
+      if (Date.now() < userScrolledUntilRef.current) {
+        lastScrolledLyricIdxRef.current = currentIdx;
+        return;
+      }
       const active = el.querySelector('[data-active="true"]') as HTMLElement;
       if (active) {
         active.scrollIntoView({ behavior: 'smooth', block: 'center' });

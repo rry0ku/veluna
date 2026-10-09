@@ -11,24 +11,38 @@ export interface DuplicateTrackInfo {
 export function findDuplicateTracks(tracks?: Track[] | null): DuplicateTrackInfo[] {
   if (!tracks || tracks.length === 0) return [];
   const seenUrls = new Set<string>();
-  const seenKeys = new Set<string>();
+  const seenMetaTracks: { artist: string; title: string; durationSec: number }[] = [];
   const duplicates: DuplicateTrackInfo[] = [];
 
   tracks.forEach((t, index) => {
+    const rawUrl = (t.url || '').trim();
+    const normUrl = rawUrl ? normalizeTrackUrl(rawUrl).toLowerCase() : '';
+    const hasUrl = Boolean(normUrl);
+
+    const isUrlDupe = hasUrl && seenUrls.has(normUrl);
+
     const rawTitle = (t.title || '').trim().toLowerCase();
     const rawArtist = cleanArtist(t.artist).trim().toLowerCase();
-    const normKey = rawTitle ? `${rawArtist}|||${rawTitle}` : '';
-    const rawUrl = (t.url || '').trim();
-    const hasUrl = Boolean(rawUrl);
+    const durSec = parseDurationToSeconds(t.duration);
 
-    const isUrlDupe = hasUrl && seenUrls.has(rawUrl);
-    const isKeyDupe = Boolean(normKey && seenKeys.has(normKey));
+    // Require matching URLs OR matching duration (> 0) + artist + title before flagging duplicates
+    const isMetaDupe = Boolean(
+      !isUrlDupe &&
+      rawTitle &&
+      rawArtist &&
+      durSec > 0 &&
+      seenMetaTracks.some(
+        m => m.artist === rawArtist && m.title === rawTitle && Math.abs(m.durationSec - durSec) <= 1
+      )
+    );
 
-    if (isUrlDupe || isKeyDupe) {
+    if (isUrlDupe || isMetaDupe) {
       duplicates.push({ track: t, originalIndex: index });
     } else {
-      if (hasUrl) seenUrls.add(rawUrl);
-      if (normKey) seenKeys.add(normKey);
+      if (hasUrl) seenUrls.add(normUrl);
+      if (rawTitle && rawArtist && durSec > 0) {
+        seenMetaTracks.push({ artist: rawArtist, title: rawTitle, durationSec: durSec });
+      }
     }
   });
 
@@ -45,7 +59,11 @@ export function parseDurationToSeconds(d: string): number {
 }
 
 export const lightenColor = (hex: string, percent: number): string => {
-  let num = parseInt(hex.replace("#", ""), 16),
+  if (!hex || typeof hex !== 'string') return "#0c0b0b";
+  const cleaned = hex.replace("#", "").trim();
+  if (!/^[0-9A-Fa-f]{3}$|^[0-9A-Fa-f]{6}$/.test(cleaned)) return "#0c0b0b";
+  const fullHex = cleaned.length === 3 ? cleaned.split('').map(c => c + c).join('') : cleaned;
+  let num = parseInt(fullHex, 16),
       amt = Math.round(2.55 * percent),
       r = (num >> 16) + amt,
       g = (num >> 8 & 0x00FF) + amt,
@@ -204,7 +222,7 @@ export function parseTrackMeta(rawTitle: string, rawArtist?: string | null): { t
       else if (ch === ')' || ch === ']' || ch === '}') depth = Math.max(0, depth - 1);
       else if (depth === 0) {
         const sub = str.slice(i);
-        const m = sub.match(/^\s+(?:[-–—|:]|\/\/)\s+/);
+        const m = sub.match(/^(?:\s+(?:[-–—|]|\/\/)\s+|\s*:\s+)/);
         if (m) {
           const left = str.slice(0, i).trim();
           const right = str.slice(i + m[0].length).trim();
@@ -350,7 +368,7 @@ export function getPlaylistCovers(
   if (!playlist.tracks || playlist.tracks.length === 0) return [];
 
   const covers: string[] = [];
-  // First attempt: scan tracks for up to 4 distinct valid covers
+  // Scan tracks for up to 4 distinct unique valid covers
   for (const t of playlist.tracks) {
     const cover = getTrackCoverUrl(t);
     if (isValidCover(cover) && !covers.includes(cover)) {
@@ -359,16 +377,9 @@ export function getPlaylistCovers(
     }
   }
 
-  // If fewer than 4 distinct covers found but playlist has 4+ tracks with covers,
-  // fill remaining slots so the 4-track collage can be displayed
-  if (covers.length > 0 && covers.length < 4 && playlist.tracks.length >= 4) {
-    for (const t of playlist.tracks) {
-      const cover = getTrackCoverUrl(t);
-      if (isValidCover(cover)) {
-        covers.push(cover);
-        if (covers.length === 4) break;
-      }
-    }
+  // If fewer than 4 distinct covers are found, return either 1 cover or the distinct set without duplicates
+  if (covers.length > 0 && covers.length < 4) {
+    return [covers[0]];
   }
 
   return covers;
@@ -516,36 +527,35 @@ export async function fetchArtistYouTubeTracks(artists: string[]): Promise<Track
       // 1. Try to fetch verified artist discography first
       const rawData = await invoke<string>('get_artist_page_details', { artistName: artist });
       if (rawData && rawData.trim()) {
-        try {
-          const parsed = JSON.parse(rawData);
-          if (Array.isArray(parsed.tracks) && parsed.tracks.length > 0) {
-            for (let i = 0; i < parsed.tracks.length && i < 4; i++) {
-              const line = parsed.tracks[i];
-              const parts = line.split('====');
-              const rawTitle = parts[0]?.trim() || '';
-              const rawUploader = parts[1]?.trim() || artist;
-              const duration = parts[2]?.trim() || '0:00';
-              const id = parts[3]?.trim() || '';
-              if (!id || id === 'NA') continue;
-              const url = `https://youtube.com/watch?v=${id}`;
-              if (!seenUrls.has(url)) {
-                seenUrls.add(url);
-                const meta = parseTrackMeta(rawTitle, rawUploader || artist);
-                tracks.push({
-                  id: Date.now() + Math.floor(Math.random() * 1000000) + tracks.length,
-                  title: meta.title || rawTitle,
-                  artist: meta.artist || artist,
-                  duration: duration || '0:00',
-                  url,
-                  cover: `https://i.ytimg.com/vi/${id}/mqdefault.jpg`,
-                  mediaType: 'music'
-                });
-              }
-            }
-            if (tracks.length >= 15) break;
-            continue;
+        const lines = rawData.trim().split('\n').filter(Boolean);
+        let count = 0;
+        for (const line of lines) {
+          if (line.startsWith('ARTIST_INFO====')) continue;
+          const parts = line.split('====');
+          const rawTitle = parts[0]?.trim() || '';
+          const rawUploader = parts[1]?.trim() || artist;
+          const duration = parts[2]?.trim() || '0:00';
+          const id = parts[3]?.trim() || '';
+          if (!id || id === 'NA') continue;
+          const url = `https://youtube.com/watch?v=${id}`;
+          if (!seenUrls.has(url)) {
+            seenUrls.add(url);
+            const meta = parseTrackMeta(rawTitle, rawUploader || artist);
+            tracks.push({
+              id: Date.now() + Math.floor(Math.random() * 1000000) + tracks.length,
+              title: meta.title || rawTitle,
+              artist: meta.artist || artist,
+              duration: duration || '0:00',
+              url,
+              cover: `https://i.ytimg.com/vi/${id}/mqdefault.jpg`,
+              mediaType: 'music'
+            });
+            count++;
+            if (count >= 4) break;
           }
-        } catch {}
+        }
+        if (tracks.length >= 15) break;
+        if (count > 0) continue;
       }
 
       // 2. Fallback to youtube search with parseTrackMeta

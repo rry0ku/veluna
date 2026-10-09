@@ -31,7 +31,7 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result
         if ty.is_dir() {
             copy_dir_all(&from, &to)?;
         } else {
-            let _ = fs::copy(&from, &to);
+            fs::copy(&from, &to)?;
         }
     }
     Ok(())
@@ -89,7 +89,10 @@ pub fn migrate_legacy_cache(target_dir: &std::path::Path) {
     }
 
     let temp_veluna = std::env::temp_dir().join("veluna");
-    if temp_veluna != target_dir && !legacy_dirs.contains(&temp_veluna) {
+    let is_safe_temp = std::fs::symlink_metadata(&temp_veluna)
+        .map(|m| !m.file_type().is_symlink())
+        .unwrap_or(false);
+    if is_safe_temp && temp_veluna != target_dir && !legacy_dirs.contains(&temp_veluna) {
         legacy_dirs.push(temp_veluna);
     }
 
@@ -185,6 +188,9 @@ fn scan_directory(
                             || n.ends_with(".lock")
                             || n.ends_with("-wal")
                             || n.ends_with("-shm")
+                            || n == "cookies.txt"
+                            || n == "youtube_cookies_raw.txt"
+                            || n == "youtube_account.json"
                     })
                     .unwrap_or(false);
 

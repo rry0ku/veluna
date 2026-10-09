@@ -14,7 +14,7 @@ interface VirtualTrackListProps<T> {
 
 export function VirtualTrackList<T>({
   items,
-  itemHeight = 56,
+  itemHeight = 52,
   overscan = 8,
   className,
   style,
@@ -41,13 +41,20 @@ export function VirtualTrackList<T>({
       if (!containerRef.current) return;
       
       const zoom = getZoomFactor();
-      const parentRect = scrollParent ? scrollParent.getBoundingClientRect() : { top: 0 };
-      const containerRect = containerRef.current.getBoundingClientRect();
-      const relativeTop = (parentRect.top - containerRect.top) / zoom;
-      const viewportH = scrollParent ? scrollParent.clientHeight : (window.innerHeight / zoom);
+      let calculatedScrollTop = 0;
+      let viewportH = 800;
+
+      if (scrollParent) {
+        calculatedScrollTop = Math.max(0, (scrollParent.scrollTop - containerRef.current.offsetTop) / zoom);
+        viewportH = scrollParent.clientHeight;
+      } else {
+        const containerRect = containerRef.current.getBoundingClientRect();
+        calculatedScrollTop = Math.max(0, -containerRect.top / zoom);
+        viewportH = window.innerHeight / zoom;
+      }
 
       setScrollState({
-        scrollTop: Math.max(0, relativeTop),
+        scrollTop: calculatedScrollTop,
         viewportHeight: viewportH,
       });
     };

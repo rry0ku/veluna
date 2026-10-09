@@ -33,6 +33,7 @@ export type Playlist = {
   description: string;
   tracks: Track[];
   customCover?: string;
+  updatedAt?: number;
 };
 
 export type RepeatMode = 'off' | 'all' | 'one';
@@ -43,6 +44,7 @@ export type SearchDateFilter = 'all' | 'today' | 'week' | 'month' | 'year';
 export type LyricLine = {
   time: number;
   text: string;
+  roma?: string;
 };
 
 export type LyricsData = {
@@ -59,6 +61,7 @@ export type CtxMenu = {
   playlist?: Playlist;
   localTracksList?: LocalTrack[];
   localTrackIndex?: number;
+  queueIndex?: number;
 };
 
 export type HistoryItem = {

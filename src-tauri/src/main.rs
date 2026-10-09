@@ -1565,10 +1565,7 @@ async fn search_youtube(query: String, date_filter: Option<String>) -> Result<St
     } else {
         format!("ytsearch25:{}", q_trim)
     };
-    let mut cmd = tokio::process::Command::new(bin_ytdlp());
-    cmd.kill_on_drop(true);
     let mut args = vec![
-        search_arg,
         "--print".to_string(),
         "%(title)s====%(uploader)s====%(duration_string)s====%(id)s".to_string(),
         "--no-warnings".to_string(),
@@ -1590,10 +1587,17 @@ async fn search_youtube(query: String, date_filter: Option<String>) -> Result<St
         args.push("--flat-playlist".to_string());
     }
 
-    cmd.args(&args);
     if let Some(proxy_str) = get_proxy_url() {
-        cmd.args(["--proxy", &proxy_str]);
+        args.push("--proxy".to_string());
+        args.push(proxy_str);
     }
+
+    args.push("--".to_string());
+    args.push(search_arg);
+
+    let mut cmd = tokio::process::Command::new(bin_ytdlp());
+    cmd.kill_on_drop(true);
+    cmd.args(&args);
     cmd.no_window();
 
     let out = match tokio::time::timeout(std::time::Duration::from_secs(35), cmd.output()).await {
@@ -2017,7 +2021,7 @@ fn ensure_mpv_running() -> bool {
         .as_mut()
         .map(|c| c.try_wait().ok() == Some(None))
         .unwrap_or(false);
-    if alive && wait_for_socket(200) {
+    if alive && wait_for_socket(600) {
         return true;
     }
 
@@ -2041,9 +2045,9 @@ fn ensure_mpv_running() -> bool {
         "--demuxer-readahead-secs=2".into(),
         "--demuxer-lavf-analyzeduration=0.1".into(),
         "--demuxer-lavf-probesize=32768".into(),
-        "--audio-buffer=0.05".into(),
+        "--audio-buffer=0.2".into(),
         "--initial-audio-sync=no".into(),
-        "--cache-pause=no".into(),
+        "--cache-pause=yes".into(),
         "--cache-pause-initial=no".into(),
         "--network-timeout=10".into(),
         "--demuxer-seekable-cache=yes".into(),
@@ -2074,8 +2078,9 @@ fn ensure_mpv_running() -> bool {
         }
         Err(_) => return false,
     }
+    let ok = wait_for_socket(4000);
     drop(guard);
-    wait_for_socket(4000)
+    ok
 }
 
 fn switch_track_ipc(url: &str) -> Result<(), String> {
@@ -3098,6 +3103,7 @@ async fn download_song(
         args.push("--proxy".to_string());
         args.push(proxy_str);
     }
+    args.push("--".to_string());
     args.push(url.clone());
 
     let url_key = url.clone();
@@ -3262,8 +3268,12 @@ async fn cancel_download(app_handle: tauri::AppHandle, url: String) -> Result<()
             .store(true, std::sync::atomic::Ordering::SeqCst);
         #[cfg(unix)]
         {
+            let child_str = dl.child_id.to_string();
+            let _ = std::process::Command::new("pkill")
+                .args(["-9", "-P", &child_str])
+                .output();
             let _ = std::process::Command::new("kill")
-                .args(["-9", &dl.child_id.to_string()])
+                .args(["-9", &child_str])
                 .output();
         }
         #[cfg(windows)]
@@ -3297,6 +3307,30 @@ async fn cancel_download(app_handle: tauri::AppHandle, url: String) -> Result<()
         Ok(())
     } else {
         Ok(())
+    }
+}
+
+pub fn cleanup_all_active_downloads() {
+    let mut map = active_downloads().lock().unwrap_or_else(|p| p.into_inner());
+    for (_, dl) in map.drain() {
+        dl.cancelled.store(true, std::sync::atomic::Ordering::SeqCst);
+        #[cfg(unix)]
+        {
+            let child_str = dl.child_id.to_string();
+            let _ = std::process::Command::new("pkill")
+                .args(["-9", "-P", &child_str])
+                .output();
+            let _ = std::process::Command::new("kill")
+                .args(["-9", &child_str])
+                .output();
+        }
+        #[cfg(windows)]
+        {
+            let _ = std::process::Command::new("taskkill")
+                .no_window()
+                .args(["/F", "/T", "/PID", &dl.child_id.to_string()])
+                .output();
+        }
     }
 }
 
@@ -3491,12 +3525,6 @@ fn collect_local_tracks(
                 if let Some(ext) = p.extension().and_then(|e| e.to_str()) {
                     if extensions.contains(&ext.to_lowercase().as_str()) {
                         if let Some(meta) = metadata::probe_track_metadata(&p) {
-                            let _ = db::index_local_track_fts(
-                                &meta.title,
-                                &meta.artist,
-                                &meta.album,
-                                &meta.path,
-                            );
                             tracks.push(LocalTrack {
                                 title: meta.title,
                                 path: meta.path,
@@ -3555,6 +3583,21 @@ async fn scan_downloads(path: String) -> Result<Vec<LocalTrack>, String> {
             return Err("Directory does not exist".to_string());
         }
         collect_local_tracks(target_path, &mut tracks, &extensions, 0);
+
+        // Batch index all tracks in a single SQLite transaction
+        let batch_items: Vec<(&str, &str, &str, &str)> = tracks
+            .iter()
+            .map(|t| {
+                (
+                    t.title.as_str(),
+                    t.artist.as_deref().unwrap_or(""),
+                    t.album.as_deref().unwrap_or(""),
+                    t.path.as_str(),
+                )
+            })
+            .collect();
+        let _ = db::index_local_tracks_fts_batch(&batch_items);
+
         tracks.sort_by_key(|a| a.title.to_lowercase());
         Ok(tracks)
     })
@@ -3569,7 +3612,11 @@ async fn delete_local_file(path: String) -> Result<(), String> {
         if !safe_path.is_file() {
             return Err("Target is not a regular file".to_string());
         }
-        std::fs::remove_file(&safe_path).map_err(|e| format!("Delete failed: {}", e))
+        let path_str = safe_path.to_string_lossy().to_string();
+        std::fs::remove_file(&safe_path).map_err(|e| format!("Delete failed: {}", e))?;
+        let _ = db::remove_local_track_fts(&path_str);
+        let _ = db::remove_local_track_fts(&path);
+        Ok(())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -4042,11 +4089,26 @@ async fn write_audio_metadata(
         }
 
         #[cfg(target_os = "windows")]
-        let _ = std::fs::remove_file(&p);
-
-        if let Err(e) = std::fs::rename(&temp_path, &p) {
-            let _ = std::fs::remove_file(&temp_path);
-            return Err(format!("Failed to replace audio file: {}", e));
+        {
+            let backup_path = p.with_extension("bak_tmp");
+            let _ = std::fs::remove_file(&backup_path);
+            if let Err(e) = std::fs::rename(&p, &backup_path) {
+                let _ = std::fs::remove_file(&temp_path);
+                return Err(format!("Failed to prepare audio file replacement: {}", e));
+            }
+            if let Err(e) = std::fs::rename(&temp_path, &p) {
+                let _ = std::fs::rename(&backup_path, &p);
+                let _ = std::fs::remove_file(&temp_path);
+                return Err(format!("Failed to replace audio file: {}", e));
+            }
+            let _ = std::fs::remove_file(&backup_path);
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            if let Err(e) = std::fs::rename(&temp_path, &p) {
+                let _ = std::fs::remove_file(&temp_path);
+                return Err(format!("Failed to replace audio file: {}", e));
+            }
         }
         let _ = db::index_local_track_fts(&title, &artist, &album, &path);
 
@@ -4296,11 +4358,26 @@ async fn normalize_file(path: String, output_path: String) -> Result<(), String>
 
         if is_same_file {
             #[cfg(target_os = "windows")]
-            let _ = std::fs::remove_file(&out_path);
-
-            if let Err(e) = std::fs::rename(&actual_target, &out_path) {
-                let _ = std::fs::remove_file(&actual_target);
-                return Err(format!("Failed to finalize normalized file: {}", e));
+            {
+                let backup_path = out_path.with_extension("bak_tmp");
+                let _ = std::fs::remove_file(&backup_path);
+                if let Err(e) = std::fs::rename(&out_path, &backup_path) {
+                    let _ = std::fs::remove_file(&actual_target);
+                    return Err(format!("Failed to prepare file replacement: {}", e));
+                }
+                if let Err(e) = std::fs::rename(&actual_target, &out_path) {
+                    let _ = std::fs::rename(&backup_path, &out_path);
+                    let _ = std::fs::remove_file(&actual_target);
+                    return Err(format!("Failed to finalize normalized file: {}", e));
+                }
+                let _ = std::fs::remove_file(&backup_path);
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                if let Err(e) = std::fs::rename(&actual_target, &out_path) {
+                    let _ = std::fs::remove_file(&actual_target);
+                    return Err(format!("Failed to finalize normalized file: {}", e));
+                }
             }
         }
 
@@ -4396,6 +4473,22 @@ fn send_ipc_batch(cmds: &[&str]) -> Vec<Result<String, String>> {
     let n = cmds.len();
     let sock = socket_path();
 
+    // Prepare commands with unique request_id tags if JSON objects, otherwise send as-is
+    let mut prepared_cmds = Vec::with_capacity(n);
+    let mut expected_req_ids = Vec::with_capacity(n);
+    for (idx, cmd) in cmds.iter().enumerate() {
+        let req_id = (idx + 1) as u64;
+        expected_req_ids.push(req_id);
+        if let Ok(mut val) = serde_json::from_str::<Value>(cmd) {
+            if let Some(obj) = val.as_object_mut() {
+                obj.insert("request_id".to_string(), serde_json::json!(req_id));
+                prepared_cmds.push(val.to_string());
+                continue;
+            }
+        }
+        prepared_cmds.push(cmd.to_string());
+    }
+
     #[cfg(unix)]
     {
         let stream = match UnixStream::connect(sock) {
@@ -4410,8 +4503,8 @@ fn send_ipc_batch(cmds: &[&str]) -> Vec<Result<String, String>> {
             .ok();
 
         if let Ok(mut w) = stream.try_clone() {
-            for cmd in cmds {
-                let _ = w.write_all(cmd.as_bytes());
+            for p_cmd in &prepared_cmds {
+                let _ = w.write_all(p_cmd.as_bytes());
                 let _ = w.write_all(b"\n");
             }
         } else {
@@ -4423,9 +4516,10 @@ fn send_ipc_batch(cmds: &[&str]) -> Vec<Result<String, String>> {
             Err(_) => return vec![Err("UnixStream clone failed".to_string()); n],
         };
         let mut reader = BufReader::new(read_stream);
-        let mut results: Vec<String> = Vec::with_capacity(n);
+        let mut results_map: std::collections::HashMap<u64, String> = std::collections::HashMap::new();
+        let mut untagged_results: Vec<String> = Vec::new();
         let mut lines_read = 0usize;
-        while results.len() < n && lines_read < n * 12 {
+        while (results_map.len() + untagged_results.len()) < n && lines_read < n * 12 {
             let mut line = String::new();
             if reader.read_line(&mut line).is_err() || line.is_empty() {
                 break;
@@ -4434,16 +4528,27 @@ fn send_ipc_batch(cmds: &[&str]) -> Vec<Result<String, String>> {
             let trimmed = line.trim();
             if let Ok(v) = serde_json::from_str::<Value>(trimmed) {
                 if !v["error"].is_null() {
-                    results.push(trimmed.to_string());
+                    if let Some(rid) = v["request_id"].as_u64() {
+                        results_map.insert(rid, trimmed.to_string());
+                    } else {
+                        untagged_results.push(trimmed.to_string());
+                    }
                 }
             }
         }
 
         let _ = stream.shutdown(std::net::Shutdown::Both);
 
-        let mut out: Vec<Result<String, String>> = results.into_iter().map(Ok).collect();
-        while out.len() < n {
-            out.push(Err("No response from mpv".to_string()));
+        let mut out = Vec::with_capacity(n);
+        let mut untagged_iter = untagged_results.into_iter();
+        for req_id in expected_req_ids {
+            if let Some(resp) = results_map.remove(&req_id) {
+                out.push(Ok(resp));
+            } else if let Some(resp) = untagged_iter.next() {
+                out.push(Ok(resp));
+            } else {
+                out.push(Err("No response from mpv".to_string()));
+            }
         }
         out
     }
@@ -4459,10 +4564,11 @@ fn send_ipc_batch(cmds: &[&str]) -> Vec<Result<String, String>> {
         let mut results = Vec::with_capacity(n);
         let deadline = std::time::Instant::now() + std::time::Duration::from_millis(800);
 
-        for cmd in cmds {
+        for (idx, p_cmd) in prepared_cmds.iter().enumerate() {
+            let req_id = expected_req_ids[idx];
             {
                 let mut w = &file;
-                if w.write_all(cmd.as_bytes()).is_err() || w.write_all(b"\n").is_err() {
+                if w.write_all(p_cmd.as_bytes()).is_err() || w.write_all(b"\n").is_err() {
                     break;
                 }
             }
@@ -4478,9 +4584,17 @@ fn send_ipc_batch(cmds: &[&str]) -> Vec<Result<String, String>> {
                 let trimmed = line.trim();
                 if let Ok(v) = serde_json::from_str::<Value>(trimmed) {
                     if !v["error"].is_null() {
-                        results.push(trimmed.to_string());
-                        found = true;
-                        break;
+                        if let Some(rid) = v["request_id"].as_u64() {
+                            if rid == req_id {
+                                results.push(trimmed.to_string());
+                                found = true;
+                                break;
+                            }
+                        } else {
+                            results.push(trimmed.to_string());
+                            found = true;
+                            break;
+                        }
                     }
                 }
             }
@@ -4648,6 +4762,7 @@ fn start_mpv_event_listener(app_handle: tauri::AppHandle) {
                 let _ = writer.flush();
 
                 let mut line = String::new();
+                let mut last_time_pos_emit = std::time::Instant::now() - std::time::Duration::from_millis(500);
                 while reader.read_line(&mut line).is_ok() && !line.is_empty() {
                     let trimmed = line.trim();
                     if let Ok(v) = serde_json::from_str::<Value>(trimmed) {
@@ -4659,6 +4774,7 @@ fn start_mpv_event_listener(app_handle: tauri::AppHandle) {
                                         .lock()
                                         .unwrap_or_else(|p| p.into_inner());
                                     let mut changed = false;
+                                    let mut should_emit = true;
                                     match name {
                                         "audio-codec-name" => {
                                             if let Some(codec) = v["data"].as_str() {
@@ -4686,6 +4802,11 @@ fn start_mpv_event_listener(app_handle: tauri::AppHandle) {
                                                         app_handle.emit("mpv_track_started", ());
                                                 }
                                                 changed = true;
+                                                if last_time_pos_emit.elapsed() < std::time::Duration::from_millis(200) {
+                                                    should_emit = false;
+                                                } else {
+                                                    last_time_pos_emit = std::time::Instant::now();
+                                                }
                                             }
                                         }
                                         "pause" => {
@@ -4730,7 +4851,7 @@ fn start_mpv_event_listener(app_handle: tauri::AppHandle) {
                                         }
                                         _ => {}
                                     }
-                                    if changed {
+                                    if changed && should_emit {
                                         let s_clone = state.clone();
                                         drop(state);
                                         let _ = app_handle.emit("mpv_playback_state", &s_clone);
@@ -4823,7 +4944,20 @@ fn parse_f64_from_response(response: &str) -> Result<f64, String> {
         .ok_or_else(|| format!("Unexpected data type: {}", response))
 }
 
-fn parse_lrc_string(lrc_text: &str, duration: f64) -> Option<String> {
+fn extract_lrc_offset(lrc_text: &str) -> f64 {
+    for line in lrc_text.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("[offset:") && trimmed.ends_with(']') {
+            let inner = &trimmed[8..trimmed.len() - 1].trim();
+            if let Ok(ms) = inner.parse::<f64>() {
+                return ms / 1000.0;
+            }
+        }
+    }
+    0.0
+}
+
+fn parse_lrc_timed_lines(lrc_text: &str, offset_secs: f64) -> Vec<(f64, String)> {
     let mut timed_lines: Vec<(f64, String)> = Vec::new();
     for raw_line in lrc_text.lines() {
         let line = raw_line.trim();
@@ -4844,7 +4978,8 @@ fn parse_lrc_string(lrc_text: &str, duration: f64) -> Option<String> {
                         if let (Ok(mins), Ok(s)) =
                             (min_part.parse::<f64>(), sec_part.parse::<f64>())
                         {
-                            timestamps.push(mins * 60.0 + s);
+                            let adjusted = (mins * 60.0 + s + offset_secs).max(0.0);
+                            timestamps.push(adjusted);
                         }
                     }
                 }
@@ -4861,12 +4996,46 @@ fn parse_lrc_string(lrc_text: &str, duration: f64) -> Option<String> {
             }
         }
     }
+    timed_lines.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+    timed_lines
+}
+
+fn parse_lrc_with_roma(lrc_text: &str, roma_text: Option<&str>, duration: f64) -> Option<String> {
+    let offset_secs = extract_lrc_offset(lrc_text);
+    let timed_lines = parse_lrc_timed_lines(lrc_text, offset_secs);
+
+    let roma_timed = roma_text.map(|rt| {
+        let r_offset = extract_lrc_offset(rt);
+        parse_lrc_timed_lines(rt, r_offset)
+    });
 
     if !timed_lines.is_empty() {
-        timed_lines.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
         let lines: Vec<serde_json::Value> = timed_lines
-            .into_iter()
-            .map(|(time, text)| serde_json::json!({"time": time, "text": text}))
+            .iter()
+            .enumerate()
+            .map(|(idx, (time, text))| {
+                let matched_roma = if let Some(ref r_timed) = roma_timed {
+                    r_timed
+                        .iter()
+                        .find(|(r_time, _)| (r_time - time).abs() < 0.3)
+                        .map(|(_, r_txt)| r_txt.as_str())
+                        .or_else(|| {
+                            if r_timed.len() == timed_lines.len() {
+                                r_timed.get(idx).map(|(_, r_txt)| r_txt.as_str())
+                            } else {
+                                None
+                            }
+                        })
+                } else {
+                    None
+                };
+
+                if let Some(r_str) = matched_roma {
+                    serde_json::json!({"time": time, "text": text, "roma": r_str})
+                } else {
+                    serde_json::json!({"time": time, "text": text})
+                }
+            })
             .collect();
         return Some(serde_json::to_string(&lines).unwrap_or_default());
     }
@@ -4879,14 +5048,34 @@ fn parse_lrc_string(lrc_text: &str, duration: f64) -> Option<String> {
     if !plain_lines.is_empty() {
         let total = duration.max(1.0);
         let step = total / plain_lines.len().max(1) as f64;
+        let roma_plain: Vec<&str> = roma_text
+            .map(|rt| {
+                rt.lines()
+                    .map(|l| l.trim())
+                    .filter(|l| !l.is_empty() && !(l.starts_with('[') && l.ends_with(']')))
+                    .collect()
+            })
+            .unwrap_or_default();
+
         let arr: Vec<serde_json::Value> = plain_lines
             .iter()
             .enumerate()
-            .map(|(i, l)| serde_json::json!({"time": i as f64 * step, "text": *l}))
+            .map(|(i, l)| {
+                let time = i as f64 * step;
+                if let Some(r_str) = roma_plain.get(i) {
+                    serde_json::json!({"time": time, "text": *l, "roma": *r_str})
+                } else {
+                    serde_json::json!({"time": time, "text": *l})
+                }
+            })
             .collect();
         return Some(serde_json::to_string(&arr).unwrap_or_default());
     }
     None
+}
+
+fn parse_lrc_string(lrc_text: &str, duration: f64) -> Option<String> {
+    parse_lrc_with_roma(lrc_text, None, duration)
 }
 
 #[tauri::command]
@@ -4925,7 +5114,7 @@ async fn fetch_lyrics(
                     .and_then(|id| id.as_i64())
                 {
                     let lyric_url = format!(
-                        "https://music.163.com/api/song/lyric?id={}&lv=-1&kv=-1&tv=-1",
+                        "https://music.163.com/api/song/lyric?id={}&lv=-1&kv=-1&tv=-1&rv=-1",
                         song_id
                     );
                     if let Ok(l_resp) = client
@@ -4937,7 +5126,8 @@ async fn fetch_lyrics(
                         if let Ok(l_json) = l_resp.json::<serde_json::Value>().await {
                             if let Some(lrc) = l_json.pointer("/lrc/lyric").and_then(|s| s.as_str())
                             {
-                                if let Some(parsed) = parse_lrc_string(lrc, duration) {
+                                let romalrc = l_json.pointer("/romalrc/lyric").and_then(|s| s.as_str());
+                                if let Some(parsed) = parse_lrc_with_roma(lrc, romalrc, duration) {
                                     let _ = db::cache_lyrics(&title, &artist, &parsed);
                                     return Ok(parsed);
                                 }
@@ -5023,7 +5213,7 @@ async fn fetch_lyrics(
                     .and_then(|id| id.as_i64())
                 {
                     let lyric_url = format!(
-                        "https://music.163.com/api/song/lyric?id={}&lv=-1&kv=-1&tv=-1",
+                        "https://music.163.com/api/song/lyric?id={}&lv=-1&kv=-1&tv=-1&rv=-1",
                         song_id
                     );
                     if let Ok(l_resp) = client
@@ -5035,7 +5225,8 @@ async fn fetch_lyrics(
                         if let Ok(l_json) = l_resp.json::<serde_json::Value>().await {
                             if let Some(lrc) = l_json.pointer("/lrc/lyric").and_then(|s| s.as_str())
                             {
-                                if let Some(parsed) = parse_lrc_string(lrc, duration) {
+                                let romalrc = l_json.pointer("/romalrc/lyric").and_then(|s| s.as_str());
+                                if let Some(parsed) = parse_lrc_with_roma(lrc, romalrc, duration) {
                                     let _ = db::cache_lyrics(&title, &artist, &parsed);
                                     return Ok(parsed);
                                 }
@@ -5873,26 +6064,188 @@ async fn run_mpris_server(
     }
 }
 
+fn is_forbidden_system_path(path: &std::path::Path) -> bool {
+    let s = path.to_string_lossy().to_lowercase();
+    #[cfg(unix)]
+    {
+        if s.starts_with("/etc")
+            || s.starts_with("/sys")
+            || s.starts_with("/proc")
+            || s.starts_with("/dev")
+            || s.contains("/.ssh")
+            || s.contains("/.gnupg")
+        {
+            return true;
+        }
+    }
+    #[cfg(windows)]
+    {
+        if s.starts_with("c:\\windows")
+            || s.starts_with("c:\\program files")
+            || s.contains("\\.ssh")
+            || s.contains("\\.gnupg")
+        {
+            return true;
+        }
+    }
+    false
+}
+
 #[tauri::command]
 fn read_text_file(path: String) -> Result<String, String> {
     let safe_path = sanitize_file_path(&path)?;
+    if is_forbidden_system_path(&safe_path) {
+        return Err("Access to protected system path denied".to_string());
+    }
     std::fs::read_to_string(&safe_path).map_err(|e| format!("Read failed: {}", e))
 }
 
 #[tauri::command]
 fn write_text_file(path: String, content: String) -> Result<(), String> {
     let safe_path = sanitize_file_path(&path)?;
+    if is_forbidden_system_path(&safe_path) {
+        return Err("Access to protected system path denied".to_string());
+    }
     if let Some(parent) = safe_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("Cannot create directory: {}", e))?;
     }
     std::fs::write(&safe_path, content.as_bytes()).map_err(|e| format!("Write failed: {}", e))
 }
 
-static DISCORD_CLIENT: std::sync::OnceLock<Mutex<Option<DiscordIpcClient>>> =
+struct DiscordRpcPayload {
+    title: String,
+    artist: Option<String>,
+    cover_url: Option<String>,
+    track_url: Option<String>,
+    start_timestamp: Option<i64>,
+    end_timestamp: Option<i64>,
+    show_cover: Option<bool>,
+    time_display: Option<String>,
+    custom_button_label: Option<String>,
+    custom_button_url: Option<String>,
+}
+
+enum DiscordRpcMessage {
+    Update(Box<DiscordRpcPayload>),
+    Clear,
+}
+
+static DISCORD_CHANNEL: std::sync::OnceLock<std::sync::mpsc::SyncSender<DiscordRpcMessage>> =
     std::sync::OnceLock::new();
 
-fn get_discord_client() -> &'static Mutex<Option<DiscordIpcClient>> {
-    DISCORD_CLIENT.get_or_init(|| Mutex::new(None))
+fn get_discord_sender() -> &'static std::sync::mpsc::SyncSender<DiscordRpcMessage> {
+    DISCORD_CHANNEL.get_or_init(|| {
+        let (tx, rx) = std::sync::mpsc::sync_channel::<DiscordRpcMessage>(8);
+        std::thread::spawn(move || {
+            let mut client_opt: Option<DiscordIpcClient> = None;
+            while let Ok(msg) = rx.recv() {
+                if client_opt.is_none() {
+                    let mut client = DiscordIpcClient::new("1517835351044001953");
+                    if client.connect().is_ok() {
+                        client_opt = Some(client);
+                    }
+                }
+                match msg {
+                    DiscordRpcMessage::Update(p) => {
+                        if let Some(ref mut client) = client_opt {
+                            let title_trim = p.title.trim();
+                            let safe_title: String = if title_trim.is_empty() {
+                                "Listening to Music".to_string()
+                            } else if title_trim.chars().count() > 120 {
+                                title_trim.chars().take(120).collect()
+                            } else {
+                                title_trim.to_string()
+                            };
+                            let clean_artist = p.artist.as_deref().unwrap_or("").trim();
+                            let safe_artist: String = if clean_artist.chars().count() > 120 {
+                                clean_artist.chars().take(120).collect()
+                            } else {
+                                clean_artist.to_string()
+                            };
+
+                            let mut act = activity::Activity::new()
+                                .details(&safe_title)
+                                .activity_type(activity::ActivityType::Listening);
+                            if !safe_artist.is_empty() {
+                                act = act.state(&safe_artist);
+                            }
+                            let formatted_cover = p.cover_url.as_deref().map(normalize_discord_cover);
+                            let mut assets = activity::Assets::new()
+                                .small_image("icon")
+                                .small_text("Veluna");
+                            if p.show_cover.unwrap_or(true) {
+                                if let Some(ref cover) = formatted_cover {
+                                    if !cover.is_empty() {
+                                        assets = assets.large_image(cover);
+                                    }
+                                }
+                            }
+                            act = act.assets(assets);
+
+                            let t_mode = p.time_display.as_deref().unwrap_or("remaining");
+                            if let Some(start) = p.start_timestamp {
+                                if t_mode == "elapsed" {
+                                    act = act.timestamps(activity::Timestamps::new().start(start));
+                                } else if let Some(end) = p.end_timestamp {
+                                    if end > start {
+                                        act = act.timestamps(activity::Timestamps::new().start(start).end(end));
+                                    } else {
+                                        act = act.timestamps(activity::Timestamps::new().start(start));
+                                    }
+                                } else {
+                                    act = act.timestamps(activity::Timestamps::new().start(start));
+                                }
+                            }
+
+                            let c_label = p.custom_button_label.unwrap_or_default();
+                            let c_url = p.custom_button_url.unwrap_or_default();
+                            let l_trim = c_label.trim();
+                            let u_trim = c_url.trim();
+                            let safe_btn_label: String = if l_trim.chars().count() > 32 {
+                                l_trim.chars().take(32).collect()
+                            } else {
+                                l_trim.to_string()
+                            };
+                            let mut buttons = Vec::new();
+                            if !safe_btn_label.is_empty()
+                                && (u_trim.starts_with("http://") || u_trim.starts_with("https://"))
+                            {
+                                buttons.push(activity::Button::new(&safe_btn_label, u_trim));
+                            }
+                            if buttons.is_empty() {
+                                if let Some(ref url) = p.track_url {
+                                    if url.starts_with("http://") || url.starts_with("https://") {
+                                        buttons.push(activity::Button::new("Listen on YouTube", url));
+                                    }
+                                }
+                            }
+                            if buttons.len() < 2 {
+                                buttons.push(activity::Button::new(
+                                    "Download Veluna",
+                                    "https://github.com/rry0ku/veluna/releases/",
+                                ));
+                            }
+                            act = act.buttons(buttons);
+
+                            if client.set_activity(act).is_err() {
+                                let _ = client.close();
+                                client_opt = None;
+                            }
+                        }
+                    }
+                    DiscordRpcMessage::Clear => {
+                        if let Some(ref mut client) = client_opt {
+                            if client.clear_activity().is_err() {
+                                let _ = client.close();
+                                client_opt = None;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        tx
+    })
 }
 
 #[tauri::command]
@@ -6100,117 +6453,24 @@ fn update_discord_rpc(
     custom_button_label: Option<String>,
     custom_button_url: Option<String>,
 ) {
-    std::thread::spawn(move || {
-        let mut client_lock = get_discord_client()
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
-        if client_lock.is_none() {
-            let mut client = DiscordIpcClient::new("1517835351044001953");
-            if client.connect().is_ok() {
-                *client_lock = Some(client);
-            }
-        }
-        if let Some(ref mut client) = *client_lock {
-            let title_trim = title.trim();
-            let safe_title: String = if title_trim.is_empty() {
-                "Listening to Music".to_string()
-            } else if title_trim.chars().count() > 120 {
-                title_trim.chars().take(120).collect()
-            } else {
-                title_trim.to_string()
-            };
-            let clean_artist = artist.as_deref().unwrap_or("").trim();
-            let safe_artist: String = if clean_artist.chars().count() > 120 {
-                clean_artist.chars().take(120).collect()
-            } else {
-                clean_artist.to_string()
-            };
-
-            let mut act = activity::Activity::new()
-                .details(&safe_title)
-                .activity_type(activity::ActivityType::Listening);
-            if !safe_artist.is_empty() {
-                act = act.state(&safe_artist);
-            }
-            let formatted_cover = cover_url.as_deref().map(normalize_discord_cover);
-            let mut assets = activity::Assets::new()
-                .small_image("icon")
-                .small_text("Veluna");
-            if show_cover.unwrap_or(true) {
-                if let Some(ref cover) = formatted_cover {
-                    if !cover.is_empty() {
-                        assets = assets.large_image(cover);
-                    }
-                }
-            }
-            act = act.assets(assets);
-
-            let t_mode = time_display.as_deref().unwrap_or("remaining");
-            if let Some(start) = start_timestamp {
-                if t_mode == "elapsed" {
-                    act = act.timestamps(activity::Timestamps::new().start(start));
-                } else if let Some(end) = end_timestamp {
-                    if end > start {
-                        act = act.timestamps(activity::Timestamps::new().start(start).end(end));
-                    } else {
-                        act = act.timestamps(activity::Timestamps::new().start(start));
-                    }
-                } else {
-                    act = act.timestamps(activity::Timestamps::new().start(start));
-                }
-            }
-
-            let c_label = custom_button_label.unwrap_or_default();
-            let c_url = custom_button_url.unwrap_or_default();
-            let l_trim = c_label.trim();
-            let u_trim = c_url.trim();
-            let safe_btn_label: String = if l_trim.chars().count() > 32 {
-                l_trim.chars().take(32).collect()
-            } else {
-                l_trim.to_string()
-            };
-            let mut buttons = Vec::new();
-            if !safe_btn_label.is_empty()
-                && (u_trim.starts_with("http://") || u_trim.starts_with("https://"))
-            {
-                buttons.push(activity::Button::new(&safe_btn_label, u_trim));
-            }
-            if buttons.is_empty() {
-                if let Some(ref url) = track_url {
-                    if url.starts_with("http://") || url.starts_with("https://") {
-                        buttons.push(activity::Button::new("Listen on YouTube", url));
-                    }
-                }
-            }
-            if buttons.len() < 2 {
-                buttons.push(activity::Button::new(
-                    "Download Veluna",
-                    "https://github.com/rry0ku/veluna/releases/",
-                ));
-            }
-            act = act.buttons(buttons);
-
-            if client.set_activity(act).is_err() {
-                let _ = client.close();
-                *client_lock = None;
-            }
-        }
-    });
+    let payload = DiscordRpcPayload {
+        title,
+        artist,
+        cover_url,
+        track_url,
+        start_timestamp,
+        end_timestamp,
+        show_cover,
+        time_display,
+        custom_button_label,
+        custom_button_url,
+    };
+    let _ = get_discord_sender().try_send(DiscordRpcMessage::Update(Box::new(payload)));
 }
 
 #[tauri::command]
 fn clear_discord_rpc() {
-    std::thread::spawn(|| {
-        let mut client_lock = get_discord_client()
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
-        if let Some(ref mut client) = *client_lock {
-            if client.clear_activity().is_err() {
-                let _ = client.close();
-                *client_lock = None;
-            }
-        }
-    });
+    let _ = get_discord_sender().try_send(DiscordRpcMessage::Clear);
 }
 
 #[cfg(target_os = "linux")]
@@ -6338,11 +6598,11 @@ async fn download_stream_chunked(
     cover_url: Option<String>,
     lyrics_text: Option<String>,
 ) -> Result<String, String> {
-    let resolved = std::path::PathBuf::from(expand_tilde(&target_path));
+    let sanitized = sanitize_file_path(&target_path)?;
     downloader::download_audio_stream_chunked(
         app,
         stream_url,
-        resolved,
+        sanitized,
         track_url,
         title,
         artist,
@@ -6480,9 +6740,6 @@ fn main() {
                 }
             }
 
-            // Privacy: Wipe any leftover YouTube session cookies on startup/reopen
-            let _ = youtube_auth::clear_youtube_cookies_internal(app.handle());
-
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -6587,13 +6844,10 @@ fn main() {
                 let flag = app_handle.state::<tray::TrayFlag>();
                 if tray::handle_close_requested(app_handle, &flag) {
                     api.prevent_close();
-                } else {
-                    let _ = youtube_auth::clear_youtube_cookies_internal(app_handle);
                 }
             }
             tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
-                // Wipe YouTube session cookies on exit (privacy: one-shot import only)
-                let _ = youtube_auth::clear_youtube_cookies_internal(app_handle);
+                cleanup_all_active_downloads();
                 if let Some(mut child) = mpv_process()
                     .lock()
                     .unwrap_or_else(|p| p.into_inner())
@@ -6688,6 +6942,32 @@ Couldn't look you in the eye
         assert_eq!(parsed[1]["time"], 20.0);
         assert_eq!(parsed[2]["text"], "When you were here before");
         assert_eq!(parsed[2]["time"], 30.0);
+    }
+
+    #[test]
+    fn test_parse_lrc_offset() {
+        let lrc = r#"
+[offset:500]
+[00:10.00]Line one
+"#;
+        let res = parse_lrc_string(lrc, 120.0).expect("should parse lrc with offset");
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&res).unwrap();
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0]["text"], "Line one");
+        assert_eq!(parsed[0]["time"], 10.5);
+    }
+
+    #[test]
+    fn test_parse_lrc_with_roma() {
+        let lrc = "[00:10.00]日本語の歌詞\n[00:20.00]テスト";
+        let roma = "[00:10.00]nihongo no kashi\n[00:20.00]tesuto";
+        let res = parse_lrc_with_roma(lrc, Some(roma), 60.0).expect("should parse");
+        let parsed: Vec<serde_json::Value> = serde_json::from_str(&res).unwrap();
+        assert_eq!(parsed.len(), 2);
+        assert_eq!(parsed[0]["text"], "日本語の歌詞");
+        assert_eq!(parsed[0]["roma"], "nihongo no kashi");
+        assert_eq!(parsed[1]["text"], "テスト");
+        assert_eq!(parsed[1]["roma"], "tesuto");
     }
 
     #[test]
