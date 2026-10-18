@@ -6,9 +6,9 @@ ROOT_DIR="$(pwd)"
 VERSION="${1:-}"
 if [ -z "${VERSION}" ]; then
   if [ -f "package.json" ]; then
-    VERSION=$(node -p "require('./package.json').version" 2>/dev/null || echo "0.1.6")
+    VERSION=$(node -p "require('./package.json').version" 2>/dev/null || echo "0.1.7")
   else
-    VERSION="0.1.6"
+    VERSION="0.1.7"
   fi
 fi
 

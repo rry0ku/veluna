@@ -1,5 +1,6 @@
 {
   "name": "veluna",
+  "version": "0.1.7",
   "private": true,
   "scripts": {
     "dev": "node scripts/dev.mjs",

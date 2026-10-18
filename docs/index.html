@@ -45,7 +45,7 @@
   "url": "https://rry0ku.github.io/veluna/",
   "downloadUrl": "https://github.com/rry0ku/veluna/releases",
   "image": "https://rry0ku.github.io/veluna/og-image.png",
-  "softwareVersion": "0.1.6",
+  "softwareVersion": "0.1.7",
   "license": "https://opensource.org/licenses/MIT",
   "author": {
     "@type": "Person",
@@ -1090,7 +1090,7 @@ footer {
     <div class="reveal d2" style="margin-top:28px">
       <div class="version-chip" id="latest-version-chip">
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,6 5,9 10,3"/></svg>
-        v1.3.0 — Latest Release
+        v0.1.7 — Latest Release
       </div>
       <div class="dl-hero-sub">Get Veluna for your platform. Native performance, zero bloat.</div>
     </div>
@@ -1556,7 +1556,7 @@ footer {
     .then(function(res) { return res.ok ? res.json() : null; })
     .then(function(rel) {
       if (!rel || !rel.assets) return;
-      var tag = rel.tag_name || 'v1.3.0';
+      var tag = rel.tag_name || 'v0.1.7';
       var chip = document.getElementById('latest-version-chip');
       if (chip) chip.innerHTML = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,6 5,9 10,3"/></svg> ' + tag + ' — Latest Release';
 
