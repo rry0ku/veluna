@@ -419,11 +419,11 @@ impl Player {
         // ever turns out too short.
         if self.mpv().get_property::<bool>("pause").unwrap_or(false) {
             self.mpv().command("stop", &[])?;
-            for _ in 0..50 {
+            for _ in 0..200 {
                 if self.mpv().get_property::<String>("path").is_err() {
                     break;
                 }
-                std::thread::sleep(Duration::from_millis(1));
+                std::thread::sleep(Duration::from_millis(2));
             }
         }
         self.apply_headers(headers)?;
@@ -1375,6 +1375,7 @@ mod tests {
             while path().as_deref() != Some(old) && t.elapsed() < Duration::from_secs(5) {
                 std::thread::sleep(Duration::from_millis(10));
             }
+            p.pause().unwrap();
         }
     }
 
