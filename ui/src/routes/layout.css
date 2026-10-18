@@ -1,0 +1,1087 @@
+@import 'tailwindcss';
+@import "tw-animate-css";
+@import "shadcn-svelte/tailwind.css";
+@import "@fontsource-variable/oxanium";
+@import "@fontsource-variable/ibm-plex-sans";
+@import "@fontsource-variable/montserrat";
+@import "@fontsource-variable/outfit";
+@import "@fontsource-variable/dm-sans";
+
+@custom-variant dark (&:is(.dark *));
+
+/* --primary and --accent used to be @property-registered so a 600 ms crossfade could interpolate
+   them when the artwork accent changed. That fade is gone with #217: every frame of it restyled
+   the whole document, and it doubled what a track change costs the web process (+1.7 MB per track
+   with it, +0.8 MB without, which is what the app costs with the feature off entirely). The tint
+   layer still crossfades, so the change is not abrupt. Re-adding it means registering the two
+   properties again and putting the transition back on <html>. */
+
+/* Desktop app on WebKitGTK: the webview can report no hover-capable pointer, so Tailwind v4's
+   default hover variant — gated behind @media (hover: hover) — never matches, silently killing
+   every hover: and group-hover: utility in the app. Redefine hover to fire on a real :hover
+   regardless of the pointer heuristic. (This is a desktop app; hover always applies.) */
+@custom-variant hover (&:hover);
+
+/* `.theme-default` as well as :root, so the default palette can be put on an element the way the
+   presets are. The Appearance tab's miniatures (`ThemeMock.svelte`) carry `theme-<id>` and `dark`
+   themselves, which re-resolves every token for that subtree only: a slider drag restyles the
+   miniature, not the document. */
+:root,
+.theme-default {
+	/* Hue of the neutrals (greys, borders, muted surfaces, dark-mode backgrounds). Every tinted
+	   neutral below reads it, so the Themes tab can reshade the whole default palette from one
+	   number. Tokens at chroma 0 are pure white/black by design and stay that way. Preset palettes
+	   hardcode their own oklch values, so the tint only applies to this default set. */
+	--hue: 326;
+	/* Hue of the artwork tint, written by theme.svelte.ts. Only the `.art-tint` rules read it; the
+	   default here just keeps those rules valid if the class ever outlives the variable. */
+	--art-h: 326;
+	--background: oklch(1 0 0);
+	--foreground: oklch(0.145 0.008 var(--hue));
+	--card: oklch(1 0 0);
+	--card-foreground: oklch(0.145 0.008 var(--hue));
+	--popover: oklch(1 0 0);
+	--popover-foreground: oklch(0.145 0.008 var(--hue));
+	--primary: oklch(0.514 0.222 16.935);
+	--primary-foreground: oklch(0.969 0.015 12.422);
+	--secondary: oklch(0.967 0.001 var(--hue));
+	--secondary-foreground: oklch(0.21 0.006 var(--hue));
+	--muted: oklch(0.96 0.003 var(--hue));
+	--muted-foreground: oklch(0.542 0.034 var(--hue));
+	--accent: oklch(0.514 0.222 16.935);
+	--accent-foreground: oklch(0.969 0.015 12.422);
+	--destructive: oklch(0.577 0.245 27.325);
+	--border: oklch(0.922 0.005 var(--hue));
+	--input: oklch(0.922 0.005 var(--hue));
+	--ring: oklch(0.711 0.019 var(--hue));
+	--chart-1: oklch(0.828 0.111 230.318);
+	--chart-2: oklch(0.685 0.169 237.323);
+	--chart-3: oklch(0.588 0.158 241.966);
+	--chart-4: oklch(0.5 0.134 242.749);
+	--chart-5: oklch(0.443 0.11 240.79);
+	--radius: 0.45rem;
+	--sidebar: oklch(0.985 0 0);
+	--sidebar-foreground: oklch(0.145 0.008 var(--hue));
+	--sidebar-primary: oklch(0.586 0.253 17.585);
+	--sidebar-primary-foreground: oklch(0.969 0.015 12.422);
+	--sidebar-accent: oklch(0.96 0.003 var(--hue));
+	--sidebar-accent-foreground: oklch(0.212 0.019 var(--hue));
+	--sidebar-border: oklch(0.922 0.005 var(--hue));
+	--sidebar-ring: oklch(0.711 0.019 var(--hue));
+	--font-sans: 'Oxanium Variable', sans-serif;
+	--font-heading: 'IBM Plex Sans Variable', sans-serif;
+	--font-serif: ui-serif, Georgia, serif;
+	--font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	/* Tailwind's stock shadow scale. Restated here because @theme inline maps the shadow
+	   utilities onto these vars, so a palette theme can replace them. */
+	--shadow-2xs: 0 1px rgb(0 0 0 / 0.05);
+	--shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+	--shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+	--shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+	--shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+	--shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+	--shadow-2xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+}
+
+.dark {
+	--background: oklch(0.145 0.008 var(--hue));
+	--foreground: oklch(0.985 0 0);
+	--card: oklch(0.212 0.019 var(--hue));
+	--card-foreground: oklch(0.985 0 0);
+	--popover: oklch(0.212 0.019 var(--hue));
+	--popover-foreground: oklch(0.985 0 0);
+	--primary: oklch(0.455 0.188 13.697);
+	--primary-foreground: oklch(0.969 0.015 12.422);
+	--secondary: oklch(0.274 0.006 var(--hue));
+	--secondary-foreground: oklch(0.985 0 0);
+	--muted: oklch(0.263 0.024 var(--hue));
+	--muted-foreground: oklch(0.711 0.019 var(--hue));
+	--accent: oklch(0.455 0.188 13.697);
+	--accent-foreground: oklch(0.969 0.015 12.422);
+	--destructive: oklch(0.704 0.191 22.216);
+	--border: oklch(1 0 0 / 10%);
+	--input: oklch(1 0 0 / 15%);
+	--ring: oklch(0.542 0.034 var(--hue));
+	--chart-1: oklch(0.828 0.111 230.318);
+	--chart-2: oklch(0.685 0.169 237.323);
+	--chart-3: oklch(0.588 0.158 241.966);
+	--chart-4: oklch(0.5 0.134 242.749);
+	--chart-5: oklch(0.443 0.11 240.79);
+	--sidebar: oklch(0.21 0.006 var(--hue));
+	--sidebar-foreground: oklch(0.985 0 0);
+	--sidebar-primary: oklch(0.645 0.246 16.439);
+	--sidebar-primary-foreground: oklch(0.969 0.015 12.422);
+	--sidebar-accent: oklch(0.263 0.024 var(--hue));
+	--sidebar-accent-foreground: oklch(0.985 0 0);
+	--sidebar-border: oklch(1 0 0 / 10%);
+	--sidebar-ring: oklch(0.542 0.034 var(--hue));
+}
+
+/* --- Full-palette preset themes ---
+   Each overrides the whole token set (colours, radius, fonts, shadows) for both light and the
+   mode-watcher `.dark` variant. Selected by toggling `.theme-<id>` on <html> (see theme.svelte.ts).
+   --font-heading has no equivalent in the source themes, so it follows --font-sans to keep the
+   theme's type coherent. ponytail: --tracking-normal/--spacing/--shadow-x..opacity from the source
+   themes are dropped — they're either Tailwind defaults or just the inputs the shadow values were
+   generated from. */
+
+.theme-catppuccin {
+	--background: oklch(0.9578 0.0058 264.5321);
+	--foreground: oklch(0.4355 0.0430 279.3250);
+	--card: oklch(1.0000 0 0);
+	--card-foreground: oklch(0.4355 0.0430 279.3250);
+	--popover: oklch(0.8575 0.0145 268.4756);
+	--popover-foreground: oklch(0.4355 0.0430 279.3250);
+	--primary: oklch(0.5547 0.2503 297.0156);
+	--primary-foreground: oklch(1.0000 0 0);
+	--secondary: oklch(0.8575 0.0145 268.4756);
+	--secondary-foreground: oklch(0.4355 0.0430 279.3250);
+	--muted: oklch(0.9060 0.0117 264.5071);
+	--muted-foreground: oklch(0.5471 0.0343 279.0837);
+	--accent: oklch(0.6820 0.1448 235.3822);
+	--accent-foreground: oklch(1.0000 0 0);
+	--destructive: oklch(0.5505 0.2155 19.8095);
+	--border: oklch(0.8083 0.0174 271.1982);
+	--input: oklch(0.8575 0.0145 268.4756);
+	--ring: oklch(0.5547 0.2503 297.0156);
+	--chart-1: oklch(0.5547 0.2503 297.0156);
+	--chart-2: oklch(0.6820 0.1448 235.3822);
+	--chart-3: oklch(0.6250 0.1772 140.4448);
+	--chart-4: oklch(0.6920 0.2041 42.4293);
+	--chart-5: oklch(0.7141 0.1045 33.0967);
+	--sidebar: oklch(0.9335 0.0087 264.5206);
+	--sidebar-foreground: oklch(0.4355 0.0430 279.3250);
+	--sidebar-primary: oklch(0.5547 0.2503 297.0156);
+	--sidebar-primary-foreground: oklch(1.0000 0 0);
+	--sidebar-accent: oklch(0.6820 0.1448 235.3822);
+	--sidebar-accent-foreground: oklch(1.0000 0 0);
+	--sidebar-border: oklch(0.8083 0.0174 271.1982);
+	--sidebar-ring: oklch(0.5547 0.2503 297.0156);
+	--radius: 0.35rem;
+	--font-sans: 'Montserrat Variable', sans-serif;
+	--font-heading: 'Montserrat Variable', sans-serif;
+	--font-serif: Georgia, serif;
+	/* ponytail: Fira Code isn't bundled — used if the system has it, else the stock mono stack.
+	   Install @fontsource-variable/fira-code if the four font-mono spots ever matter. */
+	--font-mono: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	--shadow-2xs: 0px 4px 6px 0px hsl(240 30% 25% / 0.06);
+	--shadow-xs: 0px 4px 6px 0px hsl(240 30% 25% / 0.06);
+	--shadow-sm: 0px 4px 6px 0px hsl(240 30% 25% / 0.12), 0px 1px 2px -1px hsl(240 30% 25% / 0.12);
+	--shadow-md: 0px 4px 6px 0px hsl(240 30% 25% / 0.12), 0px 2px 4px -1px hsl(240 30% 25% / 0.12);
+	--shadow-lg: 0px 4px 6px 0px hsl(240 30% 25% / 0.12), 0px 4px 6px -1px hsl(240 30% 25% / 0.12);
+	--shadow-xl: 0px 4px 6px 0px hsl(240 30% 25% / 0.12), 0px 8px 10px -1px hsl(240 30% 25% / 0.12);
+	--shadow-2xl: 0px 4px 6px 0px hsl(240 30% 25% / 0.30);
+}
+.dark.theme-catppuccin {
+	--background: oklch(0.2155 0.0254 284.0647);
+	--foreground: oklch(0.8787 0.0426 272.2767);
+	--card: oklch(0.2429 0.0304 283.9110);
+	--card-foreground: oklch(0.8787 0.0426 272.2767);
+	--popover: oklch(0.4037 0.0320 280.1520);
+	--popover-foreground: oklch(0.8787 0.0426 272.2767);
+	--primary: oklch(0.7871 0.1187 304.7693);
+	--primary-foreground: oklch(0.2429 0.0304 283.9110);
+	--secondary: oklch(0.4765 0.0340 278.6430);
+	--secondary-foreground: oklch(0.8787 0.0426 272.2767);
+	--muted: oklch(0.2973 0.0294 276.2144);
+	--muted-foreground: oklch(0.7510 0.0396 273.9320);
+	--accent: oklch(0.8467 0.0833 210.2545);
+	--accent-foreground: oklch(0.2429 0.0304 283.9110);
+	--destructive: oklch(0.7556 0.1297 2.7642);
+	--border: oklch(0.3240 0.0319 281.9784);
+	--input: oklch(0.3240 0.0319 281.9784);
+	--ring: oklch(0.7871 0.1187 304.7693);
+	--chart-1: oklch(0.7871 0.1187 304.7693);
+	--chart-2: oklch(0.8467 0.0833 210.2545);
+	--chart-3: oklch(0.8577 0.1092 142.7153);
+	--chart-4: oklch(0.8237 0.1015 52.6294);
+	--chart-5: oklch(0.9226 0.0238 30.4919);
+	--sidebar: oklch(0.1828 0.0204 284.2039);
+	--sidebar-foreground: oklch(0.8787 0.0426 272.2767);
+	--sidebar-primary: oklch(0.7871 0.1187 304.7693);
+	--sidebar-primary-foreground: oklch(0.2429 0.0304 283.9110);
+	--sidebar-accent: oklch(0.8467 0.0833 210.2545);
+	--sidebar-accent-foreground: oklch(0.2429 0.0304 283.9110);
+	--sidebar-border: oklch(0.4037 0.0320 280.1520);
+	--sidebar-ring: oklch(0.7871 0.1187 304.7693);
+}
+
+.theme-tokyonight {
+    --background: oklch(0.9668 0.0058 264.5324);
+    --foreground: oklch(0.3593 0.0513 273.1802);
+    --card: oklch(0.9135 0.0068 277.1562);
+    --card-foreground: oklch(0.3593 0.0513 273.1802);
+    --popover: oklch(0.9135 0.0068 277.1562);
+    --popover-foreground: oklch(0.3593 0.0513 273.1802);
+    --primary: oklch(0.4794 0.1207 266.0080);
+    --primary-foreground: oklch(1.0000 0 0);
+    --secondary: oklch(0.4094 0.0546 274.2735);
+    --secondary-foreground: oklch(0.9668 0.0058 264.5324);
+    --muted: oklch(0.8387 0.0117 71.8792);
+    --muted-foreground: oklch(0.4717 0.0327 276.1987);
+    --accent: oklch(0.7190 0.1322 264.2022);
+    --accent-foreground: oklch(0.3593 0.0513 273.1802);
+    --destructive: oklch(0.7227 0.1589 10.2758);
+    --destructive-foreground: oklch(1.0000 0 0);
+    --border: oklch(0.8387 0.0117 71.8792);
+    --input: oklch(0.8387 0.0117 71.8792);
+    --ring: oklch(0.4794 0.1207 266.0080);
+    --chart-1: oklch(0.7190 0.1322 264.2022);
+    --chart-2: oklch(0.7953 0.1395 130.1364);
+    --chart-3: oklch(0.7839 0.1057 75.4281);
+    --chart-4: oklch(0.7515 0.1344 299.4992);
+    --chart-5: oklch(0.7227 0.1589 10.2758);
+    --sidebar: oklch(0.9135 0.0068 277.1562);
+    --sidebar-foreground: oklch(0.3593 0.0513 273.1802);
+    --sidebar-primary: oklch(0.4794 0.1207 266.0080);
+    --sidebar-primary-foreground: oklch(1.0000 0 0);
+    --sidebar-accent: oklch(0.8387 0.0117 71.8792);
+    --sidebar-accent-foreground: oklch(0.3593 0.0513 273.1802);
+    --sidebar-border: oklch(0.8387 0.0117 71.8792);
+    --sidebar-ring: oklch(0.4794 0.1207 266.0080);
+}
+.dark.theme-tokyonight {
+    --background: oklch(0.2263 0.0214 280.4871);
+    --foreground: oklch(0.8456 0.0611 274.7629);
+    --card: oklch(0.2040 0.0158 284.9095);
+    --card-foreground: oklch(0.8456 0.0611 274.7629);
+    --popover: oklch(0.1946 0.0140 285.0231);
+    --popover-foreground: oklch(0.8456 0.0611 274.7629);
+    --primary: oklch(0.7190 0.1322 264.2022);
+    --primary-foreground: oklch(0.2263 0.0214 280.4871);
+    --secondary: oklch(0.2819 0.0355 274.7479);
+    --secondary-foreground: oklch(0.8456 0.0611 274.7629);
+    --muted: oklch(0.3056 0.0369 273.2268);
+    --muted-foreground: oklch(0.4955 0.0682 274.3730);
+    --accent: oklch(0.4955 0.0682 274.3730);
+    --accent-foreground: oklch(0.8456 0.0611 274.7629);
+    --destructive: oklch(0.7227 0.1589 10.2758);
+    --destructive-foreground: oklch(1.0000 0 0);
+    --border: oklch(0.3056 0.0369 273.2268);
+    --input: oklch(0.2591 0.0249 274.4439);
+    --ring: oklch(0.7190 0.1322 264.2022);
+    --chart-1: oklch(0.7190 0.1322 264.2022);
+    --chart-2: oklch(0.8200 0.1051 235.7153);
+    --chart-3: oklch(0.9363 0.0684 194.9137);
+    --chart-4: oklch(0.7515 0.1344 299.4992);
+    --chart-5: oklch(0.7953 0.1395 130.1364);
+    --sidebar: oklch(0.2040 0.0158 284.9095);
+    --sidebar-foreground: oklch(0.7666 0.0537 275.4924);
+    --sidebar-primary: oklch(0.7190 0.1322 264.2022);
+    --sidebar-primary-foreground: oklch(0.2263 0.0214 280.4871);
+    --sidebar-accent: oklch(0.2591 0.0249 274.4439);
+    --sidebar-accent-foreground: oklch(0.7190 0.1322 264.2022);
+    --sidebar-border: oklch(0.2355 0.0271 277.8103);
+    --sidebar-ring: oklch(0.7190 0.1322 264.2022);
+}
+
+.theme-caffeine {
+	--background: oklch(0.9821 0 0);
+	--foreground: oklch(0.2435 0 0);
+	--card: oklch(0.9911 0 0);
+	--card-foreground: oklch(0.2435 0 0);
+	--popover: oklch(0.9911 0 0);
+	--popover-foreground: oklch(0.2435 0 0);
+	--primary: oklch(0.4341 0.0392 41.9938);
+	--primary-foreground: oklch(1.0000 0 0);
+	--secondary: oklch(0.9200 0.0651 74.3695);
+	--secondary-foreground: oklch(0.3499 0.0685 40.8288);
+	--muted: oklch(0.9521 0 0);
+	--muted-foreground: oklch(0.5032 0 0);
+	--accent: oklch(0.9310 0 0);
+	--accent-foreground: oklch(0.2435 0 0);
+	--destructive: oklch(0.6271 0.1936 33.3390);
+	--border: oklch(0.8822 0 0);
+	--input: oklch(0.8822 0 0);
+	--ring: oklch(0.4341 0.0392 41.9938);
+	--chart-1: oklch(0.4341 0.0392 41.9938);
+	--chart-2: oklch(0.9200 0.0651 74.3695);
+	--chart-3: oklch(0.9310 0 0);
+	--chart-4: oklch(0.9367 0.0523 75.5009);
+	--chart-5: oklch(0.4338 0.0437 41.6746);
+	--sidebar: oklch(0.9881 0 0);
+	--sidebar-foreground: oklch(0.2645 0 0);
+	--sidebar-primary: oklch(0.3250 0 0);
+	--sidebar-primary-foreground: oklch(0.9881 0 0);
+	--sidebar-accent: oklch(0.9761 0 0);
+	--sidebar-accent-foreground: oklch(0.3250 0 0);
+	--sidebar-border: oklch(0.9401 0 0);
+	--sidebar-ring: oklch(0.7731 0 0);
+	--radius: 0.5rem;
+	--font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+	--font-heading: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+	--font-serif: ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+	--font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+	--shadow-2xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+	--shadow-xs: 0 1px 3px 0px hsl(0 0% 0% / 0.05);
+	--shadow-sm: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 1px 2px -1px hsl(0 0% 0% / 0.10);
+	--shadow-md: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 2px 4px -1px hsl(0 0% 0% / 0.10);
+	--shadow-lg: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 4px 6px -1px hsl(0 0% 0% / 0.10);
+	--shadow-xl: 0 1px 3px 0px hsl(0 0% 0% / 0.10), 0 8px 10px -1px hsl(0 0% 0% / 0.10);
+	--shadow-2xl: 0 1px 3px 0px hsl(0 0% 0% / 0.25);
+}
+.dark.theme-caffeine {
+	--background: oklch(0.1776 0 0);
+	--foreground: oklch(0.9491 0 0);
+	--card: oklch(0.2134 0 0);
+	--card-foreground: oklch(0.9491 0 0);
+	--popover: oklch(0.2134 0 0);
+	--popover-foreground: oklch(0.9491 0 0);
+	--primary: oklch(0.9247 0.0524 66.1732);
+	--primary-foreground: oklch(0.2029 0.0240 200.1962);
+	--secondary: oklch(0.3163 0.0190 63.6992);
+	--secondary-foreground: oklch(0.9247 0.0524 66.1732);
+	--muted: oklch(0.2520 0 0);
+	--muted-foreground: oklch(0.7699 0 0);
+	--accent: oklch(0.2850 0 0);
+	--accent-foreground: oklch(0.9491 0 0);
+	--destructive: oklch(0.6271 0.1936 33.3390);
+	--border: oklch(0.2351 0.0115 91.7467);
+	--input: oklch(0.4017 0 0);
+	--ring: oklch(0.9247 0.0524 66.1732);
+	--chart-1: oklch(0.9247 0.0524 66.1732);
+	--chart-2: oklch(0.3163 0.0190 63.6992);
+	--chart-3: oklch(0.2850 0 0);
+	--chart-4: oklch(0.3481 0.0219 67.0001);
+	--chart-5: oklch(0.9245 0.0533 67.0855);
+	--sidebar: oklch(0.2103 0.0059 285.8852);
+	--sidebar-foreground: oklch(0.9674 0.0013 286.3752);
+	--sidebar-primary: oklch(0.4882 0.2172 264.3763);
+	--sidebar-primary-foreground: oklch(1.0000 0 0);
+	--sidebar-accent: oklch(0.2739 0.0055 286.0326);
+	--sidebar-accent-foreground: oklch(0.9674 0.0013 286.3752);
+	--sidebar-border: oklch(0.2739 0.0055 286.0326);
+	--sidebar-ring: oklch(0.8711 0.0055 286.2860);
+}
+
+.theme-neon {
+	--background: oklch(0.9816 0.0017 247.8390);
+	--foreground: oklch(0.1649 0.0352 281.8285);
+	--card: oklch(1.0000 0 0);
+	--card-foreground: oklch(0.1649 0.0352 281.8285);
+	--popover: oklch(1.0000 0 0);
+	--popover-foreground: oklch(0.1649 0.0352 281.8285);
+	--primary: oklch(0.6726 0.2904 341.4084);
+	--primary-foreground: oklch(1.0000 0 0);
+	--secondary: oklch(0.9595 0.0200 286.0164);
+	--secondary-foreground: oklch(0.1649 0.0352 281.8285);
+	--muted: oklch(0.9595 0.0200 286.0164);
+	--muted-foreground: oklch(0.1649 0.0352 281.8285);
+	--accent: oklch(0.8903 0.1739 171.2690);
+	--accent-foreground: oklch(0.1649 0.0352 281.8285);
+	--destructive: oklch(0.6535 0.2348 34.0370);
+	--border: oklch(0.9205 0.0086 225.0878);
+	--input: oklch(0.9205 0.0086 225.0878);
+	--ring: oklch(0.6726 0.2904 341.4084);
+	--chart-1: oklch(0.6726 0.2904 341.4084);
+	--chart-2: oklch(0.5488 0.2944 299.0954);
+	--chart-3: oklch(0.8442 0.1457 209.2851);
+	--chart-4: oklch(0.8903 0.1739 171.2690);
+	--chart-5: oklch(0.9168 0.1915 101.4070);
+	--sidebar: oklch(0.9595 0.0200 286.0164);
+	--sidebar-foreground: oklch(0.1649 0.0352 281.8285);
+	--sidebar-primary: oklch(0.6726 0.2904 341.4084);
+	--sidebar-primary-foreground: oklch(1.0000 0 0);
+	--sidebar-accent: oklch(0.8903 0.1739 171.2690);
+	--sidebar-accent-foreground: oklch(0.1649 0.0352 281.8285);
+	--sidebar-border: oklch(0.9205 0.0086 225.0878);
+	--sidebar-ring: oklch(0.6726 0.2904 341.4084);
+	--radius: 0.5rem;
+	--font-sans: 'Outfit Variable', sans-serif;
+	--font-heading: 'Outfit Variable', sans-serif;
+	--font-serif: ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif;
+	--font-mono: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	--shadow-2xs: 0px 4px 8px -2px hsl(0 0% 0% / 0.05);
+	--shadow-xs: 0px 4px 8px -2px hsl(0 0% 0% / 0.05);
+	--shadow-sm: 0px 4px 8px -2px hsl(0 0% 0% / 0.10), 0px 1px 2px -3px hsl(0 0% 0% / 0.10);
+	--shadow-md: 0px 4px 8px -2px hsl(0 0% 0% / 0.10), 0px 2px 4px -3px hsl(0 0% 0% / 0.10);
+	--shadow-lg: 0px 4px 8px -2px hsl(0 0% 0% / 0.10), 0px 4px 6px -3px hsl(0 0% 0% / 0.10);
+	--shadow-xl: 0px 4px 8px -2px hsl(0 0% 0% / 0.10), 0px 8px 10px -3px hsl(0 0% 0% / 0.10);
+	--shadow-2xl: 0px 4px 8px -2px hsl(0 0% 0% / 0.25);
+}
+/* Neon's dark mode keeps the same accents/charts as its light mode, so this block lists only
+   the tokens that actually differ; the rest inherit from .theme-neon above. */
+.dark.theme-neon {
+	--background: oklch(0.1649 0.0352 281.8285);
+	--foreground: oklch(0.9513 0.0074 260.7315);
+	--card: oklch(0.2542 0.0611 281.1423);
+	--card-foreground: oklch(0.9513 0.0074 260.7315);
+	--popover: oklch(0.2542 0.0611 281.1423);
+	--popover-foreground: oklch(0.9513 0.0074 260.7315);
+	--secondary: oklch(0.2542 0.0611 281.1423);
+	--secondary-foreground: oklch(0.9513 0.0074 260.7315);
+	--muted: oklch(0.2123 0.0522 280.9917);
+	--muted-foreground: oklch(0.6245 0.0500 278.1046);
+	--border: oklch(0.3279 0.0832 280.7890);
+	--input: oklch(0.3279 0.0832 280.7890);
+	--sidebar: oklch(0.1649 0.0352 281.8285);
+	--sidebar-foreground: oklch(0.9513 0.0074 260.7315);
+	--sidebar-border: oklch(0.3279 0.0832 280.7890);
+}
+
+.theme-breeze {
+	--background: oklch(0.9751 0.0127 244.2507);
+	--foreground: oklch(0.3729 0.0306 259.7328);
+	--card: oklch(1.0000 0 0);
+	--card-foreground: oklch(0.3729 0.0306 259.7328);
+	--popover: oklch(1.0000 0 0);
+	--popover-foreground: oklch(0.3729 0.0306 259.7328);
+	--primary: oklch(0.7227 0.1920 149.5793);
+	--primary-foreground: oklch(1.0000 0 0);
+	--secondary: oklch(0.9514 0.0250 236.8242);
+	--secondary-foreground: oklch(0.4461 0.0263 256.8018);
+	--muted: oklch(0.9670 0.0029 264.5419);
+	--muted-foreground: oklch(0.5510 0.0234 264.3637);
+	--accent: oklch(0.9505 0.0507 163.0508);
+	--accent-foreground: oklch(0.3729 0.0306 259.7328);
+	--destructive: oklch(0.6368 0.2078 25.3313);
+	--border: oklch(0.9276 0.0058 264.5313);
+	--input: oklch(0.9276 0.0058 264.5313);
+	--ring: oklch(0.7227 0.1920 149.5793);
+	--chart-1: oklch(0.7227 0.1920 149.5793);
+	--chart-2: oklch(0.6959 0.1491 162.4796);
+	--chart-3: oklch(0.5960 0.1274 163.2254);
+	--chart-4: oklch(0.5081 0.1049 165.6121);
+	--chart-5: oklch(0.4318 0.0865 166.9128);
+	--sidebar: oklch(0.9514 0.0250 236.8242);
+	--sidebar-foreground: oklch(0.3729 0.0306 259.7328);
+	--sidebar-primary: oklch(0.7227 0.1920 149.5793);
+	--sidebar-primary-foreground: oklch(1.0000 0 0);
+	--sidebar-accent: oklch(0.9505 0.0507 163.0508);
+	--sidebar-accent-foreground: oklch(0.3729 0.0306 259.7328);
+	--sidebar-border: oklch(0.9276 0.0058 264.5313);
+	--sidebar-ring: oklch(0.7227 0.1920 149.5793);
+	--radius: 0.5rem;
+	--font-sans: 'DM Sans Variable', sans-serif;
+	--font-heading: 'DM Sans Variable', sans-serif;
+	--font-serif: Lora, serif;
+	--font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	--shadow-2xs: 0px 4px 8px -1px hsl(0 0% 0% / 0.05);
+	--shadow-xs: 0px 4px 8px -1px hsl(0 0% 0% / 0.05);
+	--shadow-sm: 0px 4px 8px -1px hsl(0 0% 0% / 0.10), 0px 1px 2px -2px hsl(0 0% 0% / 0.10);
+	--shadow-md: 0px 4px 8px -1px hsl(0 0% 0% / 0.10), 0px 2px 4px -2px hsl(0 0% 0% / 0.10);
+	--shadow-lg: 0px 4px 8px -1px hsl(0 0% 0% / 0.10), 0px 4px 6px -2px hsl(0 0% 0% / 0.10);
+	--shadow-xl: 0px 4px 8px -1px hsl(0 0% 0% / 0.10), 0px 8px 10px -2px hsl(0 0% 0% / 0.10);
+	--shadow-2xl: 0px 4px 8px -1px hsl(0 0% 0% / 0.25);
+}
+.dark.theme-breeze {
+	--background: oklch(0.2077 0.0398 265.7549);
+	--foreground: oklch(0.8717 0.0093 258.3382);
+	--card: oklch(0.2795 0.0368 260.0310);
+	--card-foreground: oklch(0.8717 0.0093 258.3382);
+	--popover: oklch(0.2795 0.0368 260.0310);
+	--popover-foreground: oklch(0.8717 0.0093 258.3382);
+	--primary: oklch(0.7729 0.1535 163.2231);
+	--primary-foreground: oklch(0.2077 0.0398 265.7549);
+	--secondary: oklch(0.3351 0.0331 260.9120);
+	--secondary-foreground: oklch(0.7118 0.0129 286.0665);
+	--muted: oklch(0.2463 0.0275 259.9628);
+	--accent: oklch(0.3729 0.0306 259.7328);
+	--accent-foreground: oklch(0.7118 0.0129 286.0665);
+	--border: oklch(0.4461 0.0263 256.8018);
+	--input: oklch(0.4461 0.0263 256.8018);
+	--ring: oklch(0.7729 0.1535 163.2231);
+	--chart-1: oklch(0.7729 0.1535 163.2231);
+	--chart-2: oklch(0.7845 0.1325 181.9120);
+	--chart-3: oklch(0.7227 0.1920 149.5793);
+	--chart-4: oklch(0.6959 0.1491 162.4796);
+	--chart-5: oklch(0.5960 0.1274 163.2254);
+	--sidebar: oklch(0.2795 0.0368 260.0310);
+	--sidebar-foreground: oklch(0.8717 0.0093 258.3382);
+	--sidebar-primary: oklch(0.7729 0.1535 163.2231);
+	--sidebar-primary-foreground: oklch(0.2077 0.0398 265.7549);
+	--sidebar-accent: oklch(0.3729 0.0306 259.7328);
+	--sidebar-accent-foreground: oklch(0.7118 0.0129 286.0665);
+	--sidebar-border: oklch(0.4461 0.0263 256.8018);
+	--sidebar-ring: oklch(0.7729 0.1535 163.2231);
+}
+
+/* Pitch black for OLED/AMOLED panels: --background is #000000, so those pixels are switched off
+   rather than lit. Surfaces are black too and separated by borders instead of by lighter greys,
+   and the palette is monochrome so the one coloured thing on screen is the artwork. It stays
+   black in light mode on purpose: a black theme that lights the whole panel back up is pointless,
+   and every other token here would have to be maintained twice for a mode nobody picks it in. */
+.theme-amoled {
+	--background: oklch(0 0 0);
+	--foreground: oklch(0.985 0 0);
+	--card: oklch(0 0 0);
+	--card-foreground: oklch(0.985 0 0);
+	--popover: oklch(0 0 0);
+	--popover-foreground: oklch(0.985 0 0);
+	--primary: oklch(0.985 0 0);
+	--primary-foreground: oklch(0.145 0 0);
+	--secondary: oklch(0.205 0 0);
+	--secondary-foreground: oklch(0.985 0 0);
+	--muted: oklch(0.17 0 0);
+	--muted-foreground: oklch(0.708 0 0);
+	--accent: oklch(0.24 0 0);
+	--accent-foreground: oklch(0.985 0 0);
+	--destructive: oklch(0.704 0.191 22.216);
+	--border: oklch(1 0 0 / 14%);
+	--input: oklch(1 0 0 / 18%);
+	--ring: oklch(0.556 0 0);
+	--chart-1: oklch(0.985 0 0);
+	--chart-2: oklch(0.82 0 0);
+	--chart-3: oklch(0.65 0 0);
+	--chart-4: oklch(0.48 0 0);
+	--chart-5: oklch(0.32 0 0);
+	--sidebar: oklch(0 0 0);
+	--sidebar-foreground: oklch(0.985 0 0);
+	--sidebar-primary: oklch(0.985 0 0);
+	--sidebar-primary-foreground: oklch(0.145 0 0);
+	--sidebar-accent: oklch(0.24 0 0);
+	--sidebar-accent-foreground: oklch(0.985 0 0);
+	--sidebar-border: oklch(1 0 0 / 14%);
+	--sidebar-ring: oklch(0.556 0 0);
+}
+
+/* The blurred cover behind a hero (HomeHero, NowPlaying, the album and library headers), on its
+   own compositing layer. Put it on the element that holds the blurred image *and* the gradient
+   that fades it out, clipped (`overflow-hidden`), never on the image alone: two layers land a pixel
+   apart during WebKitGTK's animated wheel scroll, and a row of the raw wash flickers past the
+   fade's last line. NowPlaying's image carries it directly because it has no fade and never
+   scrolls. That promotion is the whole point of the class: left unpromoted,
+   WebKitGTK re-runs the 40px gaussian over the element every time anything underneath it repaints,
+   and the artwork tint below repaints the entire document on every frame of its crossfade. In the
+   now-playing view the wash is the size of the window, so a track change spent more time
+   re-blurring than on everything else put together.
+
+   Measured 2026-08-24, perf/arttint.mjs, now-playing view open, one track change, mean frame:
+   104ms as it was, 37ms promoted, 32ms with the wash deleted outright. Promotion buys back nearly
+   all of it, so the wash stays. (An earlier note in NowPlaying.svelte has promotion measuring as
+   noise: that was the video case, where the damage is the video *under* the blur every frame and
+   the layer has to be re-rasterized regardless. Still true, and still why the wash is dropped
+   while a video plays.)
+
+   Not on Chromium (WebView2, Windows), where the promotion is what costs the frames (#341). There
+   the wash's layer is re-blurred every time something above it repaints, and every hover animation
+   that creates a layer pays overlap tests against it. Unpromoted, the blur is rasterized into the
+   page's tiles once. Measured 2026-09-28, perf/scroll.mjs, 1920x1080, 4x CPU, frames over 20 ms:
+   lyrics panel idle while playing 100% -> 4-11%, Home top hover 53% -> 30%. */
+html:not(.chromium) .art-wash {
+	will-change: transform;
+}
+
+/* --- Artwork tint ---
+   "Adapt colors to artwork" (Themes tab). `theme.svelte.ts` puts the playing cover's hue in
+   --art-h and toggles .art-tint on <html>, and the fills below are derived from that one number so
+   the whole UI drifts with the cover instead of only the accent. Written as static CSS rather than
+   generated in JS because the light/dark split has to stay a CSS concern.
+
+   These override whichever palette is selected, so the selectors have to outrank `.dark.theme-x`
+   (0,2,0): all three below are (0,2,1) or more. --primary / --accent are not here: they stay
+   inline styles on <html>, which beat any of this.
+
+   AMOLED takes the dark fills in light mode too. It stays black in light mode by design and keeps
+   its white text there, so light fills under it put white text on near-white.
+
+   **Fills only.** Text, borders, inputs and rings used to be tinted from --art-h as well, ~40
+   custom properties in all, and that is the bug behind #217 ("memory grows and the window freezes
+   after 12-24h"). Every element inherits a root custom property, so one cover change restyled the
+   whole document, and re-rasterizing every text run in a new colour is what made it expensive:
+   WebKitGTK kept about 20 MB of each change permanently and a night of autoplay reached several
+   GB, until the main thread stopped keeping up while mpv and the tray carried on. Measured
+   2026-09-14/15 on Fedora 44 / WebKitGTK 2.52.5, cover colour changed every 2 s:
+
+       all ~40 properties (what shipped in 0.7.0)    300 ms recalc, +21 MB per change
+       --primary / --accent alone                    160 ms recalc, +0.7 MB per change
+
+   Keep this list to flat fills. Adding a foreground, a border or a ring back means re-running that
+   measurement first; `progress/active/issue-217-ui-freeze.md` has the harness.
+
+   Chroma is what makes it visible: the default palette's neutrals sit at 0.003-0.034, which reads
+   as grey. Turn the numbers here down together if a saturated cover is too much. */
+html.art-tint:not(.dark):not(.theme-amoled) {
+	--background: oklch(0.985 0.014 var(--art-h));
+	--card: oklch(0.995 0.01 var(--art-h));
+	--popover: oklch(0.995 0.01 var(--art-h));
+	--secondary: oklch(0.945 0.03 var(--art-h));
+	--muted: oklch(0.945 0.028 var(--art-h));
+	--sidebar: oklch(0.965 0.022 var(--art-h));
+	--sidebar-accent: oklch(0.935 0.035 var(--art-h));
+}
+
+html.art-tint.dark,
+html.art-tint.theme-amoled {
+	--background: oklch(0.165 0.028 var(--art-h));
+	--card: oklch(0.225 0.038 var(--art-h));
+	--popover: oklch(0.225 0.038 var(--art-h));
+	--secondary: oklch(0.285 0.04 var(--art-h));
+	--muted: oklch(0.275 0.042 var(--art-h));
+	--sidebar: oklch(0.195 0.032 var(--art-h));
+	--sidebar-accent: oklch(0.275 0.042 var(--art-h));
+}
+
+@theme inline {
+	--font-sans: var(--font-sans);
+	--font-heading: var(--font-heading);
+	--font-serif: var(--font-serif);
+	--font-mono: var(--font-mono);
+	--shadow-2xs: var(--shadow-2xs);
+	--shadow-xs: var(--shadow-xs);
+	--shadow-sm: var(--shadow-sm);
+	--shadow-md: var(--shadow-md);
+	--shadow-lg: var(--shadow-lg);
+	--shadow-xl: var(--shadow-xl);
+	--shadow-2xl: var(--shadow-2xl);
+	--color-sidebar-ring: var(--sidebar-ring);
+	--color-sidebar-border: var(--sidebar-border);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar: var(--sidebar);
+	--color-chart-5: var(--chart-5);
+	--color-chart-4: var(--chart-4);
+	--color-chart-3: var(--chart-3);
+	--color-chart-2: var(--chart-2);
+	--color-chart-1: var(--chart-1);
+	--color-ring: var(--ring);
+	--color-input: var(--input);
+	--color-border: var(--border);
+	--color-destructive: var(--destructive);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-accent: var(--accent);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-muted: var(--muted);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-secondary: var(--secondary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-primary: var(--primary);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-popover: var(--popover);
+	--color-card-foreground: var(--card-foreground);
+	--color-card: var(--card);
+	--color-foreground: var(--foreground);
+	--color-background: var(--background);
+	--radius-sm: calc(var(--radius) * 0.6);
+	--radius-md: calc(var(--radius) * 0.8);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) * 1.4);
+	--radius-2xl: calc(var(--radius) * 1.8);
+	--radius-3xl: calc(var(--radius) * 2.2);
+	--radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+	* {
+		@apply border-border outline-ring/50;
+	}
+	body {
+		/* Transparent, not bg-background: the window itself is transparent so the root container
+		   can paint rounded corners (see +layout.svelte). */
+		@apply bg-transparent text-foreground;
+	}
+	html,
+	body {
+		/* Chromium (WebView2, so Windows) rubber-bands the whole page when a wheel reaches the
+		   viewport with nothing left to scroll — and off Android it does that even along an axis
+		   that never scrolls, picking the axis from whatever delta is left over. The titlebar has
+		   no scrollable ancestor at all, so every wheel over it lands there, and a hair of sideways
+		   delta slides the page left or right. The window is transparent and undecorated, so the
+		   bounce pulls the app off its own frame and shows the desktop through the gap (issue #9).
+		   WebKitGTK has no elastic overscroll, hence never on Fedora.
+
+		   On both elements deliberately: Chromium takes the viewport's overscroll-behavior from the
+		   viewport-defining element, which is <body> while <html> has visible overflow. Only 140+
+		   reads it off <html>, so on an older WebView2 the <html> rule alone is dead CSS. */
+		overscroll-behavior: none;
+	}
+	html {
+		@apply font-sans;
+	}
+	button:not(:disabled),
+	[role='button'] {
+		/* Tailwind v4's preflight drops the UA stylesheet's pointer cursor on <button>, so a control
+		   only got one where someone remembered a cursor-pointer class, and most did not (issue #257).
+		   One base rule covers every button and every div-as-button card; anything that wants a
+		   different cursor still wins with its own utility, since utilities come after base. */
+		cursor: pointer;
+	}
+	img {
+		/* No artwork in this app is a drag payload: the drag sources for the shortcuts grid and the
+		   queue are the wrapping card/row, never the image. Left native, every <img> peels off a
+		   ghost on mousedown-drag (issue #53). The wrapper still starts its own drag, same as the
+		   draggable="false" the cards already carry on their images. */
+		-webkit-user-drag: none;
+	}
+}
+
+/* --- Motion & interaction polish --- */
+
+/* Loaded page content fades in over the skeleton/route swap it replaces. Opacity-only —
+   cheap to composite on WebKitGTK. */
+@keyframes content-in {
+	from { opacity: 0; }
+}
+.content-in { animation: content-in 150ms ease-out; }
+
+/* The card grid behind Library, Local music, search results and "See all". Same reasoning as
+   Shelf.svelte: WebKit keeps every card in style, layout and paint, and because it rasterizes in
+   tiles, one card's hover repaint re-rasterizes the images around it — so hovering gets slower the
+   more cards there are, and a full library is hundreds. Skipping off-screen cards caps that at a
+   screenful, and their thumbnails stop being fetched until you scroll near them.
+   12.75rem is a card exactly (8px padding + 144px cover + 8px gap + title + subtitle + 8px); the
+   `auto` keyword swaps in the measured size after a card's first paint, so the scrollbar stays put.
+   Paint containment clips at the card's own box, which the group-hover shadow stays inside: it
+   reaches ~27px below the cover and there are 52px of title, subtitle and padding under it. */
+.card-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, 10rem);
+	/* Pinned, not auto. An auto row is as tall as its tallest card, and a skipped card reports the
+	   contain-intrinsic-size below while a rendered one reports its real height — which is 1rem
+	   shorter when the item has no subtitle. So any row straddling the skip boundary changed height
+	   as you scrolled, and since a hover is what forces the layout pass that reconciles it, hovering
+	   near that boundary reflowed the grid, moved the scroll position, and changed which cards were
+	   skipped. Same number for both and the loop can't start. */
+	grid-auto-rows: 12.75rem;
+	gap: 1rem;
+}
+.card-grid > * {
+	content-visibility: auto;
+	contain-intrinsic-size: auto 12.75rem;
+}
+
+/* --- Moods & Genres tiles (search page) ---
+   Three sections, one family: the name top left, YouTube's colour for the tile (--mood, set inline)
+   mixed into --card so the name stays --foreground on every theme whatever colour YouTube picked,
+   and a cover from the tile's category fading into the card on the right. What changes per section
+   is how that cover sits: For you gets a panel and the app's mark, Moods & moments a record that
+   spins under the pointer, Genres a tilted sleeve with its colour glowing up from behind it.
+   Every hover effect is a transform or an opacity, and only on the one tile under the pointer. */
+.mood-grid {
+	display: grid;
+	gap: 0.75rem;
+}
+.mood-grid.for-you {
+	grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+}
+.mood-grid.moods {
+	grid-template-columns: repeat(auto-fill, minmax(13.5rem, 1fr));
+}
+.mood-grid.genres {
+	grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+}
+.mood {
+	position: relative;
+	isolation: isolate;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	align-items: flex-start;
+	padding: 1rem 1.125rem;
+	border: 1px solid color-mix(in oklab, var(--foreground) 7%, transparent);
+	border-radius: calc(var(--radius) * 2 + 0.375rem);
+	background: color-mix(in oklab, var(--mood) 14%, var(--card));
+	color: var(--foreground);
+	text-align: left;
+	cursor: pointer;
+	transition:
+		border-color 200ms ease-out,
+		transform 150ms ease-out;
+}
+.mood:hover {
+	border-color: color-mix(in oklab, var(--mood) 50%, transparent);
+}
+.mood:active {
+	transform: scale(0.98);
+}
+.mood:focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: 2px;
+}
+.mood-title {
+	max-width: 58%;
+	font-family: var(--font-heading);
+	font-weight: 700;
+	line-height: 1.15;
+	overflow-wrap: anywhere;
+}
+/* Fades in once decoded rather than popping in; a cover that fails is dropped by the page. */
+.mood-art {
+	position: absolute;
+	z-index: -1;
+	object-fit: cover;
+	opacity: 0;
+	transition:
+		opacity 300ms ease-out,
+		transform 400ms ease-out;
+}
+.mood-art.ready {
+	opacity: 1;
+}
+
+/* For you: the cover as a panel on the right, fading left into the card, and the app's mark. */
+.for-you .mood {
+	height: 8.5rem;
+}
+.for-you .mood-title {
+	font-size: 1.25rem;
+}
+.for-you .mood-art {
+	top: 0;
+	right: 0;
+	width: 58%;
+	height: 100%;
+	-webkit-mask-image: linear-gradient(to right, transparent, #000 70%);
+	mask-image: linear-gradient(to right, transparent, #000 70%);
+}
+.for-you .mood:hover .mood-art {
+	transform: scale(1.06);
+}
+.mood-logo {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 1.875rem;
+	height: 1.875rem;
+	border-radius: 9999px;
+	background: color-mix(in oklab, var(--background) 70%, transparent);
+	box-shadow: 0 0 0 1px color-mix(in oklab, var(--mood) 50%, transparent);
+}
+.mood-logo img {
+	width: 1.125rem;
+	height: 1.125rem;
+}
+
+/* Moods & moments: the cover as a record half off the right edge. The fade lives on the outer
+   ring and the spin on the inner one, or the fade would turn with the record. */
+.moods .mood {
+	height: 7rem;
+}
+.moods .mood-title {
+	font-size: 1.0625rem;
+}
+.mood-disc {
+	position: absolute;
+	z-index: -1;
+	top: 50%;
+	right: -1.75rem;
+	width: 7.5rem;
+	height: 7.5rem;
+	margin-top: -3.75rem;
+	-webkit-mask-image: linear-gradient(to right, transparent, #000 60%);
+	mask-image: linear-gradient(to right, transparent, #000 60%);
+}
+.mood-spin {
+	position: absolute;
+	inset: 0;
+	overflow: hidden;
+	border-radius: 9999px;
+	background: color-mix(in oklab, var(--mood) 45%, transparent);
+}
+.mood-spin .mood-art {
+	/* Over the frame's placeholder tint: at the shared -1 it would paint behind it. */
+	z-index: 0;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+/* The spindle hole, in the card's own colour. */
+.mood-spin::after {
+	content: '';
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: 1rem;
+	height: 1rem;
+	margin: -0.5rem;
+	border-radius: 9999px;
+	background: color-mix(in oklab, var(--mood) 14%, var(--card));
+	box-shadow: 0 0 0 3px color-mix(in oklab, var(--foreground) 12%, transparent);
+}
+.moods .mood:hover .mood-spin {
+	animation: mood-spin 5s linear infinite;
+}
+@keyframes mood-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+.mood-pill {
+	width: 1.75rem;
+	height: 0.3125rem;
+	border-radius: 9999px;
+	background: var(--mood);
+}
+
+/* Genres: the cover as a tilted sleeve in the corner that straightens under the pointer, with the
+   genre's colour as light coming from behind it rather than a mark of its own. Below the sleeve
+   (-2 against its -1), above the card's tint. */
+.genres .mood {
+	height: 6.25rem;
+}
+.genres .mood::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	z-index: -2;
+	background: radial-gradient(
+		55% 95% at 100% 100%,
+		color-mix(in oklab, var(--mood) 50%, transparent),
+		transparent 75%
+	);
+}
+.genres .mood-title {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.5rem;
+	max-width: 62%;
+	font-size: 0.975rem;
+}
+/* Centred on the first line, so a name that wraps hangs under itself, not under the dot. */
+.mood-dot {
+	flex-shrink: 0;
+	width: 0.5rem;
+	height: 0.5rem;
+	margin-top: 0.32em;
+	border-radius: 9999px;
+	background: var(--mood);
+}
+.mood-sleeve {
+	position: absolute;
+	z-index: -1;
+	right: -0.5rem;
+	bottom: -1.25rem;
+	width: 5.25rem;
+	height: 5.25rem;
+	overflow: hidden;
+	border-radius: calc(var(--radius) + 0.125rem);
+	background: color-mix(in oklab, var(--mood) 45%, transparent);
+	transform: rotate(16deg);
+	transition: transform 250ms ease-out;
+	-webkit-mask-image: linear-gradient(to left, #000 45%, transparent);
+	mask-image: linear-gradient(to left, #000 45%, transparent);
+}
+.mood-sleeve .mood-art {
+	z-index: 0;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+}
+.genres .mood:hover .mood-sleeve {
+	transform: rotate(6deg) translateY(-0.375rem);
+}
+
+/* A track title too wide for the player scrolls itself instead of stopping at an ellipsis.
+   --marquee-dx is one text width plus the gap, measured in Marquee.svelte, which also sets the
+   duration to keep the speed constant. One direction, looping: the second copy lands where the
+   first started, so translating back to 0 is not a visible jump. */
+@keyframes marquee {
+	to { transform: translateX(calc(var(--marquee-dx) * -1)); }
+}
+/* Three passes, not `infinite`: an overflowing title kept a transform animation running for the
+   whole session, so the compositor never reached an idle frame and every other repaint in the app
+   was re-incurred at refresh rate. Three passes is enough to read a long title; hovering still
+   holds it still, and `{#key text}` in Marquee.svelte restarts it on every track change. */
+.marquee { animation: marquee linear 3; }
+/* Hovering holds it still: the artist line's names are links, and hitting a moving target is not.
+   Triggered from the clipping box, not the scrolling track: the trailing copy is inert, so it is
+   not hit-testable and hovering it would never reach the track itself. */
+.marquee-box:hover .marquee { animation-play-state: paused; }
+
+/* A small "pop" for the like button when a track is favourited. */
+@keyframes heart-pop {
+	0% { transform: scale(1); }
+	40% { transform: scale(1.4); }
+	100% { transform: scale(1); }
+}
+.animate-heart-pop { animation: heart-pop 0.3s ease-out; }
+
+/* Range inputs (seek + volume): filled progress driven by --pct, with a thumb that
+   only appears on hover/focus. Every Tauri target is WebKit/Chromium, so the
+   -webkit- pseudo-elements cover Fedora (WebKitGTK), macOS (WebKit) and Windows (WebView2). */
+input[type='range'].range {
+	-webkit-appearance: none;
+	appearance: none;
+	height: 16px;
+	background: transparent;
+	cursor: pointer;
+}
+input[type='range'].range::-webkit-slider-runnable-track {
+	height: 4px;
+	border-radius: 999px;
+	background: linear-gradient(to right, var(--primary) var(--pct, 0%), var(--muted) var(--pct, 0%));
+}
+input[type='range'].range::-webkit-slider-thumb {
+	-webkit-appearance: none;
+	appearance: none;
+	margin-top: -4px;
+	height: 12px;
+	width: 12px;
+	border-radius: 50%;
+	background: var(--primary);
+	opacity: 0;
+	transition: opacity 0.15s ease, transform 0.15s ease;
+}
+/* Theater mode's bar is the width of the cover and is being read from across a room, where 4px on
+   that width reads as a hairline. */
+input[type='range'].range.theater-range::-webkit-slider-runnable-track {
+	height: 6px;
+}
+input[type='range'].range.theater-range::-webkit-slider-thumb {
+	margin-top: -4px;
+	height: 14px;
+	width: 14px;
+}
+/* The mini player's seek bar sits on cover art, where --muted has nothing to contrast with. */
+input[type='range'].range.on-art::-webkit-slider-runnable-track {
+	background: linear-gradient(to right, var(--primary) var(--pct, 0%), rgb(255 255 255 / 0.35) var(--pct, 0%));
+}
+input[type='range'].range:hover::-webkit-slider-thumb,
+input[type='range'].range:focus-visible::-webkit-slider-thumb {
+	opacity: 1;
+}
+input[type='range'].range:active::-webkit-slider-thumb {
+	transform: scale(1.25);
+}
+
+/* Custom scrollbars everywhere (KI-5). WebKitGTK paints its *native* overlay
+   scrollbars on a separate composited layer above all page content, so they
+   float on top of modals/popovers regardless of z-index. Any ::-webkit-scrollbar
+   styling switches WebKit to CSS-painted scrollbars, which live in the normal
+   stacking order. Every Tauri target is WebKit/Chromium, so this covers all
+   platforms. */
+::-webkit-scrollbar {
+	width: 8px;
+	height: 8px;
+}
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+::-webkit-scrollbar-thumb {
+	background: color-mix(in srgb, var(--muted-foreground) 35%, transparent);
+	border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+	background: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
+}
+::-webkit-scrollbar-corner {
+	background: transparent;
+}
+
+/* A shelf's sideways scrollbar. The arrows and the edge fades already say "this row continues", so
+   the bar is a hairline that only shows while the pointer is on the row: at 8px under every shelf
+   it was the heaviest line on home (#319). Still there for dragging, and the row still scrolls with
+   a trackpad or shift+wheel when it is invisible. */
+.rail::-webkit-scrollbar {
+	height: 4px;
+}
+.rail::-webkit-scrollbar-thumb {
+	background: transparent;
+}
+.rail:hover::-webkit-scrollbar-thumb {
+	background: color-mix(in srgb, var(--muted-foreground) 35%, transparent);
+}
+
+/* Respect users who ask the OS to minimise motion. */
+@media (prefers-reduced-motion: reduce) {
+	*, *::before, *::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}

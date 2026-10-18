@@ -1,0 +1,59 @@
+{
+  "responseContext": {
+    "mainAppWebResponseContext": { "datasyncId": "personal-sync||device-sync" }
+  },
+  "actions": [
+    {
+      "getMultiPageMenuAction": {
+        "menu": {
+          "multiPageMenuRenderer": {
+            "sections": [
+              {
+                "accountSectionListRenderer": {
+                  "header": {
+                    "googleAccountHeaderRenderer": {
+                      "email": { "runs": [{ "text": "listener@example.invalid" }] }
+                    }
+                  },
+                  "contents": [
+                    {
+                      "accountItemSectionRenderer": {
+                        "contents": [
+                          {
+                            "accountItem": {
+                              "accountName": { "simpleText": "Personal channel" },
+                              "channelHandle": { "runs": [{ "text": "@personal" }] },
+                              "accountPhoto": {
+                                "thumbnails": [{ "url": "https://example.invalid/personal.jpg" }]
+                              },
+                              "isSelected": true,
+                              "hasChannel": true,
+                              "navigationEndpoint": {
+                                "browseEndpoint": { "browseId": "UCSANITIZEDPERSONAL" }
+                              },
+                              "serviceEndpoint": {
+                                "selectActiveIdentityEndpoint": {
+                                  "supportedTokens": [
+                                    {
+                                      "datasyncIdToken": {
+                                        "datasyncIdToken": "personal-sync||ignored-device-part"
+                                      }
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

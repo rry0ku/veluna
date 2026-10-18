@@ -1,0 +1,169 @@
+{
+ "data": {
+  "playlistV2": {
+   "__typename": "Playlist",
+   "content": {
+    "__typename": "PlaylistItemsPage",
+    "totalCount": 150,
+    "pagingInfo": {
+     "offset": 100,
+     "limit": 100
+    },
+    "items": [
+     {
+      "addedAt": {
+       "isoString": "2026-07-09T14:06:14.326Z"
+      },
+      "addedBy": null,
+      "itemV2": {
+       "__typename": "TrackResponseWrapper",
+       "data": {
+        "__typename": "Track",
+        "uri": "spotify:track:05RgAMGypEvqhNs5hPCbMS",
+        "name": "Panama - 2015 Remaster",
+        "trackDuration": {
+         "totalMilliseconds": 210226
+        },
+        "albumOfTrack": {
+         "uri": "spotify:album:3REUXdj5OPKhuDTrTtCBU0",
+         "name": "1984 (Remastered)",
+         "artists": {
+          "items": [
+           {
+            "uri": "spotify:artist:2cnMpRsOVqtPMfq7YiFE6K",
+            "profile": {
+             "name": "Van Halen"
+            }
+           }
+          ]
+         },
+         "coverArt": {
+          "sources": [
+           {
+            "url": "https://i.scdn.co/image/ab67616d00001e02b414c63fb435b622238c15ed",
+            "width": 300,
+            "height": 300
+           },
+           {
+            "url": "https://i.scdn.co/image/ab67616d00004851b414c63fb435b622238c15ed",
+            "width": 64,
+            "height": 64
+           },
+           {
+            "url": "https://i.scdn.co/image/ab67616d0000b273b414c63fb435b622238c15ed",
+            "width": 640,
+            "height": 640
+           }
+          ]
+         }
+        },
+        "artists": {
+         "items": [
+          {
+           "uri": "spotify:artist:2cnMpRsOVqtPMfq7YiFE6K",
+           "profile": {
+            "name": "Van Halen"
+           }
+          }
+         ]
+        },
+        "discNumber": 1,
+        "trackNumber": 3,
+        "playability": {
+         "playable": true,
+         "reason": "PLAYABLE"
+        },
+        "contentRating": {
+         "label": "NONE"
+        }
+       }
+      }
+     },
+     {
+      "addedAt": {
+       "isoString": "2026-07-09T14:06:14.326Z"
+      },
+      "addedBy": null,
+      "itemV2": {
+       "__typename": "TrackResponseWrapper",
+       "data": {
+        "__typename": "Track",
+        "uri": "spotify:track:1ff8lsrJ2kuZuofMw81EQo",
+        "name": "Save a Prayer - 2009 Remaster",
+        "trackDuration": {
+         "totalMilliseconds": 333306
+        },
+        "albumOfTrack": {
+         "uri": "spotify:album:02tfQwJSOLP77oCd9U8bqm",
+         "name": "Rio (Collector's Edition)",
+         "artists": {
+          "items": [
+           {
+            "uri": "spotify:artist:0lZoBs4Pzo7R89JM9lxwoT",
+            "profile": {
+             "name": "Duran Duran"
+            }
+           }
+          ]
+         },
+         "coverArt": {
+          "sources": [
+           {
+            "url": "https://i.scdn.co/image/ab67616d00001e0216c75e2dd2654d7d03f2c556",
+            "width": 300,
+            "height": 300
+           },
+           {
+            "url": "https://i.scdn.co/image/ab67616d0000485116c75e2dd2654d7d03f2c556",
+            "width": 64,
+            "height": 64
+           },
+           {
+            "url": "https://i.scdn.co/image/ab67616d0000b27316c75e2dd2654d7d03f2c556",
+            "width": 640,
+            "height": 640
+           }
+          ]
+         }
+        },
+        "artists": {
+         "items": [
+          {
+           "uri": "spotify:artist:0lZoBs4Pzo7R89JM9lxwoT",
+           "profile": {
+            "name": "Duran Duran"
+           }
+          }
+         ]
+        },
+        "discNumber": 1,
+        "trackNumber": 8,
+        "playability": {
+         "playable": true,
+         "reason": "PLAYABLE"
+        },
+        "contentRating": {
+         "label": "EXPLICIT"
+        }
+       }
+      }
+     },
+     {
+      "addedAt": {
+       "isoString": "2026-07-09T14:06:14.326Z"
+      },
+      "addedBy": null,
+      "itemV2": {
+       "__typename": "EpisodeResponseWrapper",
+       "data": {
+        "__typename": "Episode",
+        "uri": "spotify:episode:4rOoJ6Egrf8K2IrywzwOMk",
+        "name": "Some podcast episode"
+       }
+      }
+     }
+    ]
+   }
+  }
+ }
+}

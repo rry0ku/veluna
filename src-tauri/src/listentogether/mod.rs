@@ -1,0 +1,900 @@
+//! Listen Together client. Owns the WebSocket connection to a self-hosted `veluna-sync` server
+//! (context/19), the room state, and reconnection. It knows nothing about mpv or the orchestrator:
+//! playback for guests is driven through an mpsc channel of [`SyncCommand`]s that a bridge task
+//! (in `lib.rs`) applies to `AppState`. The host's playback is broadcast by `AppState` calling
+//! [`LtSession::broadcast_playback`].
+//!
+//! No back-reference to `AppState` (avoids an Arc cycle): everything the connection needs is the
+//! `AppHandle` (to emit UI events) and the sync channel.
+
+use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
+use std::time::Duration;
+
+use futures_util::{SinkExt, StreamExt};
+use listen_protocol::{
+    ClientMessage, Playback, PlaybackKind, RoomState, ServerMessage, Suggestion, Track, User,
+};
+use tauri::{AppHandle, Emitter};
+use tokio::net::TcpStream;
+use tokio::sync::{mpsc, Mutex};
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::{Error as WsError, Message};
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
+
+/// Playback intents the connection hands to the bridge task to apply to the local player.
+#[derive(Debug, Clone)]
+pub enum SyncCommand {
+    /// Full state (after join / reconnect / request-sync): resolve current track, seek to live
+    /// position, set play/pause, mirror the queue.
+    ApplyState(RoomState),
+    /// `track` is `None` when the host is on something a guest can't play (a local file).
+    ChangeTrack {
+        track: Option<Track>,
+        position_ms: i64,
+        playing: bool,
+        queue: Vec<Track>,
+    },
+    Play {
+        position_ms: i64,
+    },
+    Pause {
+        position_ms: i64,
+    },
+    Seek {
+        position_ms: i64,
+    },
+    /// Guest: mirror the host's upcoming queue (a guest added/the host removed a track).
+    SyncQueue {
+        queue: Vec<Track>,
+    },
+    /// Host: a guest's track to insert at the guest boundary (auto-approved suggestion,
+    /// `queued_by` already stamped with the guest's name).
+    GuestAdd {
+        track: Track,
+    },
+    /// We just became host of a freshly-created room — seed the room with our current now-playing.
+    HostSeed,
+    /// We left / were kicked / became host — stop applying remote playback.
+    Release,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Role {
+    None,
+    Host,
+    Guest,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Status {
+    Disconnected,
+    Connecting,
+    Connected,
+}
+
+impl Status {
+    fn as_str(self) -> &'static str {
+        match self {
+            Status::Disconnected => "disconnected",
+            Status::Connecting => "connecting",
+            Status::Connected => "connected",
+        }
+    }
+}
+
+/// The server a user gets when they have set none of their own. Kept out of the UI on purpose:
+/// the settings field seeds empty, `snapshot_of` reports it empty, and an invite minted on it is a
+/// bare room code, so nobody has to see (or retype) somebody else's hostname to listen together.
+/// An empty `server_url` means "this one", resolved at connect time in [`LtSession::run`], so
+/// clearing the field is how a self-hoster comes back to the default.
+const DEFAULT_SERVER: &str = "wss://fedora-1.tail9c4985.ts.net/ws";
+
+#[derive(Default)]
+struct Inner {
+    status_connected: bool,
+    connecting: bool,
+    /// We've asked to create/join and are waiting for the room to materialize (host approval).
+    /// Drives the guest's "waiting" UI and blocks duplicate requests.
+    requesting: bool,
+    role: Role,
+    server_url: String,
+    room_code: Option<String>,
+    my_id: Option<String>,
+    session_token: Option<String>,
+    users: Vec<User>,
+    current_track: Option<Track>,
+    queue: Vec<Track>,
+    pending_joins: Vec<(String, String)>, // (user_id, username)
+    suggestions: Vec<Suggestion>,
+    outbound: Option<mpsc::UnboundedSender<ClientMessage>>,
+}
+
+impl Default for Role {
+    fn default() -> Self {
+        Role::None
+    }
+}
+
+impl Inner {
+    fn status(&self) -> Status {
+        if self.status_connected {
+            Status::Connected
+        } else if self.connecting {
+            Status::Connecting
+        } else {
+            Status::Disconnected
+        }
+    }
+
+    /// Clear all room membership (leave / kicked / fatal). Keeps `server_url`.
+    fn reset_room(&mut self) {
+        self.role = Role::None;
+        self.room_code = None;
+        self.my_id = None;
+        self.session_token = None;
+        self.users.clear();
+        self.current_track = None;
+        self.queue.clear();
+        self.pending_joins.clear();
+        self.suggestions.clear();
+        self.outbound = None;
+        self.status_connected = false;
+        self.connecting = false;
+        self.requesting = false;
+    }
+
+    fn absorb(&mut self, state: &RoomState) {
+        self.room_code = Some(state.room_code.clone());
+        self.users = state.users.clone();
+        self.current_track = state.current_track.clone();
+        self.queue = state.queue.clone();
+    }
+}
+
+pub struct LtSession {
+    app: AppHandle,
+    inner: Arc<Mutex<Inner>>,
+    sync_tx: mpsc::UnboundedSender<SyncCommand>,
+    /// Bumped to cancel the running connection loop (leave / new connection).
+    gen: AtomicU64,
+}
+
+impl LtSession {
+    /// Create the session. Returns the receiver the bridge task drains to drive guest playback.
+    pub fn new(
+        app: AppHandle,
+        server_url: String,
+    ) -> (Arc<Self>, mpsc::UnboundedReceiver<SyncCommand>) {
+        // rustls needs a process-wide crypto provider before the first `wss://` handshake.
+        let _ = rustls::crypto::ring::default_provider().install_default();
+        let (sync_tx, sync_rx) = mpsc::unbounded_channel();
+        let inner = Inner { server_url, ..Inner::default() };
+        let s = Arc::new(LtSession {
+            app,
+            inner: Arc::new(Mutex::new(inner)),
+            sync_tx,
+            gen: AtomicU64::new(0),
+        });
+        (s, sync_rx)
+    }
+
+    // --- public API (called by commands + AppState) -----------------------------------------
+
+    pub async fn set_server_url(&self, url: String) {
+        self.inner.lock().await.server_url = url;
+        self.emit_state().await;
+    }
+
+    /// True when we're in a room in any role.
+    pub async fn in_room(&self) -> bool {
+        self.inner.lock().await.role != Role::None
+    }
+
+    /// True when we're a guest in a room — the caller should block local playback control.
+    pub async fn is_guest(&self) -> bool {
+        self.inner.lock().await.role == Role::Guest
+    }
+
+    pub async fn is_host(&self) -> bool {
+        self.inner.lock().await.role == Role::Host
+    }
+
+    /// Our own display name in the room (None outside one) — stamps the host's queue adds.
+    pub async fn my_username(&self) -> Option<String> {
+        let inner = self.inner.lock().await;
+        let me = inner.my_id.as_deref()?;
+        inner.users.iter().find(|u| u.user_id == me).map(|u| u.username.clone())
+    }
+
+    /// Host: broadcast a playback action to the room. No-op unless we're the host and connected.
+    pub async fn broadcast_playback(&self, mut p: Playback) {
+        keep_shareable(&mut p);
+        let inner = self.inner.lock().await;
+        if inner.role != Role::Host {
+            return;
+        }
+        if let Some(tx) = &inner.outbound {
+            let _ = tx.send(ClientMessage::Playback(p));
+        }
+    }
+
+    /// Send any client message on the current connection (best-effort).
+    async fn send(&self, msg: ClientMessage) {
+        if let Some(tx) = &self.inner.lock().await.outbound {
+            let _ = tx.send(msg);
+        }
+    }
+
+    pub async fn create_room(self: &Arc<Self>, username: String) {
+        self.start(ClientMessage::CreateRoom { username }).await;
+    }
+
+    pub async fn join_room(self: &Arc<Self>, code: String, username: String) {
+        self.start(ClientMessage::JoinRoom { room_code: code, username }).await;
+    }
+
+    pub async fn approve_join(&self, user_id: String) {
+        self.send(ClientMessage::ApproveJoin { user_id }).await;
+    }
+    pub async fn reject_join(&self, user_id: String) {
+        // Drop it from our local pending list immediately (optimistic).
+        {
+            let mut inner = self.inner.lock().await;
+            inner.pending_joins.retain(|(id, _)| id != &user_id);
+        }
+        self.send(ClientMessage::RejectJoin { user_id }).await;
+        self.emit_state().await;
+    }
+    pub async fn kick(&self, user_id: String) {
+        self.send(ClientMessage::KickUser { user_id }).await;
+    }
+    pub async fn transfer_host(&self, user_id: String) {
+        self.send(ClientMessage::TransferHost { user_id }).await;
+    }
+    pub async fn suggest(&self, track: Track) {
+        if !shareable(&track) {
+            return;
+        }
+        self.send(ClientMessage::Suggest { track }).await;
+    }
+    /// Host: approve a suggestion. Returns its track so the caller can add it to the real playback
+    /// queue (the host owns the queue; the server just notifies the suggester).
+    pub async fn approve_suggestion(&self, id: String) -> Option<Track> {
+        let track = {
+            let mut inner = self.inner.lock().await;
+            let idx = inner.suggestions.iter().position(|s| s.id == id);
+            idx.map(|i| inner.suggestions.remove(i).track)
+        };
+        self.send(ClientMessage::ApproveSuggestion { id }).await;
+        self.emit_state().await;
+        track
+    }
+    pub async fn reject_suggestion(&self, id: String) {
+        {
+            let mut inner = self.inner.lock().await;
+            inner.suggestions.retain(|s| s.id != id);
+        }
+        self.send(ClientMessage::RejectSuggestion { id }).await;
+        self.emit_state().await;
+    }
+    pub async fn request_sync(&self) {
+        self.send(ClientMessage::RequestSync).await;
+    }
+
+    /// Leave the room and tear down the connection.
+    pub async fn leave(&self) {
+        self.send(ClientMessage::LeaveRoom).await;
+        self.gen.fetch_add(1, Ordering::SeqCst); // cancel the connection loop
+        self.inner.lock().await.reset_room();
+        let _ = self.sync_tx.send(SyncCommand::Release);
+        self.emit_state().await;
+    }
+
+    /// A snapshot of the client-side LT state for the UI.
+    pub async fn snapshot(&self) -> serde_json::Value {
+        let inner = self.inner.lock().await;
+        Self::snapshot_of(&inner)
+    }
+
+    // --- connection loop --------------------------------------------------------------------
+
+    async fn start(self: &Arc<Self>, initial: ClientMessage) {
+        // Cancel any existing connection, reset, then spawn a fresh loop.
+        self.gen.fetch_add(1, Ordering::SeqCst);
+        {
+            let mut inner = self.inner.lock().await;
+            inner.reset_room();
+            inner.connecting = true;
+            inner.requesting = true; // waiting for the room to materialize
+        }
+        self.emit_state().await;
+        let gen = self.gen.load(Ordering::SeqCst);
+        let me = self.clone();
+        tokio::spawn(async move {
+            me.run(gen, initial).await;
+        });
+    }
+
+    async fn run(self: Arc<Self>, gen: u64, initial: ClientMessage) {
+        let mut next_msg = initial;
+        let mut attempt: u32 = 0;
+        loop {
+            if self.gen.load(Ordering::SeqCst) != gen {
+                return;
+            }
+            let mut url = self.inner.lock().await.server_url.clone();
+            if url.is_empty() {
+                url = DEFAULT_SERVER.to_string();
+            }
+            {
+                let mut inner = self.inner.lock().await;
+                inner.connecting = true;
+                inner.status_connected = false;
+            }
+            self.emit_state().await;
+
+            match connect_ws(&url).await {
+                Ok(ws) => {
+                    // A connect that outlived its cancellation must not touch shared state:
+                    // `leave()` and a second Host/Join click bump `gen`, but neither can interrupt
+                    // an in-flight connect. Without this check a late arrival overwrites the live
+                    // connection's `outbound` sender and re-sends its stale CreateRoom/JoinRoom on
+                    // a second socket.
+                    if self.gen.load(Ordering::SeqCst) != gen {
+                        return;
+                    }
+                    attempt = 0;
+                    let (mut sink, mut read) = ws.split();
+                    let (otx, mut orx) = mpsc::unbounded_channel::<ClientMessage>();
+                    {
+                        let mut inner = self.inner.lock().await;
+                        inner.outbound = Some(otx.clone());
+                        inner.connecting = false;
+                        inner.status_connected = true;
+                    }
+                    let _ = otx.send(next_msg.clone());
+                    self.emit_state().await;
+
+                    // Writer: drain outbound → socket.
+                    let writer = tokio::spawn(async move {
+                        while let Some(m) = orx.recv().await {
+                            if sink.send(Message::Text(m.to_json())).await.is_err() {
+                                break;
+                            }
+                        }
+                    });
+                    // App-level keepalive.
+                    let ping = {
+                        let tx = otx.clone();
+                        tokio::spawn(async move {
+                            loop {
+                                tokio::time::sleep(Duration::from_secs(25)).await;
+                                if tx.send(ClientMessage::Ping).is_err() {
+                                    break;
+                                }
+                            }
+                        })
+                    };
+
+                    let mut last_heard = std::time::Instant::now();
+                    loop {
+                        // Poll the cancel generation even when idle: `leave()` bumps it but the
+                        // server doesn't close the socket on LeaveRoom, so we'd otherwise park here.
+                        let next = tokio::select! {
+                            biased;
+                            next = read.next() => next,
+                            _ = tokio::time::sleep(Duration::from_millis(500)) => {
+                                if self.gen.load(Ordering::SeqCst) != gen {
+                                    break;
+                                }
+                                // The server answers every ping, so this much silence is a dead
+                                // socket (sleep/resume, a network switch) that would otherwise
+                                // sit here, looking connected, until TCP gives up minutes later.
+                                if last_heard.elapsed() > SILENCE_LIMIT {
+                                    tracing::warn!("listen-together: server went silent, reconnecting");
+                                    break;
+                                }
+                                continue;
+                            }
+                        };
+                        if self.gen.load(Ordering::SeqCst) != gen {
+                            break;
+                        }
+                        let Some(next) = next else { break }; // stream ended
+                        last_heard = std::time::Instant::now();
+                        match next {
+                            Ok(Message::Text(t)) => {
+                                match serde_json::from_str::<ServerMessage>(&t) {
+                                    Ok(sm) => {
+                                        if self.handle(sm).await {
+                                            break; // fatal (kicked / rejected) — stop reading
+                                        }
+                                    }
+                                    Err(e) => tracing::debug!(error = %e, "bad server message"),
+                                }
+                            }
+                            Ok(Message::Close(_)) | Err(_) => break,
+                            _ => {}
+                        }
+                    }
+                    ping.abort();
+                    // Only if we still own the session: a newer connection may have replaced us.
+                    if self.gen.load(Ordering::SeqCst) == gen {
+                        self.inner.lock().await.outbound = None;
+                    }
+                    // Let the writer send what is queued and stop once the last sender is gone.
+                    // `leave()` queues LeaveRoom right before cancelling us, and aborting could
+                    // lose it: the server then took the leave for a dropped socket, kept the room
+                    // up and handed the host role on instead of closing it. Bounded, because a
+                    // half-open socket can block a write.
+                    drop(otx);
+                    let mut writer = writer;
+                    if tokio::time::timeout(Duration::from_secs(2), &mut writer).await.is_err() {
+                        writer.abort();
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "listen-together connect failed");
+                }
+            }
+
+            if self.gen.load(Ordering::SeqCst) != gen {
+                return;
+            }
+            // Reconnect only if we were in a room (have a token). Fresh create/join that never
+            // landed just fails.
+            let token = self.inner.lock().await.session_token.clone();
+            let Some(t) = token else {
+                self.close_locally("Couldn't reach the Listen Together server.").await;
+                return;
+            };
+            attempt += 1;
+            if attempt > 15 {
+                self.close_locally("Lost connection to the room.").await;
+                return;
+            }
+            {
+                let mut inner = self.inner.lock().await;
+                inner.status_connected = false;
+                inner.connecting = true;
+            }
+            self.emit_state().await;
+            next_msg = ClientMessage::Reconnect { session_token: t };
+            tokio::time::sleep(backoff_delay(attempt)).await;
+        }
+    }
+
+    /// Handle one server message. Returns `true` if the connection should close (fatal).
+    async fn handle(&self, mut sm: ServerMessage) -> bool {
+        sanitize(&mut sm);
+        match sm {
+            ServerMessage::Pong => return false,
+
+            ServerMessage::RoomCreated { room_code: _, user_id, session_token, state } => {
+                {
+                    let mut inner = self.inner.lock().await;
+                    inner.role = Role::Host;
+                    inner.requesting = false;
+                    inner.my_id = Some(user_id);
+                    inner.session_token = Some(session_token);
+                    inner.absorb(&state);
+                }
+                // Seed the room with whatever we're currently playing.
+                let _ = self.sync_tx.send(SyncCommand::HostSeed);
+            }
+
+            ServerMessage::JoinRequest { user_id, username } => {
+                let is_new = {
+                    let mut inner = self.inner.lock().await;
+                    let new = !inner.pending_joins.iter().any(|(id, _)| id == &user_id);
+                    if new {
+                        inner.pending_joins.push((user_id, username.clone()));
+                    }
+                    new
+                };
+                if is_new {
+                    self.emit_notice(&format!("{username} wants to join")).await;
+                }
+            }
+
+            ServerMessage::JoinApproved { user_id, session_token, state } => {
+                {
+                    let mut inner = self.inner.lock().await;
+                    inner.role = Role::Guest;
+                    inner.requesting = false;
+                    inner.my_id = Some(user_id);
+                    inner.session_token = Some(session_token);
+                    inner.absorb(&state);
+                }
+                let _ = self.sync_tx.send(SyncCommand::ApplyState(state));
+            }
+
+            ServerMessage::JoinRejected { reason } => {
+                self.emit_notice(&reason).await;
+                self.close_locally("").await;
+                return true;
+            }
+
+            ServerMessage::Reconnected { user_id, is_host, state } => {
+                {
+                    let mut inner = self.inner.lock().await;
+                    inner.role = if is_host { Role::Host } else { Role::Guest };
+                    inner.requesting = false;
+                    inner.my_id = Some(user_id);
+                    inner.absorb(&state);
+                }
+                if !is_host {
+                    let _ = self.sync_tx.send(SyncCommand::ApplyState(state));
+                }
+            }
+
+            ServerMessage::UserJoined { user } => {
+                let mut inner = self.inner.lock().await;
+                inner.pending_joins.retain(|(id, _)| id != &user.user_id);
+                if !inner.users.iter().any(|u| u.user_id == user.user_id) {
+                    inner.users.push(user);
+                }
+            }
+            ServerMessage::UserLeft { user_id } => {
+                let mut inner = self.inner.lock().await;
+                inner.users.retain(|u| u.user_id != user_id);
+                // Also covers a joiner who vanished while still pending: without this the host's
+                // request list keeps a row that approving can never clear.
+                inner.pending_joins.retain(|(id, _)| id != &user_id);
+            }
+            ServerMessage::UserDisconnected { user_id } => {
+                let mut inner = self.inner.lock().await;
+                if let Some(u) = inner.users.iter_mut().find(|u| u.user_id == user_id) {
+                    u.is_connected = false;
+                }
+            }
+            ServerMessage::UserReconnected { user_id } => {
+                let mut inner = self.inner.lock().await;
+                if let Some(u) = inner.users.iter_mut().find(|u| u.user_id == user_id) {
+                    u.is_connected = true;
+                }
+            }
+
+            ServerMessage::HostChanged { host_id } => {
+                let became_host = {
+                    let mut inner = self.inner.lock().await;
+                    for u in &mut inner.users {
+                        u.is_host = u.user_id == host_id;
+                    }
+                    let me = inner.my_id.clone();
+                    let became = me.as_deref() == Some(host_id.as_str());
+                    inner.role = if became { Role::Host } else { Role::Guest };
+                    if !became {
+                        // The server re-sends these to the new host; ours can't be acted on now.
+                        inner.pending_joins.clear();
+                        inner.suggestions.clear();
+                    }
+                    became
+                };
+                if became_host {
+                    // We now control playback locally — stop applying remote sync.
+                    let _ = self.sync_tx.send(SyncCommand::Release);
+                    self.emit_notice("You're the host now.").await;
+                }
+            }
+
+            ServerMessage::SyncPlayback(p) => {
+                // Only guests apply; the host originated it (server excludes us anyway).
+                if self.inner.lock().await.role == Role::Guest {
+                    self.apply_playback(p).await;
+                }
+            }
+
+            ServerMessage::SyncState { state } => {
+                {
+                    let mut inner = self.inner.lock().await;
+                    inner.absorb(&state);
+                }
+                if self.inner.lock().await.role == Role::Guest {
+                    let _ = self.sync_tx.send(SyncCommand::ApplyState(state));
+                }
+            }
+
+            ServerMessage::SuggestionReceived { suggestion } => {
+                // Spotify-Jam-style: guest adds go straight into the queue — no host approval
+                // step. Stamp who added it, tell the server it's handled (notifies the guest),
+                // and hand the track to the bridge to insert at the guest boundary.
+                let mut track = suggestion.track;
+                if !shareable(&track) {
+                    self.send(ClientMessage::RejectSuggestion { id: suggestion.id }).await;
+                    return false;
+                }
+                track.queued_by = Some(suggestion.from_username.clone());
+                let title = track.title.clone();
+                self.send(ClientMessage::ApproveSuggestion { id: suggestion.id }).await;
+                let _ = self.sync_tx.send(SyncCommand::GuestAdd { track });
+                self.emit_notice(&format!("{} added {title}", suggestion.from_username)).await;
+            }
+            ServerMessage::SuggestionApproved { .. } => {
+                self.emit_notice("Added to the session queue.").await;
+            }
+            ServerMessage::SuggestionRejected { reason, .. } => {
+                self.emit_notice(&reason).await;
+            }
+
+            ServerMessage::Kicked { reason } => {
+                self.emit_notice(&reason).await;
+                self.close_locally("").await;
+                return true;
+            }
+            ServerMessage::Error { code, message } => {
+                self.emit_notice(&message).await;
+                // Any error that arrives before we're actually in a room means create/join failed:
+                // close instead of leaving the UI spinning on "waiting for the host". Once in a
+                // room, only a dead session is fatal (`not_host` etc. are just refusals).
+                let in_room = self.inner.lock().await.role != Role::None;
+                if !in_room || code == "session_expired" {
+                    self.close_locally("").await;
+                    return true;
+                }
+            }
+        }
+        self.emit_state().await;
+        false
+    }
+
+    /// Translate a broadcast playback action into a bridge command (guest side).
+    async fn apply_playback(&self, p: Playback) {
+        // Keep our mirror of current track/queue current so the UI reflects it.
+        {
+            let mut inner = self.inner.lock().await;
+            match p.kind {
+                PlaybackKind::ChangeTrack => {
+                    inner.current_track = p.track.clone();
+                    if let Some(q) = &p.queue {
+                        inner.queue = q.clone();
+                    }
+                }
+                PlaybackKind::SyncQueue => {
+                    if let Some(q) = &p.queue {
+                        inner.queue = q.clone();
+                    }
+                }
+                _ => {}
+            }
+        }
+        let cmd = match p.kind {
+            PlaybackKind::Play => Some(SyncCommand::Play { position_ms: p.position_ms }),
+            PlaybackKind::Pause => Some(SyncCommand::Pause { position_ms: p.position_ms }),
+            PlaybackKind::Seek => Some(SyncCommand::Seek { position_ms: p.position_ms }),
+            PlaybackKind::ChangeTrack => Some(SyncCommand::ChangeTrack {
+                track: p.track,
+                position_ms: p.position_ms,
+                playing: p.playing,
+                queue: p.queue.unwrap_or_default(),
+            }),
+            PlaybackKind::SyncQueue => p.queue.map(|queue| SyncCommand::SyncQueue { queue }),
+            PlaybackKind::SetVolume => None,
+        };
+        if let Some(cmd) = cmd {
+            let _ = self.sync_tx.send(cmd);
+        }
+    }
+
+    /// Tear down room membership locally (no server round-trip). `notice` optional.
+    async fn close_locally(&self, notice: &str) {
+        if !notice.is_empty() {
+            self.emit_notice(notice).await;
+        }
+        self.gen.fetch_add(1, Ordering::SeqCst);
+        self.inner.lock().await.reset_room();
+        let _ = self.sync_tx.send(SyncCommand::Release);
+        self.emit_state().await;
+    }
+
+    // --- UI events --------------------------------------------------------------------------
+
+    fn snapshot_of(inner: &Inner) -> serde_json::Value {
+        let role = match inner.role {
+            Role::None => "none",
+            Role::Host => "host",
+            Role::Guest => "guest",
+        };
+        serde_json::json!({
+            "status": inner.status().as_str(),
+            "role": role,
+            "requesting": inner.requesting,
+            "roomCode": inner.room_code,
+            "myId": inner.my_id,
+            "serverUrl": inner.server_url,
+            // Sent so the settings panel can show what "the default" actually is once the user
+            // opens it. `serverUrl` stays empty until they pick their own, which is what keeps the
+            // address off every other screen.
+            "defaultServerUrl": DEFAULT_SERVER,
+            "users": inner.users,
+            "currentTrack": inner.current_track,
+            "queue": inner.queue,
+            "pendingJoins": inner.pending_joins.iter()
+                .map(|(id, name)| serde_json::json!({ "userId": id, "username": name }))
+                .collect::<Vec<_>>(),
+            "suggestions": inner.suggestions,
+        })
+    }
+
+    async fn emit_state(&self) {
+        let snap = { Self::snapshot_of(&*self.inner.lock().await) };
+        let _ = self.app.emit("lt-state", snap);
+    }
+
+    async fn emit_notice(&self, msg: &str) {
+        let _ = self.app.emit("lt-notice", msg);
+    }
+}
+
+/// Whether a track may cross the wire: only a YouTube video id. Ids come from the relay and from
+/// every other member of the room, and the player resolves a `LOCAL:<path>` id straight to a file,
+/// so a peer could point us at any path. On Windows a UNC path (`\\host\share`) makes the OS
+/// connect to that host and offer the user's NTLM credentials. Outbound, the same rule keeps our
+/// local paths, and the username in them, off the relay; guests couldn't play the file anyway.
+fn shareable(t: &Track) -> bool {
+    t.id.len() == 11 && t.id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+}
+
+fn keep_shareable(p: &mut Playback) {
+    p.track = p.track.take().filter(shareable);
+    if let Some(q) = &mut p.queue {
+        q.retain(shareable);
+    }
+}
+
+/// Drop every track that isn't [`shareable`] before anything reads the message. Suggestions are
+/// checked where they're handled, so a bad one can be rejected rather than left pending. No
+/// wildcard arm: a new message that carries tracks has to be decided on here.
+fn sanitize(sm: &mut ServerMessage) {
+    match sm {
+        ServerMessage::RoomCreated { state, .. }
+        | ServerMessage::JoinApproved { state, .. }
+        | ServerMessage::Reconnected { state, .. }
+        | ServerMessage::SyncState { state } => {
+            state.current_track = state.current_track.take().filter(shareable);
+            state.queue.retain(shareable);
+        }
+        ServerMessage::SyncPlayback(p) => keep_shareable(p),
+        ServerMessage::SuggestionReceived { .. }
+        | ServerMessage::Pong
+        | ServerMessage::JoinRequest { .. }
+        | ServerMessage::JoinRejected { .. }
+        | ServerMessage::UserJoined { .. }
+        | ServerMessage::UserLeft { .. }
+        | ServerMessage::UserDisconnected { .. }
+        | ServerMessage::UserReconnected { .. }
+        | ServerMessage::HostChanged { .. }
+        | ServerMessage::SuggestionApproved { .. }
+        | ServerMessage::SuggestionRejected { .. }
+        | ServerMessage::Kicked { .. }
+        | ServerMessage::Error { .. } => {}
+    }
+}
+
+/// How long one address gets to complete a TCP handshake before we move to the next.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(4);
+
+/// No frame from the server for this long means the connection is dead. Pings go out every 25s
+/// and each gets a Pong, so this is two missed answers plus slack.
+const SILENCE_LIMIT: Duration = Duration::from_secs(60);
+
+/// Open the WebSocket, giving every resolved address its own short deadline.
+///
+/// `tokio_tungstenite::connect_async` hands `host:port` straight to `TcpStream::connect`, which
+/// walks the resolved addresses one at a time and waits out the OS SYN timeout (~127s on Linux) on
+/// each dead one. Tailscale Funnel publishes three AAAA and three A records for a node, and the
+/// AAAA ingress is a black hole from some networks; glibc sorts IPv6 first, so a host with working
+/// IPv6 burned six minutes on dead addresses before ever trying the IPv4 that works. Same reason a
+/// join request never reached the host: the socket carrying it was still in a SYN retry.
+async fn connect_ws(url: &str) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, WsError> {
+    let req = url.into_client_request()?;
+    let uri = req.uri().clone();
+    let host = uri
+        .host()
+        .ok_or(WsError::Url(tokio_tungstenite::tungstenite::error::UrlError::NoHostName))?;
+    let port = uri.port_u16().unwrap_or(if uri.scheme_str() == Some("ws") { 80 } else { 443 });
+
+    let addrs: Vec<SocketAddr> = tokio::net::lookup_host((host, port)).await?.collect();
+    let socket = connect_first(&addrs).await.map_err(WsError::Io)?;
+
+    let (ws, _) = tokio_tungstenite::client_async_tls_with_config(req, socket, None, None).await?;
+    Ok(ws)
+}
+
+/// First address that completes a handshake within [`CONNECT_TIMEOUT`], in order.
+async fn connect_first(addrs: &[SocketAddr]) -> std::io::Result<TcpStream> {
+    let mut last: Option<std::io::Error> = None;
+    for &addr in addrs {
+        match tokio::time::timeout(CONNECT_TIMEOUT, TcpStream::connect(addr)).await {
+            Ok(Ok(s)) => return Ok(s),
+            Ok(Err(e)) => {
+                tracing::debug!(%addr, error = %e, "listen-together: address refused");
+                last = Some(e);
+            }
+            Err(_) => {
+                tracing::debug!(%addr, "listen-together: address timed out");
+                last = Some(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    format!("{addr} did not answer in {CONNECT_TIMEOUT:?}"),
+                ));
+            }
+        }
+    }
+    Err(last.unwrap_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::AddrNotAvailable, "host resolved to nothing")
+    }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn track(id: &str) -> Track {
+        Track {
+            id: id.into(),
+            title: String::new(),
+            artist: String::new(),
+            thumbnail: None,
+            duration_ms: 0,
+            queued_by: None,
+        }
+    }
+
+    #[test]
+    fn only_video_ids_cross_the_wire() {
+        let mut p = Playback::new(PlaybackKind::ChangeTrack);
+        p.track = Some(track(r"LOCAL:\\evil\share\a.mp3"));
+        p.queue =
+            Some(vec![track("dQw4w9WgXcQ"), track("LOCAL:/home/me/a.mp3"), track("dQw4w9WgXc")]);
+        let mut sm = ServerMessage::SyncPlayback(p.clone());
+        sanitize(&mut sm);
+        let ServerMessage::SyncPlayback(got) = sm else { unreachable!() };
+        assert!(got.track.is_none());
+        assert_eq!(
+            got.queue.unwrap().iter().map(|t| t.id.as_str()).collect::<Vec<_>>(),
+            ["dQw4w9WgXcQ"]
+        );
+
+        // Outbound runs the same filter.
+        keep_shareable(&mut p);
+        assert!(p.track.is_none());
+        assert_eq!(p.queue.unwrap().len(), 1);
+
+        assert!(!shareable(&track("../../etc/pas")));
+        assert!(shareable(&track("a-B_c123456")));
+    }
+
+    /// The bug: a dead address ahead of a live one used to cost a full OS SYN timeout (~127s on
+    /// Linux, six minutes across Funnel's three AAAA records). It must now fall through fast.
+    #[tokio::test]
+    async fn dead_address_does_not_block_the_live_one() {
+        let live = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let live_addr = live.local_addr().unwrap();
+        // 198.51.100.0/24 is TEST-NET-2: routed nowhere, so this either hangs (→ our timeout) or
+        // errors out, which is exactly the fall-through we want to exercise.
+        let dead: SocketAddr = "198.51.100.1:443".parse().unwrap();
+
+        let t = std::time::Instant::now();
+        let s = connect_first(&[dead, live_addr]).await.expect("should reach the live address");
+        assert_eq!(s.peer_addr().unwrap(), live_addr);
+        assert!(
+            t.elapsed() < CONNECT_TIMEOUT * 2,
+            "fell through in {:?}, expected under {:?}",
+            t.elapsed(),
+            CONNECT_TIMEOUT * 2
+        );
+    }
+
+    #[tokio::test]
+    async fn no_addresses_is_an_error_not_a_hang() {
+        assert!(connect_first(&[]).await.is_err());
+    }
+}
+
+/// Exponential backoff, capped at 32s (context/19 Part B §1: the client's real ceiling).
+fn backoff_delay(attempt: u32) -> Duration {
+    let shift = attempt.clamp(1, 6) - 1; // 0..=5 → 1,2,4,8,16,32
+    Duration::from_secs(1u64 << shift)
+}

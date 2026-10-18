@@ -1,552 +1,2444 @@
-use rusqlite::{params, Connection};
-use std::path::PathBuf;
+//! Local SQLite state. context/11 §state. `rusqlite` (bundled) behind a Mutex — one file, low
+//! write volume, no async pool needed (plan decision).
+
 use std::sync::Mutex;
-use tauri::Manager;
 
-static DB_WRITE_CONN: std::sync::OnceLock<Mutex<Connection>> = std::sync::OnceLock::new();
-static DB_READ_CONN: std::sync::OnceLock<Mutex<Connection>> = std::sync::OnceLock::new();
+use md5::{Digest, Md5};
+use rusqlite::Connection;
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-pub struct DbTrack {
-    pub id: i64,
-    pub title: String,
-    pub artist: String,
-    pub duration: String,
-    pub url: String,
-    pub cover: String,
-    pub media_type: Option<String>,
+/// Clearing the lyrics cache spares songs whose source was picked by hand in the lyrics footer (or
+/// their timing nudged): those are the user's choices, not a cache.
+// ponytail: the pin lives in the lyrics JSON rather than a column, it is read nowhere else.
+const CLEAR_LYRICS: &str =
+    "DELETE FROM lyrics_cache WHERE lyrics IS NULL OR json_extract(lyrics, '$.pinned') IS NOT 1";
+
+pub struct Db(Mutex<Connection>);
+
+/// The stored-account key (multi-account support): a stable per-Google-account identifier derived
+/// from the long-lived `SAPISID` cookie value, the one piece of the jar Google does not rotate.
+/// Versioned MD5 (the `md-5` crate is already here for the Last.fm signature), hex-encoded,
+/// deliberately not `DefaultHasher`, whose output Rust does not guarantee to stay stable across
+/// releases: a persisted key must survive toolchain upgrades. Not a security digest, just a stable
+/// identifier, and the SAPISID itself never appears in the key the UI gets to see.
+///
+/// `None` for a jar with no SAPISID, which is not a signed-in session at all: every caller needs
+/// to skip such a cookie rather than file it under a key shared with every other broken jar.
+pub fn account_key(session_cookie: &str) -> Option<String> {
+    let sapisid = innertube::cookie_sapisid(session_cookie)?;
+    let mut digest = Md5::new();
+    digest.update(b"veluna-google-account-v1");
+    digest.update(sapisid.as_bytes());
+    Some(format!("ga-{:x}", digest.finalize()))
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-pub struct DbPlaylist {
+/// One saved Google account. Canonical multi-account state; the `settings` rows `session_cookie`,
+/// `selected_identity_json`, `data_sync_id`, `account_json` and `visitor_data` remain as
+/// projections of the *active* account, so everything that read them before (startup bootstrap in
+/// lib.rs, `account_snapshot`, the channel switcher, legacy fallbacks) keeps working unchanged.
+#[derive(Debug, Clone)]
+pub struct StoredAccount {
     pub id: String,
-    pub name: String,
-    pub description: String,
-    pub custom_cover: Option<String>,
-    pub updated_at: Option<i64>,
-    pub tracks: Vec<DbTrack>,
+    pub session_cookie: String,
+    pub data_sync_id: Option<String>,
+    pub selected_identity_json: Option<String>,
+    pub account_json: Option<String>,
+    pub visitor_data: Option<String>,
+    pub added_at: i64,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-pub struct DbListeningEvent {
+/// Unix seconds. Lives here because every wall-clock value in the app is a column in this file
+/// (`expires_at`, `played_at`, `fetched_at`) or something stored alongside them.
+pub fn now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+/// One row of `import_matches`: a Spotify track and what it is on YouTube Music. `video_id` is
+/// `None` for a track that wasn't found. The JSON columns are whole `SongItem`s.
+pub struct ImportMatch {
+    pub video_id: Option<String>,
+    pub song_json: Option<String>,
+    pub tier: String,
+    pub candidates_json: Option<String>,
+    pub manual: bool,
+    pub updated_at: i64,
+}
+
+/// A cached stream URL with its expiry. Never a source of truth — purely a latency cache.
+pub struct CachedStream {
     pub url: String,
-    pub title: Option<String>,
-    pub artist: Option<String>,
-    pub played_at: String,
-    pub secs: i64,
+    pub itag: i64,
+    pub expires_at: i64,
+    /// Raw `loudnessDb` (main-client metadata) so a cache-hit replay still normalizes loudness.
+    pub loudness_db: Option<f64>,
+    /// YouTube's `musicVideoType` verdict, cached for the same reason: a hit skips `/player`, and
+    /// without it a replay inside the cache window can't tell the player view whether the track
+    /// has a music video. `None` on rows written before the column existed.
+    pub is_video: Option<bool>,
+    /// The watch-history ping (`videostatsPlaybackUrl` + the client that was issued it), cached for
+    /// the same reason again: a hit skips `/player`, and without it every replay inside the cache
+    /// window went unregistered. That included plenty of *first* listens, because the gapless
+    /// lookahead caches the next track and a non-gapless advance then re-resolves it. Issue #83.
+    pub ping_url: Option<String>,
+    pub ping_client: Option<String>,
+    /// The client whose URL this is ("WEB_REMIX", "VISIONOS", ...), so a replay can rebuild the
+    /// headers the URL was validated under (the User-Agent is per client; the wrong one is a 403)
+    /// and a failure toast can name it. `ping_client` is not a substitute: the orchestrator prefers
+    /// the *main* client's tracking block even when a fallback won the stream.
+    pub client: Option<String>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-pub struct DbTrackStat {
-    pub url: String,
-    pub title: String,
-    pub artist: String,
-    pub play_count: i64,
-    pub total_secs: i64,
-    pub first_seen: String,
-    pub last_played: String,
-}
-
-#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
-pub struct DbSearchResult {
-    pub title: String,
-    pub artist: String,
-    pub album: String,
-    pub path: String,
-}
-
-fn get_db_path(app: &tauri::AppHandle) -> PathBuf {
-    if let Ok(app_dir) = app.path().app_data_dir() {
-        let _ = std::fs::create_dir_all(&app_dir);
-        return app_dir.join("veluna.db");
-    }
-
-    // Fallback: standard config directory
-    if let Some(user_dir) = dirs_fallback() {
-        let dir = user_dir.join(".config").join("veluna");
-        let _ = std::fs::create_dir_all(&dir);
-        return dir.join("veluna.db");
-    }
-
-    PathBuf::from("veluna.db")
-}
-
-fn dirs_fallback() -> Option<PathBuf> {
-    #[cfg(target_os = "windows")]
-    {
-        std::env::var("APPDATA").ok().map(PathBuf::from)
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        std::env::var("HOME").ok().map(PathBuf::from)
-    }
-}
-
-pub fn init_db(app: &tauri::AppHandle) -> Result<(), String> {
-    let db_path = get_db_path(app);
-    let write_conn =
-        Connection::open(&db_path).map_err(|e| format!("Failed to open SQLite DB: {}", e))?;
-    let _ = write_conn.busy_timeout(std::time::Duration::from_millis(5000));
-
-    // Performance and integrity pragmas
-    write_conn
-        .execute_batch(
-            "
-        PRAGMA busy_timeout = 5000;
-        PRAGMA journal_mode = WAL;
-        PRAGMA synchronous = NORMAL;
-        PRAGMA foreign_keys = ON;
-
-        CREATE TABLE IF NOT EXISTS playlists (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            description TEXT NOT NULL DEFAULT '',
-            custom_cover TEXT,
-            updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
-        );
-
-        CREATE TABLE IF NOT EXISTS playlist_tracks (
-            playlist_id TEXT NOT NULL,
-            position INTEGER NOT NULL,
-            track_id INTEGER NOT NULL,
-            title TEXT NOT NULL,
-            artist TEXT NOT NULL,
-            duration TEXT NOT NULL,
-            url TEXT NOT NULL,
-            cover TEXT NOT NULL,
-            media_type TEXT,
-            PRIMARY KEY (playlist_id, position),
-            FOREIGN KEY (playlist_id) REFERENCES playlists(id) ON DELETE CASCADE
-        );
-
-        CREATE TABLE IF NOT EXISTS listening_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            url TEXT NOT NULL,
-            title TEXT NOT NULL DEFAULT '',
-            artist TEXT NOT NULL DEFAULT '',
-            played_at TEXT NOT NULL,
-            secs INTEGER NOT NULL DEFAULT 0
-        );
-
-        CREATE TABLE IF NOT EXISTS track_stats (
-            url TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
-            artist TEXT NOT NULL,
-            play_count INTEGER NOT NULL DEFAULT 0,
-            total_secs INTEGER NOT NULL DEFAULT 0,
-            first_seen TEXT NOT NULL,
-            last_played TEXT NOT NULL
-        );
-
-        CREATE TABLE IF NOT EXISTS lyrics_cache (
-            cache_key TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
-            artist TEXT NOT NULL,
-            lrc_json TEXT NOT NULL,
-            cached_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
-        );
-
-        CREATE VIRTUAL TABLE IF NOT EXISTS library_fts USING fts5(
-            title,
-            artist,
-            album,
-            path
-        );
-        ",
-        )
-        .map_err(|e| format!("Failed to initialize DB schema: {}", e))?;
-
-    let read_conn =
-        Connection::open(&db_path).map_err(|e| format!("Failed to open read SQLite DB: {}", e))?;
-    let _ = read_conn.busy_timeout(std::time::Duration::from_millis(5000));
-    read_conn
-        .execute_batch(
-            "
-        PRAGMA busy_timeout = 5000;
-        PRAGMA journal_mode = WAL;
-        PRAGMA synchronous = NORMAL;
-        PRAGMA foreign_keys = ON;
-        ",
-        )
-        .map_err(|e| format!("Failed to configure read DB connection: {}", e))?;
-
-    let _ = DB_WRITE_CONN.set(Mutex::new(write_conn));
-    let _ = DB_READ_CONN.set(Mutex::new(read_conn));
-    Ok(())
-}
-
-fn with_db<F, R>(f: F) -> Result<R, String>
-where
-    F: FnOnce(&Connection) -> Result<R, rusqlite::Error>,
-{
-    let conn_mutex = DB_READ_CONN.get().ok_or("Database not initialized")?;
-    let conn = conn_mutex.lock().unwrap_or_else(|p| p.into_inner());
-    f(&conn).map_err(|e| format!("Database error: {}", e))
-}
-
-fn with_db_mut<F, R>(f: F) -> Result<R, String>
-where
-    F: FnOnce(&mut Connection) -> Result<R, rusqlite::Error>,
-{
-    let conn_mutex = DB_WRITE_CONN.get().ok_or("Database not initialized")?;
-    let mut conn = conn_mutex.lock().unwrap_or_else(|p| p.into_inner());
-    f(&mut conn).map_err(|e| format!("Database error: {}", e))
-}
-
-pub fn save_playlist(p: DbPlaylist) -> Result<(), String> {
-    with_db_mut(|conn| {
-        let tx = conn.transaction()?;
-        tx.execute(
-            "INSERT INTO playlists (id, name, description, custom_cover, updated_at)
-             VALUES (?1, ?2, ?3, ?4, strftime('%s', 'now'))
-             ON CONFLICT(id) DO UPDATE SET
-                name = excluded.name,
-                description = excluded.description,
-                custom_cover = excluded.custom_cover,
-                updated_at = strftime('%s', 'now')",
-            params![p.id, p.name, p.description, p.custom_cover],
-        )?;
-
-        tx.execute(
-            "DELETE FROM playlist_tracks WHERE playlist_id = ?1",
-            params![p.id],
-        )?;
-
-        {
-            let mut stmt = tx.prepare(
-                "INSERT INTO playlist_tracks (playlist_id, position, track_id, title, artist, duration, url, cover, media_type)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)"
-            )?;
-            for (idx, t) in p.tracks.iter().enumerate() {
-                stmt.execute(params![
-                    p.id,
-                    idx as i64,
-                    t.id,
-                    t.title,
-                    t.artist,
-                    t.duration,
-                    t.url,
-                    t.cover,
-                    t.media_type
-                ])?;
+impl Db {
+    /// [`Db::open`], but a database that cannot be opened is moved aside and a fresh one is
+    /// created in its place.
+    ///
+    /// The file holds a cache plus a little UI state (queue, settings, play counts), and the
+    /// playlists kept on this machine. Losing it costs the user their resume position, their On
+    /// Repeat history and those playlists (still in the moved-aside copy). Failing to open it costs
+    /// them the whole app: `open` is called from Tauri's `setup`, before any window exists, so a
+    /// hard failure there is a process that starts and vanishes with nothing on screen. Between
+    /// those two, starting is worth more.
+    ///
+    /// The bad file is kept, never deleted, so a user who cares can be walked through recovering
+    /// rows from it. The name carries a timestamp so a repeated failure does not overwrite the
+    /// first (and most likely useful) copy.
+    ///
+    /// Only SQLite's own verdict that the file is damaged (`NotADatabase`, `DatabaseCorrupt`) moves
+    /// it. Anything else (locked, permissions, a missing directory) says nothing about the data,
+    /// and moving a healthy library aside for it would hand the user an empty one for nothing, so
+    /// that error is returned as is.
+    ///
+    /// Returns the error from the *second* attempt if even a fresh file will not open, because at
+    /// that point the problem is the directory or the disk, not the data.
+    pub fn open_or_quarantine(
+        path: &std::path::Path,
+    ) -> rusqlite::Result<(Self, Option<std::path::PathBuf>)> {
+        use rusqlite::ErrorCode::{DatabaseCorrupt, NotADatabase};
+        match Self::open(path) {
+            Ok(db) => Ok((db, None)),
+            Err(first)
+                if !matches!(first.sqlite_error_code(), Some(NotADatabase | DatabaseCorrupt)) =>
+            {
+                Err(first)
+            }
+            Err(first) => {
+                let stamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                let aside = path.with_extension(format!("corrupt-{stamp}.sqlite"));
+                tracing::error!(
+                    "cannot open {}: {first}. Moving it to {}",
+                    path.display(),
+                    aside.display()
+                );
+                // WAL leaves -wal and -shm beside the database. Move them too, or the fresh file
+                // inherits a journal that does not belong to it. Suffixed on the OsStr, not via
+                // `display()`, which is lossy on a non-UTF-8 path and would rename nothing.
+                for suffix in ["", "-wal", "-shm"] {
+                    let with = |p: &std::path::Path| {
+                        let mut s = p.as_os_str().to_owned();
+                        s.push(suffix);
+                        std::path::PathBuf::from(s)
+                    };
+                    let _ = std::fs::rename(with(path), with(&aside));
+                }
+                Self::open(path).map(|db| (db, Some(aside)))
             }
         }
-
-        tx.commit()?;
-        Ok(())
-    })
-}
-
-type PlaylistRow = (String, String, String, Option<String>, Option<i64>);
-
-pub fn get_all_playlists() -> Result<Vec<DbPlaylist>, String> {
-    with_db(|conn| {
-        let mut stmt = conn.prepare(
-            "SELECT id, name, description, custom_cover, updated_at FROM playlists ORDER BY updated_at DESC",
-        )?;
-        let playlist_rows: Vec<PlaylistRow> = stmt
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, String>(1)?,
-                    row.get::<_, String>(2)?,
-                    row.get::<_, Option<String>>(3)?,
-                    row.get::<_, Option<i64>>(4)?,
-                ))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let mut playlists = Vec::new();
-        let mut track_stmt = conn.prepare(
-            "SELECT track_id, title, artist, duration, url, cover, media_type
-             FROM playlist_tracks WHERE playlist_id = ?1 ORDER BY position ASC",
-        )?;
-
-        for (id, name, description, custom_cover, updated_at) in playlist_rows {
-            let tracks = track_stmt
-                .query_map(params![id], |row| {
-                    Ok(DbTrack {
-                        id: row.get(0)?,
-                        title: row.get(1)?,
-                        artist: row.get(2)?,
-                        duration: row.get(3)?,
-                        url: row.get(4)?,
-                        cover: row.get(5)?,
-                        media_type: row.get(6)?,
-                    })
-                })?
-                .collect::<Result<Vec<_>, _>>()?;
-
-            playlists.push(DbPlaylist {
-                id,
-                name,
-                description,
-                custom_cover,
-                updated_at,
-                tracks,
-            });
-        }
-        Ok(playlists)
-    })
-}
-
-pub fn delete_playlist(id: &str) -> Result<(), String> {
-    delete_playlists(&[id.to_string()])
-}
-
-pub fn delete_playlists(ids: &[String]) -> Result<(), String> {
-    if ids.is_empty() {
-        return Ok(());
     }
-    with_db_mut(|conn| {
+
+    pub fn open(path: &std::path::Path) -> rusqlite::Result<Self> {
+        let mut conn = Connection::open(path)?;
+        // This file is a cache plus a little UI state, and it is written on every volume nudge,
+        // pause, track change and queue edit. WAL keeps those off a full rollback journal, and
+        // `synchronous=NORMAL` drops the fsync per commit: a power cut can lose the last few
+        // seconds of "what was playing", which is the correct trade for a music player, and no
+        // crash of ours can corrupt the file either way. `journal_mode` answers with a row, so it
+        // is a query rather than a `pragma_update`.
+        let _ = conn.query_row("PRAGMA journal_mode=WAL", [], |r| r.get::<_, String>(0));
+        let _ = conn.pragma_update(None, "synchronous", "NORMAL");
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS stream_url_cache (
+                video_id    TEXT PRIMARY KEY,
+                url         TEXT NOT NULL,
+                itag        INTEGER NOT NULL,
+                expires_at  INTEGER NOT NULL,
+                loudness_db REAL,
+                is_video    INTEGER,
+                ping_url    TEXT,
+                ping_client TEXT
+            );
+            CREATE TABLE IF NOT EXISTS lyrics_cache (
+                video_id   TEXT PRIMARY KEY,
+                lyrics     TEXT,
+                fetched_at INTEGER NOT NULL
+            );
+            -- Listening history (#396): one row per play, kept for good. Like `local_playlists`
+            -- this is the user's own data, not a cache. `secs` is how long the song was actually
+            -- heard (pauses and seeks don't count), and it keeps growing while the song plays on
+            -- (see `AppState::hear`). The song itself lives once in `listen_songs`, as the latest
+            -- `SongItem` it was played as. Stats and On Repeat are both built from these two.
+            CREATE TABLE IF NOT EXISTS listens (
+                id        INTEGER PRIMARY KEY,
+                video_id  TEXT NOT NULL,
+                played_at INTEGER NOT NULL,
+                secs      INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS listens_played_at ON listens(played_at);
+            CREATE TABLE IF NOT EXISTS listen_songs (
+                video_id  TEXT PRIMARY KEY,
+                song_json TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS local_tracks (
+                path          TEXT PRIMARY KEY,
+                title         TEXT NOT NULL,
+                artist        TEXT NOT NULL,
+                album         TEXT NOT NULL,
+                album_key     TEXT NOT NULL,
+                album_artist  TEXT,
+                track_no      INTEGER NOT NULL,
+                duration_secs INTEGER NOT NULL,
+                cover         TEXT,
+                mtime         INTEGER NOT NULL,
+                disc_no       INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS local_tracks_album ON local_tracks(album_key);
+            CREATE TABLE IF NOT EXISTS playlist_track (
+                playlist_id TEXT NOT NULL,
+                video_id    TEXT NOT NULL,
+                PRIMARY KEY (playlist_id, video_id)
+            ) WITHOUT ROWID;
+            CREATE INDEX IF NOT EXISTS playlist_track_video ON playlist_track(video_id);
+            CREATE TABLE IF NOT EXISTS accounts (
+                id                     TEXT PRIMARY KEY,
+                session_cookie         TEXT NOT NULL,
+                data_sync_id           TEXT,
+                selected_identity_json TEXT,
+                account_json           TEXT,
+                visitor_data           TEXT,
+                added_at               INTEGER NOT NULL
+            );
+            -- Playlists kept on this machine, no account needed (issue #251). Unlike everything
+            -- above except `accounts`, this is the user's own data and not a cache: nothing
+            -- rebuilds it. AUTOINCREMENT on both so an id is never handed out twice: a shortcut,
+            -- a pin or an open page left pointing at a deleted playlist (or a removed row) must
+            -- not quietly land on whatever took its number.
+            CREATE TABLE IF NOT EXISTS local_playlists (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                title       TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                created_at  INTEGER NOT NULL,
+                updated_at  INTEGER NOT NULL
+            );
+            -- One row per track, in the order added (`id`). The row id is the track's
+            -- `set_video_id`, the same handle a YouTube playlist row carries for its removal.
+            -- `song_json` is the whole `SongItem`, so the playlist opens with no network at all.
+            CREATE TABLE IF NOT EXISTS local_playlist_tracks (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                playlist_id INTEGER NOT NULL,
+                video_id    TEXT NOT NULL,
+                song_json   TEXT NOT NULL,
+                added_at    INTEGER NOT NULL,
+                UNIQUE (playlist_id, video_id)
+            );
+            CREATE INDEX IF NOT EXISTS local_playlist_tracks_video
+                ON local_playlist_tracks(video_id);
+            -- Spotify import (#375): what each Spotify track turned out to be on YouTube Music,
+            -- keyed by Spotify's track id. A cache, apart from the `manual` rows: those are the
+            -- user's own picks, which every later import and "Update from Spotify" reuses.
+            -- `candidates_json` is kept only for rows that still need a look.
+            CREATE TABLE IF NOT EXISTS import_matches (
+                key             TEXT PRIMARY KEY,
+                video_id        TEXT,
+                song_json       TEXT,
+                tier            TEXT NOT NULL,
+                candidates_json TEXT,
+                manual          INTEGER NOT NULL DEFAULT 0,
+                updated_at      INTEGER NOT NULL
+            );
+            "#,
+        )?;
+        // Migrate pre-Phase-4 DBs that predate the loudness_db column. Errors ("duplicate column")
+        // on fresh DBs are expected and ignored — the cache is disposable anyway.
+        let _ = conn.execute("ALTER TABLE stream_url_cache ADD COLUMN loudness_db REAL", []);
+        // Same for the AlbumArtist tag, which older scans read but never stored. The SCAN_VERSION
+        // bump in local.rs is what refills it; this only makes the column exist.
+        let _ = conn.execute("ALTER TABLE local_tracks ADD COLUMN album_artist TEXT", []);
+        // And the disc number (issue #315), refilled the same way.
+        let _ = conn
+            .execute("ALTER TABLE local_tracks ADD COLUMN disc_no INTEGER NOT NULL DEFAULT 0", []);
+        // Same one-shot for the music-video verdict, except the rows that predate it have to go:
+        // a cache hit skips `/player`, so a NULL there reads as "no music video" for as long as
+        // the URL lives (hours). `execute` succeeds only on the launch that adds the column, so
+        // this wipes the stale rows once. The cache is disposable; the next play refills it.
+        if conn.execute("ALTER TABLE stream_url_cache ADD COLUMN is_video INTEGER", []).is_ok() {
+            let _ = conn.execute("DELETE FROM stream_url_cache", []);
+        }
+        // The watch-history ping, added for the same reason (issue #83). No wipe: a NULL here just
+        // means that one replay goes unregistered, which is exactly what every row did before.
+        let _ = conn.execute("ALTER TABLE stream_url_cache ADD COLUMN ping_url TEXT", []);
+        let _ = conn.execute("ALTER TABLE stream_url_cache ADD COLUMN ping_client TEXT", []);
+        // The resolving client, so a replay can rebuild its headers and name itself. Rows that
+        // predate it have neither, which is the bug, so wipe them once like `is_video` above.
+        if conn.execute("ALTER TABLE stream_url_cache ADD COLUMN client TEXT", []).is_ok() {
+            let _ = conn.execute("DELETE FROM stream_url_cache", []);
+        }
+        // Sweep dead stream URLs here as well as on write. `put_stream` only runs on a cache miss,
+        // so a session spent replaying cached tracks never triggers one, and the backlog that
+        // built up before anything pruned at all (1803 rows, 1772 of them expired, on a real
+        // install) would sit there until it happened to.
+        let _ = conn.execute("DELETE FROM stream_url_cache WHERE expires_at <= ?1", [now_secs()]);
+        // #329 put LRCLIB's search ahead of Netease, QQ and Kugou, but cached hits never expire, so
+        // every track they already answered would keep their lyrics. Drop those once; the next
+        // play asks the chain again. `user_version` is the once-marker, unused before this.
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap_or(0);
+        if version < 1 {
+            let _ = conn.execute(
+                "DELETE FROM lyrics_cache WHERE json_extract(lyrics, '$.source')
+                    IN ('Netease Cloud Music', 'QQ Music', 'Kugou')",
+                [],
+            );
+            let _ = conn.execute_batch("PRAGMA user_version = 1");
+        }
+        // v1.0.0: the Boidu switch became one entry in an ordered provider list, and word-timed
+        // providers joined the head of it. Boidu turned off carries over as `-boidu`. Cached hits
+        // never expire, so without a purge no song already played would ever reach the new ones.
+        if version < 2 {
+            let _ = conn.execute(
+                "INSERT OR IGNORE INTO settings(key, value) SELECT 'lyrics_providers', '-boidu'
+                    FROM settings WHERE key = 'lyrics_boidu' AND value = 'false'",
+                [],
+            );
+            let _ = conn.execute("DELETE FROM settings WHERE key = 'lyrics_boidu'", []);
+            let _ = conn.execute("DELETE FROM lyrics_cache", []);
+            let _ = conn.execute_batch("PRAGMA user_version = 2");
+        }
+        // #396: On Repeat's `plays` (a trailing month, a full `SongItem` per row) becomes
+        // `listens` + `listen_songs`, kept for good. Its rows carry over so the stats page opens on
+        // up to a month of history instead of nothing. Checked on every open rather than once per
+        // `user_version`: an older release run against the same file (a downgrade, or `cargo tauri
+        // dev` beside the installed app) recreates `plays` and fills it, and those plays belong in
+        // the history too. One transaction, so a crash halfway retries next launch.
+        if let Err(e) = migrate_plays(&mut conn) {
+            tracing::warn!(error = %e, "moving plays into listens failed, will retry");
+        }
+        // One-time migration of the pre-multi-account single session into `accounts`. The legacy
+        // settings rows stay in place as projections of the active account (see `StoredAccount`).
+        let legacy_cookie = conn
+            .query_row("SELECT value FROM settings WHERE key = 'session_cookie'", [], |r| {
+                r.get::<_, String>(0)
+            })
+            .ok();
+        if let (Some(cookie), Some(id)) =
+            (legacy_cookie.as_deref(), legacy_cookie.as_deref().and_then(account_key))
+        {
+            let existing: i64 =
+                conn.query_row("SELECT COUNT(*) FROM accounts", [], |r| r.get(0)).unwrap_or(0);
+            if existing == 0 {
+                let get = |key: &str| -> Option<String> {
+                    conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get(0))
+                        .ok()
+                };
+                let _ = conn.execute(
+                    "INSERT OR IGNORE INTO accounts(id, session_cookie, data_sync_id, \
+                     selected_identity_json, account_json, visitor_data, added_at) \
+                     VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    rusqlite::params![
+                        id,
+                        cookie,
+                        get("data_sync_id"),
+                        get("selected_identity_json"),
+                        get("account_json"),
+                        get("visitor_data"),
+                        now_secs()
+                    ],
+                );
+                let _ = conn.execute(
+                    "INSERT INTO settings(key, value) VALUES('active_account', ?1) \
+                     ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                    [id],
+                );
+            }
+        }
+        // An account's id is derived from its own cookie, so any change to `account_key` (the
+        // pre-release SHA-1 scheme was one) strands rows under keys the app no longer computes and
+        // the same Google account turns up twice in the menu. Recompute every row's key from its
+        // own cookie and fold the row onto it. Idempotent: once the ids agree this is one scan.
+        // The statement must be dropped before the writes (rusqlite borrows the connection).
+        let rows: Vec<(String, String, i64)> = {
+            let mut found = Vec::new();
+            if let Ok(mut stmt) = conn.prepare("SELECT id, session_cookie, added_at FROM accounts")
+            {
+                if let Ok(rows) = stmt.query_map([], |r| {
+                    Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, i64>(2)?))
+                }) {
+                    found.extend(rows.flatten());
+                }
+            }
+            found
+        };
+        for (old_id, cookie, added_at) in rows {
+            let Some(new_id) = account_key(&cookie) else { continue };
+            if new_id == old_id {
+                continue;
+            }
+            // The row's new key and the `active_account` pointer at it have to land together: a
+            // crash between them leaves the pointer at an id nothing computes any more, and the
+            // next launch sees the ids already agreeing and re-scans nothing.
+            // Every statement goes through `tx`, and the commit only happens if all of them
+            // succeeded: dropping the transaction rolls the row back, which beats committing a
+            // pointer to an id whose row never moved.
+            let Ok(tx) = conn.unchecked_transaction() else { continue };
+            let taken: i64 = tx
+                .query_row("SELECT COUNT(*) FROM accounts WHERE id = ?1", [&new_id], |r| r.get(0))
+                .unwrap_or(0);
+            let moved = if taken == 0 {
+                tx.execute("UPDATE accounts SET id = ?1 WHERE id = ?2", [&new_id, &old_id]).is_ok()
+            } else {
+                // The canonical row is already there, written by the current build, so its cookie
+                // is the fresher one. Keep it, but inherit the older `added_at` so the menu order
+                // does not jump, and drop the stale copy.
+                tx.execute(
+                    "UPDATE accounts SET added_at = MIN(added_at, ?1) WHERE id = ?2",
+                    rusqlite::params![added_at, &new_id],
+                )
+                .is_ok()
+                    && tx.execute("DELETE FROM accounts WHERE id = ?1", [&old_id]).is_ok()
+            };
+            let pointed = tx
+                .execute(
+                    "UPDATE settings SET value = ?1 WHERE key = 'active_account' AND value = ?2",
+                    [&new_id, &old_id],
+                )
+                .is_ok();
+            if moved && pointed {
+                let _ = tx.commit();
+            }
+        }
+        Ok(Db(Mutex::new(conn)))
+    }
+
+    // --- settings ---------------------------------------------------------------------------
+
+    pub fn get_setting(&self, key: &str) -> Option<String> {
+        let conn = self.0.lock().unwrap();
+        conn.query_row("SELECT value FROM settings WHERE key = ?1", [key], |r| r.get(0)).ok()
+    }
+
+    pub fn set_setting(&self, key: &str, value: &str) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute(
+            "INSERT INTO settings(key, value) VALUES(?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [key, value],
+        );
+    }
+
+    pub fn delete_setting(&self, key: &str) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute("DELETE FROM settings WHERE key = ?1", [key]);
+    }
+
+    /// Persist the canonical selected identity and its two legacy projections atomically. Older
+    /// releases still read `data_sync_id` / `account_json`; keeping all three in one transaction
+    /// prevents a restart from pairing one channel's request delegation with another's display.
+    pub fn set_auth_identity(
+        &self,
+        session_cookie: &str,
+        selected_json: &str,
+        data_sync_id: Option<&str>,
+        account_json: &str,
+    ) -> rusqlite::Result<()> {
+        let mut conn = self.0.lock().unwrap();
         let tx = conn.transaction()?;
-        for id in ids {
+        tx.execute(
+            "INSERT INTO settings(key, value) VALUES('session_cookie', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [session_cookie],
+        )?;
+        tx.execute(
+            "INSERT INTO settings(key, value) VALUES('selected_identity_json', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [selected_json],
+        )?;
+        if let Some(id) = data_sync_id {
             tx.execute(
-                "DELETE FROM playlist_tracks WHERE playlist_id = ?1",
-                params![id],
+                "INSERT INTO settings(key, value) VALUES('data_sync_id', ?1)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                [id],
             )?;
-            tx.execute("DELETE FROM playlists WHERE id = ?1", params![id])?;
+        } else {
+            tx.execute("DELETE FROM settings WHERE key = 'data_sync_id'", [])?;
+        }
+        tx.execute(
+            "INSERT INTO settings(key, value) VALUES('account_json', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [account_json],
+        )?;
+        tx.execute("DELETE FROM settings WHERE key = 'account_selection_pending'", [])?;
+        tx.commit()
+    }
+
+    /// Persist an authenticated cookie while deliberately leaving the account unfinished. Keeping
+    /// the marker and removal of stale identity projections in the same transaction means a crash
+    /// during the required picker cannot restart into YouTube's default channel silently.
+    pub fn set_pending_auth_selection(
+        &self,
+        session_cookie: &str,
+        account_id: Option<&str>,
+    ) -> rusqlite::Result<()> {
+        let mut conn = self.0.lock().unwrap();
+        let tx = conn.transaction()?;
+        tx.execute(
+            "INSERT INTO settings(key, value) VALUES('session_cookie', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [session_cookie],
+        )?;
+        for key in ["selected_identity_json", "data_sync_id", "account_json"] {
+            tx.execute("DELETE FROM settings WHERE key = ?1", [key])?;
+        }
+        tx.execute(
+            "INSERT INTO settings(key, value) VALUES('account_selection_pending', 'true')
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [],
+        )?;
+        if let Some(id) = account_id {
+            tx.execute(
+                "INSERT INTO settings(key, value) VALUES('active_account', ?1)
+                 ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                [id],
+            )?;
+        }
+        tx.commit()
+    }
+
+    pub fn clear_auth_identity(&self) -> rusqlite::Result<()> {
+        let mut conn = self.0.lock().unwrap();
+        let tx = conn.transaction()?;
+        for key in
+            ["selected_identity_json", "data_sync_id", "account_json", "account_selection_pending"]
+        {
+            tx.execute("DELETE FROM settings WHERE key = ?1", [key])?;
+        }
+        tx.commit()
+    }
+
+    // --- saved Google accounts (multi-account) ------------------------------------------------
+
+    /// Insert or refresh a saved account. `added_at` is deliberately not updated on conflict: a
+    /// re-login refreshes the cookie and identity, not the account's place in the list order.
+    pub fn upsert_account(&self, account: &StoredAccount) -> rusqlite::Result<()> {
+        let conn = self.0.lock().unwrap();
+        conn.execute(
+            "INSERT INTO accounts(id, session_cookie, data_sync_id, selected_identity_json, \
+             account_json, visitor_data, added_at) \
+             VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7) \
+             ON CONFLICT(id) DO UPDATE SET \
+                session_cookie = excluded.session_cookie, \
+                data_sync_id = excluded.data_sync_id, \
+                selected_identity_json = excluded.selected_identity_json, \
+                account_json = excluded.account_json, \
+                visitor_data = excluded.visitor_data",
+            rusqlite::params![
+                account.id,
+                account.session_cookie,
+                account.data_sync_id,
+                account.selected_identity_json,
+                account.account_json,
+                account.visitor_data,
+                account.added_at
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Saved accounts, oldest first. No raw auth material leaves this function's callers except
+    /// back into the transport; the UI only ever sees display fields plus the opaque id.
+    pub fn list_accounts(&self) -> Vec<StoredAccount> {
+        let conn = self.0.lock().unwrap();
+        let mut out = Vec::new();
+        if let Ok(mut stmt) = conn.prepare(
+            "SELECT id, session_cookie, data_sync_id, selected_identity_json, account_json, \
+             visitor_data, added_at FROM accounts ORDER BY added_at, id",
+        ) {
+            if let Ok(rows) = stmt.query_map([], |r| {
+                Ok(StoredAccount {
+                    id: r.get(0)?,
+                    session_cookie: r.get(1)?,
+                    data_sync_id: r.get(2)?,
+                    selected_identity_json: r.get(3)?,
+                    account_json: r.get(4)?,
+                    visitor_data: r.get(5)?,
+                    added_at: r.get(6)?,
+                })
+            }) {
+                out.extend(rows.flatten());
+            }
+        }
+        out
+    }
+
+    /// One saved account by id, or `None` when it isn't saved.
+    pub fn get_account(&self, id: &str) -> Option<StoredAccount> {
+        let conn = self.0.lock().unwrap();
+        conn.query_row(
+            "SELECT id, session_cookie, data_sync_id, selected_identity_json, account_json, \
+             visitor_data, added_at FROM accounts WHERE id = ?1",
+            [id],
+            |r| {
+                Ok(StoredAccount {
+                    id: r.get(0)?,
+                    session_cookie: r.get(1)?,
+                    data_sync_id: r.get(2)?,
+                    selected_identity_json: r.get(3)?,
+                    account_json: r.get(4)?,
+                    visitor_data: r.get(5)?,
+                    added_at: r.get(6)?,
+                })
+            },
+        )
+        .ok()
+    }
+
+    /// Write a rotated cookie jar into one account's row, leaving its identity fields alone.
+    /// Nothing happens when the row is gone (the account was removed while a request was in
+    /// flight), which is what should happen.
+    pub fn update_account_cookie(&self, id: &str, session_cookie: &str) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn
+            .execute("UPDATE accounts SET session_cookie = ?1 WHERE id = ?2", [session_cookie, id]);
+    }
+
+    /// Delete a saved account row. Whether removing it signs the app out is the caller's decision
+    /// (see `AppState::remove_google_account`), not this row's.
+    pub fn remove_account(&self, id: &str) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute("DELETE FROM accounts WHERE id = ?1", [id]);
+    }
+
+    /// Write a saved account's fields into the active-account `settings` projections and flip the
+    /// `active_account` pointer, atomically (used when switching to a saved account), so a crash
+    /// mid-switch can't restart into projections for one account and a pointer for another.
+    /// Clears `account_selection_pending`: a completed account needs no channel pick.
+    pub fn restore_account(&self, account: &StoredAccount) -> rusqlite::Result<()> {
+        let mut conn = self.0.lock().unwrap();
+        let tx = conn.transaction()?;
+        tx.execute(
+            "INSERT INTO settings(key, value) VALUES('session_cookie', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [&account.session_cookie],
+        )?;
+        for (key, value) in [
+            ("data_sync_id", account.data_sync_id.as_deref()),
+            ("selected_identity_json", account.selected_identity_json.as_deref()),
+            ("account_json", account.account_json.as_deref()),
+            ("visitor_data", account.visitor_data.as_deref()),
+        ] {
+            match value {
+                Some(value) => {
+                    tx.execute(
+                        "INSERT INTO settings(key, value) VALUES(?1, ?2)
+                         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                        [key, value],
+                    )?;
+                }
+                None => {
+                    tx.execute("DELETE FROM settings WHERE key = ?1", [key])?;
+                }
+            }
+        }
+        tx.execute(
+            "INSERT INTO settings(key, value) VALUES('active_account', ?1)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            [&account.id],
+        )?;
+        tx.execute("DELETE FROM settings WHERE key = 'account_selection_pending'", [])?;
+        tx.commit()
+    }
+
+    pub fn all_settings(&self) -> Vec<(String, String)> {
+        let conn = self.0.lock().unwrap();
+        let mut out = Vec::new();
+        if let Ok(mut stmt) = conn.prepare("SELECT key, value FROM settings") {
+            if let Ok(rows) = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?))) {
+                out.extend(rows.flatten());
+            }
+        }
+        out
+    }
+
+    // --- stream url cache -------------------------------------------------------------------
+
+    /// Return the cached URL only if still valid (`expires_at` in the future). context/11.
+    pub fn get_stream(&self, video_id: &str, now: i64) -> Option<CachedStream> {
+        let conn = self.0.lock().unwrap();
+        conn.query_row(
+            "SELECT url, itag, expires_at, loudness_db, is_video, ping_url, ping_client, client FROM stream_url_cache WHERE video_id = ?1 AND expires_at > ?2",
+            rusqlite::params![video_id, now],
+            |r| {
+                Ok(CachedStream {
+                    url: r.get(0)?,
+                    itag: r.get(1)?,
+                    expires_at: r.get(2)?,
+                    loudness_db: r.get(3)?,
+                    is_video: r.get(4)?,
+                    ping_url: r.get(5)?,
+                    ping_client: r.get(6)?,
+                    client: r.get(7)?,
+                })
+            },
+        )
+        .ok()
+    }
+
+    /// Drop a cached URL (e.g. it 403'd on the real GET). context/06 §2.
+    pub fn evict_stream(&self, video_id: &str) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute("DELETE FROM stream_url_cache WHERE video_id = ?1", [video_id]);
+    }
+
+    /// Cache one resolved URL, and drop every entry that has already expired.
+    ///
+    /// The prune rides along with the insert (same shape as [`Db::record_play`]) because nothing
+    /// else ever deleted a dead row: `get_stream` filters them out but leaves them, so the table
+    /// only ever grew. Measured on a real install before this: 1803 rows / 2.5 MB, nearly all of
+    /// them URLs that expired hours or weeks ago.
+    pub fn put_stream(&self, video_id: &str, row: &CachedStream, now: i64) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute(
+            "INSERT INTO stream_url_cache(video_id, url, itag, expires_at, loudness_db, is_video, ping_url, ping_client, client) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+             ON CONFLICT(video_id) DO UPDATE SET url = excluded.url, itag = excluded.itag, expires_at = excluded.expires_at, loudness_db = excluded.loudness_db, is_video = excluded.is_video, ping_url = excluded.ping_url, ping_client = excluded.ping_client, client = excluded.client",
+            rusqlite::params![
+                video_id,
+                row.url,
+                row.itag,
+                row.expires_at,
+                row.loudness_db,
+                row.is_video,
+                row.ping_url,
+                row.ping_client,
+                row.client
+            ],
+        );
+        let _ = conn.execute("DELETE FROM stream_url_cache WHERE expires_at <= ?1", [now]);
+    }
+
+    /// Wipe the whole URL cache (settings "Clear caches"). context/11.
+    pub fn clear_stream_cache(&self) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute("DELETE FROM stream_url_cache", []);
+        let _ = conn.execute(CLEAR_LYRICS, []);
+        // Spared like a pinned lyrics source: a pick made by hand is the user's, not a cache.
+        let _ = conn.execute("DELETE FROM import_matches WHERE manual = 0", []);
+    }
+
+    pub fn get_import_match(&self, key: &str) -> Option<ImportMatch> {
+        let conn = self.0.lock().unwrap();
+        conn.query_row(
+            "SELECT video_id, song_json, tier, candidates_json, manual, updated_at
+             FROM import_matches WHERE key = ?1",
+            [key],
+            |r| {
+                Ok(ImportMatch {
+                    video_id: r.get(0)?,
+                    song_json: r.get(1)?,
+                    tier: r.get(2)?,
+                    candidates_json: r.get(3)?,
+                    manual: r.get::<_, i64>(4)? != 0,
+                    updated_at: r.get(5)?,
+                })
+            },
+        )
+        .ok()
+    }
+
+    pub fn put_import_match(&self, key: &str, m: &ImportMatch) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute(
+            "INSERT INTO import_matches(key, video_id, song_json, tier, candidates_json, manual,
+                updated_at) VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT(key) DO UPDATE SET video_id = excluded.video_id,
+                song_json = excluded.song_json, tier = excluded.tier,
+                candidates_json = excluded.candidates_json, manual = excluded.manual,
+                updated_at = excluded.updated_at",
+            rusqlite::params![
+                key,
+                m.video_id,
+                m.song_json,
+                m.tier,
+                m.candidates_json,
+                m.manual as i64,
+                m.updated_at
+            ],
+        );
+    }
+
+    /// Drop cached lyrics only, leaving stream URLs alone. Changing which providers are allowed
+    /// has to invalidate what earlier ones already answered, or the setting appears to do nothing
+    /// on every track whose lyrics were already fetched (cache hits never expire).
+    pub fn clear_lyrics_cache(&self) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute(CLEAR_LYRICS, []);
+    }
+
+    /// Forget one song's lyrics, a hand-picked source included.
+    pub fn delete_lyrics(&self, video_id: &str) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute("DELETE FROM lyrics_cache WHERE video_id = ?1", [video_id]);
+    }
+
+    // --- lyrics cache -----------------------------------------------------------------------
+
+    /// Cached lyrics JSON for a track. `Some(None)` = a cached "no lyrics" verdict (NULL row),
+    /// still valid; misses expire after `miss_ttl` secs while hits live forever.
+    pub fn get_lyrics(&self, video_id: &str, now: i64, miss_ttl: i64) -> Option<Option<String>> {
+        let conn = self.0.lock().unwrap();
+        let (lyrics, fetched_at): (Option<String>, i64) = conn
+            .query_row(
+                "SELECT lyrics, fetched_at FROM lyrics_cache WHERE video_id = ?1",
+                [video_id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .ok()?;
+        if lyrics.is_none() && now - fetched_at > miss_ttl {
+            return None; // stale negative result → refetch
+        }
+        Some(lyrics)
+    }
+
+    /// `lyrics = None` records a "no lyrics found" verdict.
+    pub fn put_lyrics(&self, video_id: &str, lyrics: Option<&str>, now: i64) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute(
+            "INSERT INTO lyrics_cache(video_id, lyrics, fetched_at) VALUES(?1, ?2, ?3)
+             ON CONFLICT(video_id) DO UPDATE SET lyrics = excluded.lyrics, fetched_at = excluded.fetched_at",
+            rusqlite::params![video_id, lyrics, now],
+        );
+    }
+
+    // --- listening history (the stats page, #396, and the On Repeat playlist) -----------------
+
+    /// Count a play: the song's latest metadata into `listen_songs` and a `listens` row holding the
+    /// `secs` heard so far. Returns the row, which [`Db::set_listen_secs`] keeps up to date while
+    /// the song plays on. `song_json` is the serialized `SongItem`, so the stats and On Repeat are
+    /// built without asking YouTube for metadata it already gave us.
+    pub fn record_listen(
+        &self,
+        video_id: &str,
+        song_json: &str,
+        now: i64,
+        secs: i64,
+    ) -> Option<i64> {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute(
+            "INSERT INTO listen_songs(video_id, song_json) VALUES(?1, ?2)
+             ON CONFLICT(video_id) DO UPDATE SET song_json = excluded.song_json",
+            [video_id, song_json],
+        );
+        conn.execute(
+            "INSERT INTO listens(video_id, played_at, secs) VALUES(?1, ?2, ?3)",
+            rusqlite::params![video_id, now, secs],
+        )
+        .ok()
+        .map(|_| conn.last_insert_rowid())
+    }
+
+    pub fn set_listen_secs(&self, id: i64, secs: i64) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute("UPDATE listens SET secs = ?2 WHERE id = ?1", [id, secs]);
+    }
+
+    /// "Clear listening history" on the stats page. On Repeat empties with it: same rows.
+    pub fn clear_listens(&self) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute_batch("DELETE FROM listens; DELETE FROM listen_songs;");
+    }
+
+    /// The most-played songs since `since`, as `(song_json, play_count)` ranked by plays and then
+    /// by recency. Local files are left out: this is On Repeat, a YouTube Music playlist, and a row
+    /// pointing at a path on this disk doesn't belong in it.
+    pub fn top_plays(&self, since: i64, limit: usize) -> Vec<(String, i64)> {
+        let conn = self.0.lock().unwrap();
+        let mut out = Vec::new();
+        if let Ok(mut stmt) = conn.prepare(
+            "SELECT s.song_json, COUNT(*) AS plays, MAX(l.played_at) AS last
+             FROM listens l JOIN listen_songs s ON s.video_id = l.video_id
+             WHERE l.played_at >= ?1 AND l.video_id NOT LIKE 'LOCAL:%'
+             GROUP BY l.video_id
+             ORDER BY plays DESC, last DESC
+             LIMIT ?2",
+        ) {
+            if let Ok(rows) = stmt
+                .query_map(rusqlite::params![since, limit as i64], |r| Ok((r.get(0)?, r.get(1)?)))
+            {
+                out.extend(rows.flatten());
+            }
+        }
+        out
+    }
+
+    /// Play count per videoId since `since`. [`Db::top_plays`] answers "what are my 20 most played
+    /// songs"; this answers "how many times have I played each of these", which is what sorting an
+    /// arbitrary playlist by plays needs.
+    pub fn play_counts(&self, since: i64) -> Vec<(String, i64)> {
+        let conn = self.0.lock().unwrap();
+        let mut out = Vec::new();
+        if let Ok(mut stmt) = conn.prepare(
+            "SELECT video_id, COUNT(*) FROM listens WHERE played_at >= ?1 GROUP BY video_id",
+        ) {
+            if let Ok(rows) = stmt.query_map([since], |r| Ok((r.get(0)?, r.get(1)?))) {
+                out.extend(rows.flatten());
+            }
+        }
+        out
+    }
+
+    /// Everything the stats page draws for `[since, now)`, in one lock. Grouping by the local
+    /// calendar (`'localtime'`) is SQLite's, which reads the same zone the webview does.
+    pub fn listening(&self, since: i64, now: i64) -> Listening {
+        let conn = self.0.lock().unwrap();
+        let sum = |sql: &str, a: i64, b: i64| -> i64 {
+            conn.query_row(sql, [a, b], |r| r.get::<_, Option<i64>>(0)).ok().flatten().unwrap_or(0)
+        };
+        Listening {
+            since,
+            songs: songs(&conn, since, now),
+            days: all(
+                &conn,
+                "SELECT date(played_at, 'unixepoch', 'localtime') AS d, SUM(secs)
+                 FROM listens WHERE played_at >= ?1 AND played_at < ?2 GROUP BY d ORDER BY d",
+                [since, now],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            ),
+            hours: all(
+                &conn,
+                "SELECT CAST(strftime('%w', played_at, 'unixepoch', 'localtime') AS INTEGER) AS w,
+                        CAST(strftime('%H', played_at, 'unixepoch', 'localtime') AS INTEGER) AS h,
+                        SUM(secs)
+                 FROM listens WHERE played_at >= ?1 AND played_at < ?2 GROUP BY w, h",
+                [since, now],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            ),
+            prev_secs: sum(
+                "SELECT SUM(secs) FROM listens WHERE played_at >= ?1 AND played_at < ?2",
+                since - (now - since),
+                since,
+            ),
+            first_at: conn
+                .query_row("SELECT MIN(played_at) FROM listens", [], |r| r.get(0))
+                .ok()
+                .flatten(),
+            // A day's number counts local midnights: julianday turns at noon, hence the +0.5.
+            day_numbers: all(
+                &conn,
+                "SELECT DISTINCT CAST(julianday(played_at, 'unixepoch', 'localtime') + 0.5 AS INTEGER)
+                 AS n FROM listens ORDER BY n",
+                [],
+                |r| r.get(0),
+            ),
+            today: conn
+                .query_row(
+                    "SELECT CAST(julianday(?1, 'unixepoch', 'localtime') + 0.5 AS INTEGER)",
+                    [now],
+                    |r| r.get(0),
+                )
+                .unwrap_or(0),
+        }
+    }
+
+    /// Per song played in `[since, now)`: what [`Listening::songs`] holds, without the rest of the
+    /// stats page. Home's Familiar Artists (#497).
+    pub fn listened_songs(&self, since: i64, now: i64) -> Vec<(String, i64, i64, i64)> {
+        songs(&self.0.lock().unwrap(), since, now)
+    }
+
+    // --- playlist membership index (which of your playlists hold a track) ----------------------
+    // Populated by `commands::sync_playlist_index`, which walks the library's owned playlists.
+    // Nothing here talks to YouTube; it is the answer, cached, so a track list can draw the
+    // "saved" mark on its first row instead of after a round-trip per song.
+
+    /// Replace one playlist's tracks. Delete-then-insert, not an upsert: a removal made on another
+    /// device only disappears if the rows the crawl no longer saw go away with it.
+    pub fn set_playlist_tracks(&self, playlist_id: &str, video_ids: &[String]) {
+        let mut conn = self.0.lock().unwrap();
+        let Ok(tx) = conn.transaction() else { return };
+        let _ = tx.execute("DELETE FROM playlist_track WHERE playlist_id = ?1", [playlist_id]);
+        for video_id in video_ids {
+            let _ = tx.execute(
+                "INSERT OR IGNORE INTO playlist_track(playlist_id, video_id) VALUES(?1, ?2)",
+                [playlist_id, video_id.as_str()],
+            );
+        }
+        let _ = tx.commit();
+    }
+
+    /// One track added to one playlist, so an add made here shows its mark without a re-crawl.
+    pub fn add_playlist_track(&self, playlist_id: &str, video_id: &str) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute(
+            "INSERT OR IGNORE INTO playlist_track(playlist_id, video_id) VALUES(?1, ?2)",
+            [playlist_id, video_id],
+        );
+    }
+
+    pub fn remove_playlist_track(&self, playlist_id: &str, video_id: &str) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute(
+            "DELETE FROM playlist_track WHERE playlist_id = ?1 AND video_id = ?2",
+            [playlist_id, video_id],
+        );
+    }
+
+    pub fn forget_playlist(&self, playlist_id: &str) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute("DELETE FROM playlist_track WHERE playlist_id = ?1", [playlist_id]);
+    }
+
+    /// Drop every playlist the crawl no longer saw: deleted, unsaved, or no longer owned. An
+    /// empty list means nothing was indexed, which is the same thing as an empty index.
+    pub fn retain_playlists(&self, keep: &[String]) {
+        let conn = self.0.lock().unwrap();
+        if keep.is_empty() {
+            let _ = conn.execute("DELETE FROM playlist_track", []);
+            return;
+        }
+        let holes = vec!["?"; keep.len()].join(",");
+        let params = rusqlite::params_from_iter(keep.iter());
+        let _ = conn.execute(
+            &format!("DELETE FROM playlist_track WHERE playlist_id NOT IN ({holes})"),
+            params,
+        );
+    }
+
+    /// videoId → the playlists holding it, the ones on this machine included (as their
+    /// `LOCALPLAYLIST:` browseIds), so the saved mark and "Remove from this playlist" treat both
+    /// kinds alike. ponytail: the whole table in one go, like `local_tracks`, since an
+    /// owned-playlist library is thousands of rows and the UI needs random access to it on every
+    /// row it draws.
+    pub fn playlist_memberships(&self) -> std::collections::HashMap<String, Vec<String>> {
+        let conn = self.0.lock().unwrap();
+        let mut out: std::collections::HashMap<String, Vec<String>> =
+            std::collections::HashMap::new();
+        let sql = format!(
+            "SELECT video_id, playlist_id FROM playlist_track UNION ALL \
+             SELECT video_id, '{}' || playlist_id FROM local_playlist_tracks",
+            crate::state::LOCAL_PLAYLIST_PREFIX
+        );
+        if let Ok(mut stmt) = conn.prepare(&sql) {
+            if let Ok(rows) =
+                stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+            {
+                for (video_id, playlist_id) in rows.flatten() {
+                    out.entry(video_id).or_default().push(playlist_id);
+                }
+            }
+        }
+        out
+    }
+
+    /// The index is per-account, so signing out or switching channel empties it. The playlists on
+    /// this machine belong to no account and are not in that table.
+    pub fn clear_playlist_index(&self) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute("DELETE FROM playlist_track", []);
+    }
+
+    // --- playlists on this machine (issue #251) -----------------------------------------------
+    // The user's own data, so unlike the cache writes above every write here answers whether it
+    // happened: a playlist edit that silently did nothing is a lost edit.
+
+    pub fn create_local_playlist(&self, title: &str, now: i64) -> rusqlite::Result<i64> {
+        let conn = self.0.lock().unwrap();
+        conn.execute(
+            "INSERT INTO local_playlists(title, created_at, updated_at) VALUES(?1, ?2, ?2)",
+            rusqlite::params![title, now],
+        )?;
+        Ok(conn.last_insert_rowid())
+    }
+
+    /// Every playlist, the most recently changed first (YouTube's own library order).
+    pub fn local_playlists(&self) -> Vec<LocalPlaylist> {
+        self.query_local_playlists(None)
+    }
+
+    pub fn local_playlist(&self, id: i64) -> Option<LocalPlaylist> {
+        self.query_local_playlists(Some(id)).pop()
+    }
+
+    fn query_local_playlists(&self, id: Option<i64>) -> Vec<LocalPlaylist> {
+        let conn = self.0.lock().unwrap();
+        let sql = format!(
+            "SELECT p.id, p.title, p.description,
+                    (SELECT COUNT(*) FROM local_playlist_tracks t WHERE t.playlist_id = p.id),
+                    (SELECT song_json FROM local_playlist_tracks t WHERE t.playlist_id = p.id
+                     ORDER BY t.id LIMIT 1)
+             FROM local_playlists p {}
+             ORDER BY p.updated_at DESC, p.id DESC",
+            if id.is_some() { "WHERE p.id = ?1" } else { "" }
+        );
+        let row = |r: &rusqlite::Row| {
+            Ok(LocalPlaylist {
+                id: r.get(0)?,
+                title: r.get(1)?,
+                description: r.get(2)?,
+                count: r.get(3)?,
+                first_song: r.get(4)?,
+            })
+        };
+        let mut out = Vec::new();
+        if let Ok(mut stmt) = conn.prepare(&sql) {
+            let rows = match id {
+                Some(id) => stmt.query_map([id], row),
+                None => stmt.query_map([], row),
+            };
+            if let Ok(rows) = rows {
+                out.extend(rows.flatten());
+            }
+        }
+        out
+    }
+
+    /// One playlist's tracks in the order they were added, as `(row id, song_json, added_at)`.
+    pub fn local_playlist_tracks(&self, id: i64) -> Vec<(i64, String, i64)> {
+        let conn = self.0.lock().unwrap();
+        let mut out = Vec::new();
+        if let Ok(mut stmt) = conn.prepare(
+            "SELECT id, song_json, added_at FROM local_playlist_tracks WHERE playlist_id = ?1 \
+             ORDER BY id",
+        ) {
+            if let Ok(rows) = stmt.query_map([id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?))) {
+                out.extend(rows.flatten());
+            }
+        }
+        out
+    }
+
+    /// Append `(video_id, song_json)` rows, answering per row whether it went in: `false` is a
+    /// track the playlist already holds, which is refused the way YouTube refuses one. One
+    /// transaction, so a bulk add of a whole album is one fsync and lands all or nothing.
+    pub fn add_local_playlist_tracks(
+        &self,
+        id: i64,
+        songs: &[(String, String)],
+        now: i64,
+    ) -> rusqlite::Result<Vec<bool>> {
+        let mut conn = self.0.lock().unwrap();
+        let tx = conn.transaction()?;
+        let exists: bool =
+            tx.query_row("SELECT COUNT(*) FROM local_playlists WHERE id = ?1", [id], |r| {
+                r.get::<_, i64>(0).map(|n| n > 0)
+            })?;
+        if !exists {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
+        let mut added = Vec::with_capacity(songs.len());
+        for (video_id, json) in songs {
+            let n = tx.execute(
+                "INSERT OR IGNORE INTO local_playlist_tracks(playlist_id, video_id, song_json, \
+                 added_at) VALUES(?1, ?2, ?3, ?4)",
+                rusqlite::params![id, video_id, json, now],
+            )?;
+            added.push(n > 0);
+        }
+        if added.contains(&true) {
+            tx.execute("UPDATE local_playlists SET updated_at = ?1 WHERE id = ?2", [now, id])?;
         }
         tx.commit()?;
-        Ok(())
-    })
-}
-
-pub fn record_play_event(url: &str, title: &str, artist: &str, secs: i64) -> Result<(), String> {
-    let clean_url = url.trim();
-    if clean_url.is_empty() {
-        return Ok(());
+        Ok(added)
     }
-    let now = chrono_now_iso();
-    with_db_mut(|conn| {
+
+    /// Drop rows by their row id. Scoped to the playlist, so a stale id from another list can
+    /// never take out someone else's row.
+    pub fn remove_local_playlist_tracks(
+        &self,
+        id: i64,
+        rows: &[i64],
+        now: i64,
+    ) -> rusqlite::Result<()> {
+        let mut conn = self.0.lock().unwrap();
         let tx = conn.transaction()?;
-        tx.execute(
-            "INSERT INTO listening_history (url, title, artist, played_at, secs) VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![clean_url, title, artist, now, secs],
-        )?;
-
-        tx.execute(
-            "INSERT INTO track_stats (url, title, artist, play_count, total_secs, first_seen, last_played)
-             VALUES (?1, ?2, ?3, 1, ?4, ?5, ?5)
-             ON CONFLICT(url) DO UPDATE SET
-                play_count = play_count + 1,
-                total_secs = total_secs + excluded.total_secs,
-                title = CASE WHEN excluded.title != '' THEN excluded.title ELSE track_stats.title END,
-                artist = CASE WHEN excluded.artist != '' THEN excluded.artist ELSE track_stats.artist END,
-                last_played = excluded.last_played",
-            params![clean_url, title, artist, secs, now],
-        )?;
-
-        tx.commit()?;
-        Ok(())
-    })
-}
-
-pub fn update_track_listen_time(url: &str, secs: i64) -> Result<(), String> {
-    let clean_url = url.trim();
-    if clean_url.is_empty() || secs <= 0 {
-        return Ok(());
+        for row in rows {
+            tx.execute(
+                "DELETE FROM local_playlist_tracks WHERE playlist_id = ?1 AND id = ?2",
+                [id, *row],
+            )?;
+        }
+        tx.execute("UPDATE local_playlists SET updated_at = ?1 WHERE id = ?2", [now, id])?;
+        tx.commit()
     }
-    with_db_mut(|conn| {
-        conn.execute(
-            "UPDATE track_stats SET total_secs = total_secs + ?1 WHERE url = ?2",
-            params![secs, clean_url],
+
+    /// Rename and/or re-describe. `None` leaves that field as it is. Errors when there is no such
+    /// playlist, rather than reporting an edit nothing received.
+    pub fn edit_local_playlist(
+        &self,
+        id: i64,
+        title: Option<&str>,
+        description: Option<&str>,
+        now: i64,
+    ) -> rusqlite::Result<()> {
+        let conn = self.0.lock().unwrap();
+        let n = conn.execute(
+            "UPDATE local_playlists SET title = COALESCE(?1, title),
+                 description = COALESCE(?2, description), updated_at = ?3 WHERE id = ?4",
+            rusqlite::params![title, description, now, id],
         )?;
+        if n == 0 {
+            return Err(rusqlite::Error::QueryReturnedNoRows);
+        }
         Ok(())
-    })
-}
+    }
 
-pub fn get_listening_stats() -> Result<Vec<DbTrackStat>, String> {
-    with_db(|conn| {
-        let mut stmt = conn.prepare(
-            "SELECT url, title, artist, play_count, total_secs, first_seen, last_played
-             FROM track_stats ORDER BY play_count DESC LIMIT 200",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            Ok(DbTrackStat {
-                url: row.get(0)?,
-                title: row.get(1)?,
-                artist: row.get(2)?,
-                play_count: row.get(3)?,
-                total_secs: row.get(4)?,
-                first_seen: row.get(5)?,
-                last_played: row.get(6)?,
-            })
-        })?;
-        rows.collect::<Result<Vec<_>, _>>()
-    })
-}
-
-pub fn get_listening_history(limit: usize) -> Result<Vec<DbListeningEvent>, String> {
-    with_db(|conn| {
-        let mut stmt = conn.prepare(
-            "SELECT url, title, artist, played_at, secs FROM listening_history ORDER BY id DESC LIMIT ?1"
-        )?;
-        let rows = stmt.query_map(params![limit as i64], |row| {
-            Ok(DbListeningEvent {
-                url: row.get(0)?,
-                title: row.get(1)?,
-                artist: row.get(2)?,
-                played_at: row.get(3)?,
-                secs: row.get(4)?,
-            })
-        })?;
-        rows.collect::<Result<Vec<_>, _>>()
-    })
-}
-
-pub fn clear_listening_stats() -> Result<(), String> {
-    with_db_mut(|conn| {
+    pub fn delete_local_playlist(&self, id: i64) -> rusqlite::Result<()> {
+        let mut conn = self.0.lock().unwrap();
         let tx = conn.transaction()?;
-        tx.execute("DELETE FROM listening_history", [])?;
-        tx.execute("DELETE FROM track_stats", [])?;
-        tx.commit()?;
-        Ok(())
-    })
+        tx.execute("DELETE FROM local_playlist_tracks WHERE playlist_id = ?1", [id])?;
+        tx.execute("DELETE FROM local_playlists WHERE id = ?1", [id])?;
+        tx.commit()
+    }
+
+    // --- local music library (local.rs) -------------------------------------------------------
+
+    /// Every known file with its recorded mtime — the scanner re-reads tags only where it differs.
+    pub fn local_mtimes(&self) -> std::collections::HashMap<String, i64> {
+        let conn = self.0.lock().unwrap();
+        let mut out = std::collections::HashMap::new();
+        if let Ok(mut stmt) = conn.prepare("SELECT path, mtime FROM local_tracks") {
+            if let Ok(rows) = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?))) {
+                out.extend(rows.flatten());
+            }
+        }
+        out
+    }
+
+    /// Upsert a batch in one transaction. SQLite fsyncs per statement otherwise, which is the
+    /// difference between a first scan taking a second and taking minutes.
+    pub fn put_local_tracks(&self, tracks: &[LocalTrack]) {
+        if tracks.is_empty() {
+            return;
+        }
+        let mut conn = self.0.lock().unwrap();
+        let Ok(tx) = conn.transaction() else { return };
+        for t in tracks {
+            let _ = tx.execute(
+                LOCAL_TRACK_UPSERT,
+                rusqlite::params![
+                    t.path,
+                    t.title,
+                    t.artist,
+                    t.album,
+                    t.album_key,
+                    t.album_artist,
+                    t.track_no,
+                    t.duration_secs,
+                    t.cover,
+                    t.mtime,
+                    t.disc_no
+                ],
+            );
+        }
+        let _ = tx.commit();
+    }
+
+    /// Forget files that are no longer on disk (the user deleted or moved them).
+    pub fn delete_local_tracks(&self, paths: &[String]) {
+        if paths.is_empty() {
+            return;
+        }
+        let mut conn = self.0.lock().unwrap();
+        let Ok(tx) = conn.transaction() else { return };
+        for p in paths {
+            let _ = tx.execute("DELETE FROM local_tracks WHERE path = ?1", [p]);
+        }
+        let _ = tx.commit();
+    }
+
+    /// All tracks, or one album's, in album order. ponytail: loads the whole table — a personal
+    /// collection is thousands of rows, so paging it would buy nothing.
+    pub fn local_tracks(&self, album_key: Option<&str>) -> Vec<LocalTrack> {
+        let conn = self.0.lock().unwrap();
+        let sql =
+            "SELECT path, title, artist, album, album_key, album_artist, track_no, duration_secs, cover, mtime, disc_no
+                   FROM local_tracks {WHERE}";
+        let sql =
+            sql.replace("{WHERE}", if album_key.is_some() { "WHERE album_key = ?1" } else { "" });
+        let mut out = Vec::new();
+        let row = |r: &rusqlite::Row| {
+            Ok(LocalTrack {
+                path: r.get(0)?,
+                title: r.get(1)?,
+                artist: r.get(2)?,
+                album: r.get(3)?,
+                album_key: r.get(4)?,
+                album_artist: r.get(5)?,
+                track_no: r.get(6)?,
+                duration_secs: r.get(7)?,
+                cover: r.get(8)?,
+                mtime: r.get(9)?,
+                disc_no: r.get(10)?,
+            })
+        };
+        if let Ok(mut stmt) = conn.prepare(&sql) {
+            let rows = match album_key {
+                Some(k) => stmt.query_map([k], row),
+                None => stmt.query_map([], row),
+            };
+            if let Ok(rows) = rows {
+                out.extend(rows.flatten());
+            }
+        }
+        // Disc before track, since every disc numbers from 1 (issue #315). The folder sits between
+        // them for a rip with no disc tag: CD1/ and CD2/ keep their tracks apart instead of
+        // interleaving them. It changes nothing for an album that lives in one folder.
+        //
+        // The album itself goes right after the title, or two albums sharing one ("Greatest Hits")
+        // are dealt out a disc at a time. With no album artist the key is the folder's digest
+        // (`local::tagged_album_key`), so the folder stands in for it there: it sorts by name,
+        // which keeps an untagged CD1/ ahead of CD2/.
+        fn order(
+            t: &LocalTrack,
+        ) -> (&str, &str, Option<&std::path::Path>, i64, Option<&std::path::Path>, i64, &str)
+        {
+            let dir = std::path::Path::new(&t.path).parent();
+            let (key, key_dir) = match t.album_artist {
+                Some(_) => (t.album_key.as_str(), None),
+                None => ("", dir),
+            };
+            (&t.album, key, key_dir, t.disc_no, dir, t.track_no, &t.title)
+        }
+        out.sort_by(|a, b| order(a).cmp(&order(b)));
+        out
+    }
 }
 
-pub fn make_lyrics_key(title: &str, artist: &str) -> String {
-    format!(
-        "{}::{}",
-        title.trim().to_lowercase(),
-        artist.trim().to_lowercase()
+/// See [`Listening::songs`].
+fn songs(conn: &Connection, since: i64, now: i64) -> Vec<(String, i64, i64, i64)> {
+    all(
+        conn,
+        "WITH firsts AS (SELECT video_id, MIN(played_at) AS first FROM listens GROUP BY video_id)
+         SELECT s.song_json, COUNT(*), SUM(l.secs), f.first
+         FROM listens l
+         JOIN listen_songs s ON s.video_id = l.video_id
+         JOIN firsts f ON f.video_id = l.video_id
+         WHERE l.played_at >= ?1 AND l.played_at < ?2
+         GROUP BY l.video_id",
+        [since, now],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
     )
 }
 
-pub fn get_cached_lyrics(title: &str, artist: &str) -> Result<Option<String>, String> {
-    let key = make_lyrics_key(title, artist);
-    with_db(|conn| {
-        let mut stmt = conn.prepare("SELECT lrc_json FROM lyrics_cache WHERE cache_key = ?1")?;
-        let mut rows = stmt.query(params![key])?;
-        if let Some(row) = rows.next()? {
-            Ok(Some(row.get(0)?))
-        } else {
-            Ok(None)
-        }
-    })
+/// Every row of a query, mapped; empty when it fails. The stats read best-effort, like the rest.
+fn all<T>(
+    conn: &Connection,
+    sql: &str,
+    args: impl rusqlite::Params,
+    map: impl FnMut(&rusqlite::Row) -> rusqlite::Result<T>,
+) -> Vec<T> {
+    let Ok(mut stmt) = conn.prepare(sql) else { return Vec::new() };
+    let out = stmt.query_map(args, map).map(|rows| rows.flatten().collect()).unwrap_or_default();
+    out
 }
 
-pub fn cache_lyrics(title: &str, artist: &str, lrc_json: &str) -> Result<(), String> {
-    let key = make_lyrics_key(title, artist);
-    with_db_mut(|conn| {
-        conn.execute(
-            "INSERT INTO lyrics_cache (cache_key, title, artist, lrc_json, cached_at)
-             VALUES (?1, ?2, ?3, ?4, strftime('%s', 'now'))
-             ON CONFLICT(cache_key) DO UPDATE SET
-                lrc_json = excluded.lrc_json,
-                cached_at = strftime('%s', 'now')",
-            params![key, title.trim(), artist.trim(), lrc_json],
-        )?;
-        Ok(())
-    })
-}
-
-pub fn search_library_fts(query: &str) -> Result<Vec<DbSearchResult>, String> {
-    let sanitized: String = query
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || c.is_whitespace() {
-                c
-            } else {
-                ' '
-            }
-        })
-        .collect();
-
-    let tokens: Vec<&str> = sanitized.split_whitespace().collect();
-    if tokens.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let fts_query = tokens
-        .iter()
-        .map(|tok| format!("{}*", tok))
-        .collect::<Vec<_>>()
-        .join(" ");
-
-    with_db(|conn| {
-        let mut stmt = conn.prepare(
-            "SELECT title, artist, album, path FROM library_fts WHERE library_fts MATCH ?1 LIMIT 50"
-        )?;
-        let rows = stmt.query_map(params![fts_query], |row| {
-            Ok(DbSearchResult {
-                title: row.get(0)?,
-                artist: row.get(1)?,
-                album: row.get(2)?,
-                path: row.get(3)?,
-            })
-        })?;
-        rows.collect::<Result<Vec<_>, _>>()
-    })
-}
-
-pub fn index_local_tracks_fts_batch(
-    tracks: &[(&str, &str, &str, &str)],
-) -> Result<(), String> {
-    if tracks.is_empty() {
-        return Ok(());
-    }
-    with_db_mut(|conn| {
+/// #396: fold On Repeat's old `plays` table into `listens` + `listen_songs` and drop it. Nothing to
+/// do once it's gone, which is every launch but the first (see the call in `open`).
+fn migrate_plays(conn: &mut Connection) -> rusqlite::Result<()> {
+    let had: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'plays')",
+        [],
+        |r| r.get(0),
+    )?;
+    if had {
         let tx = conn.transaction()?;
-        {
-            let mut del_stmt = tx.prepare_cached("DELETE FROM library_fts WHERE path = ?1")?;
-            let mut ins_stmt = tx.prepare_cached(
-                "INSERT INTO library_fts (title, artist, album, path) VALUES (?1, ?2, ?3, ?4)",
+        let rows: Vec<(String, i64, String)> = {
+            let mut stmt =
+                tx.prepare("SELECT video_id, played_at, song_json FROM plays ORDER BY played_at")?;
+            let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+            rows.collect::<rusqlite::Result<_>>()?
+        };
+        for (video_id, played_at, json) in rows {
+            let duration = serde_json::from_str::<serde_json::Value>(&json)
+                .ok()
+                .and_then(|v| v.get("duration")?.as_str().map(str::to_owned));
+            let secs = crate::state::parse_duration_ms(duration.as_deref()) / 1000;
+            // Oldest first, so each song is left carrying its latest metadata.
+            tx.execute(
+                "INSERT INTO listen_songs(video_id, song_json) VALUES(?1, ?2)
+                 ON CONFLICT(video_id) DO UPDATE SET song_json = excluded.song_json",
+                [&video_id, &json],
             )?;
-            for (title, artist, album, path) in tracks {
-                del_stmt.execute(params![path])?;
-                ins_stmt.execute(params![title, artist, album, path])?;
+            tx.execute(
+                "INSERT INTO listens(video_id, played_at, secs) VALUES(?1, ?2, ?3)",
+                rusqlite::params![video_id, played_at, secs],
+            )?;
+        }
+        tx.execute_batch("DROP TABLE plays")?;
+        tx.commit()?;
+    }
+    Ok(())
+}
+
+/// The raw material of the stats page, as [`Db::listening`] reads it. `stats.rs` shapes it.
+#[derive(Debug, Default)]
+pub struct Listening {
+    /// Where the window starts: a song first played at or after it is new.
+    pub since: i64,
+    /// Per song played in the window: `(song_json, plays, secs, first play ever)`.
+    pub songs: Vec<(String, i64, i64, i64)>,
+    /// Seconds per local day (`2026-10-17`), oldest first, days with nothing left out.
+    pub days: Vec<(String, i64)>,
+    /// `(weekday, hour, secs)`, local, weekday 0 = Sunday. Hours with nothing left out.
+    pub hours: Vec<(i64, i64, i64)>,
+    /// Seconds heard in the window of the same length just before this one.
+    pub prev_secs: i64,
+    /// The oldest play on record, `None` with nothing recorded.
+    pub first_at: Option<i64>,
+    /// Every local day with a play, as day numbers, ascending; and today's.
+    pub day_numbers: Vec<i64>,
+    pub today: i64,
+}
+
+const LOCAL_TRACK_UPSERT: &str =
+    "INSERT INTO local_tracks(path, title, artist, album, album_key, album_artist, track_no, duration_secs, cover, mtime, disc_no)
+     VALUES(?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+     ON CONFLICT(path) DO UPDATE SET title = excluded.title, artist = excluded.artist,
+        album = excluded.album, album_key = excluded.album_key,
+        album_artist = excluded.album_artist, track_no = excluded.track_no,
+        duration_secs = excluded.duration_secs, cover = excluded.cover, mtime = excluded.mtime,
+        disc_no = excluded.disc_no";
+
+/// One file in the local library. Tag data as read at scan time; `mtime` is the change detector.
+#[derive(Debug, Clone)]
+pub struct LocalTrack {
+    pub path: String,
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+    /// Stable, human-readable album id fragment (`artist--album`, sanitized). See `local.rs`.
+    pub album_key: String,
+    /// The AlbumArtist tag, when the file has one. What an album is credited to, even when its
+    /// tracks name different performers.
+    pub album_artist: Option<String>,
+    pub track_no: i64,
+    /// 0 when the file has no disc tag.
+    pub disc_no: i64,
+    pub duration_secs: i64,
+    /// Absolute path to the cover image (extracted or found next to the files).
+    pub cover: Option<String>,
+    pub mtime: i64,
+}
+
+/// A playlist kept on this machine, as the library grid and the playlist header need it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LocalPlaylist {
+    pub id: i64,
+    pub title: String,
+    pub description: String,
+    pub count: i64,
+    /// The first track's stored `SongItem`, whose artwork stands in for a cover nobody picked.
+    pub first_song: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn db() -> Db {
+        Db::open(std::path::Path::new(":memory:")).unwrap()
+    }
+
+    #[test]
+    fn top_plays_ranks_by_count_then_recency_and_carries_the_latest_metadata() {
+        let d = db();
+        // "a" twice, "b" three times, "c" once but most recently, "old" outside the window.
+        for (id, json, at) in [
+            ("old", "{\"old\":1}", 100),
+            ("a", "{\"a\":1}", 1_000),
+            ("a", "{\"a\":2}", 1_100),
+            ("b", "{\"b\":1}", 1_000),
+            ("b", "{\"b\":2}", 1_050),
+            ("b", "{\"b\":3}", 1_060),
+            ("c", "{\"c\":1}", 2_000),
+        ] {
+            d.record_listen(id, json, at, 0);
+        }
+
+        let top = d.top_plays(900, 20);
+        assert_eq!(
+            top,
+            vec![
+                ("{\"b\":3}".into(), 3), // most plays
+                ("{\"a\":2}".into(), 2), // latest json wins for a song, not the first
+                ("{\"c\":1}".into(), 1), // ties on count break toward the recent play
+            ],
+            "'old' is outside the window and must not appear"
+        );
+        assert_eq!(d.top_plays(900, 2).len(), 2, "limit applies");
+
+        // Same rows through `play_counts`: every song, not a top N, and no metadata.
+        let mut counts = d.play_counts(900);
+        counts.sort();
+        assert_eq!(counts, vec![("a".into(), 2), ("b".into(), 3), ("c".into(), 1)]);
+        assert!(
+            d.play_counts(1_500) == vec![("c".into(), 1)],
+            "`since` cuts the same way it does for top_plays"
+        );
+    }
+
+    #[test]
+    fn playlist_index_replaces_patches_and_prunes() {
+        let d = db();
+        d.set_playlist_tracks("VL1", &["a".into(), "b".into()]);
+        d.set_playlist_tracks("VL2", &["b".into()]);
+
+        let m = d.playlist_memberships();
+        assert_eq!(m["a"], vec!["VL1"]);
+        let mut b = m["b"].clone();
+        b.sort();
+        assert_eq!(b, vec!["VL1", "VL2"], "one track can sit in several playlists");
+
+        // A re-crawl is the whole list, so a track it no longer saw has to disappear with it.
+        d.set_playlist_tracks("VL1", &["a".into()]);
+        assert_eq!(d.playlist_memberships()["b"], vec!["VL2"]);
+
+        // Single-track patches, the path an add or a remove made inside the app takes.
+        d.add_playlist_track("VL2", "a");
+        d.add_playlist_track("VL2", "a"); // idempotent: the index may already know
+        let mut a = d.playlist_memberships()["a"].clone();
+        a.sort();
+        assert_eq!(a, vec!["VL1", "VL2"]);
+        d.remove_playlist_track("VL2", "a");
+        assert_eq!(d.playlist_memberships()["a"], vec!["VL1"]);
+
+        d.forget_playlist("VL2");
+        assert!(!d.playlist_memberships().contains_key("b"), "VL2 held b alone");
+
+        // Retain keeps the named playlists and drops everything else, including on an empty list.
+        d.set_playlist_tracks("VL3", &["c".into()]);
+        d.retain_playlists(&["VL3".into()]);
+        assert_eq!(d.playlist_memberships().keys().collect::<Vec<_>>(), vec!["c"]);
+        d.retain_playlists(&[]);
+        assert!(d.playlist_memberships().is_empty());
+    }
+
+    #[test]
+    fn local_playlists_hold_tracks_in_order_and_outlive_the_account_index() {
+        let d = db();
+        let song = |v: &str| (v.to_string(), format!(r#"{{"video_id":"{v}"}}"#));
+        let a = d.create_local_playlist("Road trip", 10).unwrap();
+        let b = d.create_local_playlist("Empty", 11).unwrap();
+        assert_ne!(a, b);
+
+        // A duplicate is refused per row, the rest of the batch still lands.
+        let added = d.add_local_playlist_tracks(a, &[song("x"), song("y"), song("x")], 20).unwrap();
+        assert_eq!(added, [true, true, false]);
+        assert!(d.add_local_playlist_tracks(999, &[song("z")], 20).is_err(), "no such playlist");
+
+        // Most recently changed first; the count and the first track come with the row.
+        let all = d.local_playlists();
+        assert_eq!(all.iter().map(|p| p.id).collect::<Vec<_>>(), [a, b]);
+        assert_eq!((all[0].count, all[1].count), (2, 0));
+        assert_eq!(all[0].first_song.as_deref(), Some(r#"{"video_id":"x"}"#));
+        assert_eq!(all[1].first_song, None);
+        let rows = d.local_playlist_tracks(a);
+        assert_eq!(rows.iter().map(|r| r.1.contains('x')).collect::<Vec<_>>(), [true, false]);
+
+        // The membership index names it by browseId, and the account-side prunes leave it alone.
+        let key = format!("{}{a}", crate::state::LOCAL_PLAYLIST_PREFIX);
+        d.set_playlist_tracks("VL1", &["x".into()]);
+        d.clear_playlist_index();
+        d.retain_playlists(&[]);
+        assert_eq!(d.playlist_memberships()["x"], vec![key.clone()]);
+
+        // A row id only removes inside its own playlist.
+        d.remove_local_playlist_tracks(b, &[rows[0].0], 30).unwrap();
+        assert_eq!(d.local_playlist_tracks(a).len(), 2);
+        d.remove_local_playlist_tracks(a, &[rows[0].0], 30).unwrap();
+        assert_eq!(d.local_playlist(a).unwrap().first_song.as_deref(), Some(r#"{"video_id":"y"}"#));
+        assert!(!d.playlist_memberships().contains_key("x"));
+
+        d.edit_local_playlist(a, Some("Renamed"), None, 40).unwrap();
+        d.edit_local_playlist(a, None, Some("notes"), 41).unwrap();
+        let p = d.local_playlist(a).unwrap();
+        assert_eq!((p.title.as_str(), p.description.as_str()), ("Renamed", "notes"));
+        assert!(d.edit_local_playlist(999, Some("x"), None, 42).is_err());
+
+        d.delete_local_playlist(a).unwrap();
+        assert!(d.local_playlist(a).is_none());
+        assert!(d.local_playlist_tracks(a).is_empty(), "its rows go with it");
+        // AUTOINCREMENT: a deleted playlist's number is never handed to the next one, not even
+        // once the table is empty (a plain rowid would start again from 1).
+        d.delete_local_playlist(b).unwrap();
+        assert!(d.create_local_playlist("New", 50).unwrap() > b);
+    }
+
+    #[test]
+    fn on_repeat_leaves_local_files_out_and_the_file_is_wal() {
+        let path = std::env::temp_dir().join("veluna-plays-purge-test.sqlite");
+        std::fs::remove_file(&path).ok();
+        let d = Db::open(&path).unwrap();
+        // Piggybacking on a file-backed test: `journal_mode` answers with a row, so setting it via
+        // `pragma_update` would silently do nothing (and `:memory:` cannot be WAL at all, which is
+        // why this can't live in its own in-memory test).
+        let mode: String =
+            d.0.lock().unwrap().query_row("PRAGMA journal_mode", [], |r| r.get(0)).unwrap();
+        assert_eq!(mode, "wal");
+        d.record_listen("LOCAL:/music/a.mp3", "{\"local\":1}", 1_000, 0);
+        d.record_listen("dQw4w9WgXcQ", "{\"yt\":1}", 1_000, 0);
+        assert_eq!(d.top_plays(0, 20), vec![("{\"yt\":1}".to_string(), 1)]);
+        assert_eq!(d.play_counts(0).len(), 2, "both count toward a playlist's sort");
+        drop(d);
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// v1.0.0: Boidu switched off carries over as the first entry of the provider order, the
+    /// cache is purged once, and from then on clearing it spares hand-picked lyrics.
+    #[test]
+    fn opening_the_db_migrates_the_boidu_switch_and_pins_survive_clears() {
+        let path = std::env::temp_dir().join("veluna-lyrics-providers-test.sqlite");
+        std::fs::remove_file(&path).ok();
+        {
+            let d = Db::open(&path).unwrap();
+            let conn = d.0.lock().unwrap();
+            conn.execute_batch("PRAGMA user_version = 1").unwrap();
+            conn.execute("INSERT INTO settings(key, value) VALUES('lyrics_boidu', 'false')", [])
+                .unwrap();
+            conn.execute(
+                "INSERT INTO lyrics_cache VALUES('old', '{\"source\":\"LRCLIB\"}', 1)",
+                [],
+            )
+            .unwrap();
+        }
+        let d = Db::open(&path).unwrap();
+        assert_eq!(d.get_setting("lyrics_providers").as_deref(), Some("-boidu"));
+        assert_eq!(d.get_setting("lyrics_boidu"), None);
+        assert_eq!(d.get_lyrics("old", 2, 10), None, "purged once");
+
+        d.put_lyrics("auto", Some("{\"source\":\"LRCLIB\"}"), 2);
+        d.put_lyrics("picked", Some("{\"source\":\"Kugou\",\"pinned\":true}"), 2);
+        d.put_lyrics("miss", None, 2);
+        d.clear_lyrics_cache();
+        assert_eq!(d.get_lyrics("auto", 2, 10), None);
+        assert_eq!(d.get_lyrics("miss", 2, 10), None);
+        assert!(d.get_lyrics("picked", 2, 10).is_some(), "a hand-picked source is not a cache");
+        drop(d);
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// A cache row with only the fields a test cares about; the rest are the boring defaults.
+    fn row(url: &str, expires_at: i64) -> CachedStream {
+        CachedStream {
+            url: url.to_owned(),
+            itag: 251,
+            expires_at,
+            loudness_db: None,
+            is_video: None,
+            ping_url: None,
+            ping_client: None,
+            client: None,
+        }
+    }
+
+    #[test]
+    fn put_stream_drops_entries_that_have_already_expired() {
+        let d = db();
+        d.put_stream("stale", &row("https://x/1", 1_000), 900);
+        d.put_stream("live", &row("https://x/2", 9_000), 900);
+        assert!(d.get_stream("stale", 900).is_some(), "not expired yet at t=900");
+
+        // t=2000: "stale" expired at 1_000, so writing anything now sweeps it.
+        d.put_stream("fresh", &row("https://x/3", 8_000), 2_000);
+        assert!(d.get_stream("stale", 2_000).is_none());
+        assert!(d.get_stream("live", 2_000).is_some(), "unexpired rows survive the sweep");
+        assert!(d.get_stream("fresh", 2_000).is_some(), "the row just written survives it");
+    }
+
+    /// A cache hit skips `/player`, so the music-video verdict has to survive the round trip or
+    /// the player view can't tell whether to load the video for a track played twice in a session.
+    #[test]
+    fn put_stream_round_trips_the_music_video_verdict() {
+        let d = db();
+        d.put_stream(
+            "mv",
+            &CachedStream { is_video: Some(true), ..row("https://x/1", 9_000) },
+            900,
+        );
+        d.put_stream(
+            "song",
+            &CachedStream { is_video: Some(false), ..row("https://x/2", 9_000) },
+            900,
+        );
+        d.put_stream("unknown", &row("https://x/3", 9_000), 900);
+        assert_eq!(d.get_stream("mv", 900).unwrap().is_video, Some(true));
+        assert_eq!(d.get_stream("song", 900).unwrap().is_video, Some(false));
+        assert_eq!(d.get_stream("unknown", 900).unwrap().is_video, None);
+    }
+
+    /// The watch-history ping has to survive the cache the same way (issue #83): a hit skips
+    /// `/player`, and the gapless lookahead means a track's *first* play is often a cache hit.
+    #[test]
+    fn put_stream_round_trips_the_watch_history_ping() {
+        let d = db();
+        d.put_stream(
+            "pinged",
+            &CachedStream {
+                ping_url: Some("https://s.youtube.com/api/stats/playback?docid=x".to_owned()),
+                ping_client: Some("ANDROID_VR_1_65_10".to_owned()),
+                ..row("https://x/1", 9_000)
+            },
+            900,
+        );
+        d.put_stream("unpinged", &row("https://x/2", 9_000), 900);
+
+        let hit = d.get_stream("pinged", 900).unwrap();
+        assert_eq!(
+            hit.ping_url.as_deref(),
+            Some("https://s.youtube.com/api/stats/playback?docid=x")
+        );
+        assert_eq!(hit.ping_client.as_deref(), Some("ANDROID_VR_1_65_10"));
+
+        let none = d.get_stream("unpinged", 900).unwrap();
+        assert!(none.ping_url.is_none() && none.ping_client.is_none());
+    }
+
+    /// A replay rebuilds its headers from the recorded client, so it has to survive the cache.
+    /// No test for a pre-column row reading as `None`: the migration wipes those.
+    #[test]
+    fn a_cached_stream_round_trips_its_client() {
+        let d = db();
+        d.put_stream(
+            "v",
+            &CachedStream { client: Some("VISIONOS".into()), ..row("https://x/1", 9_000) },
+            900,
+        );
+        assert_eq!(d.get_stream("v", 900).unwrap().client.as_deref(), Some("VISIONOS"));
+    }
+
+    /// A play's row grows with the time heard, and clearing the history takes the songs too.
+    #[test]
+    fn a_listen_grows_and_clears() {
+        let d = db();
+        let row = d.record_listen("a", "{\"a\":1}", 1_000, 30).unwrap();
+        d.set_listen_secs(row, 200);
+        let l = d.listening(0, 2_000);
+        assert_eq!(l.songs, vec![("{\"a\":1}".to_string(), 1, 200, 1_000)]);
+        assert_eq!(l.first_at, Some(1_000));
+        d.clear_listens();
+        let l = d.listening(0, 2_000);
+        assert!(l.songs.is_empty() && l.first_at.is_none() && l.day_numbers.is_empty());
+    }
+
+    /// The window, the one before it, first plays and the local-day buckets, against a fixed clock.
+    #[test]
+    fn listening_splits_the_window_from_the_one_before() {
+        let d = db();
+        let day = 86_400;
+        let t0 = 1_760_000_000; // any instant; the buckets are local days around it
+        d.record_listen("old", "{}", t0 - 2 * day + 5, 100); // the previous window only
+        d.record_listen("a", "{}", t0 - day, 60); // also in the previous window, at its edge
+        d.record_listen("a", "{}", t0 + 10, 40);
+        d.record_listen("b", "{}", t0 + day, 50);
+        let l = d.listening(t0, t0 + 2 * day);
+        assert_eq!(l.songs.len(), 2);
+        assert_eq!(l.prev_secs, 160, "the two days before `since`");
+        let firsts: Vec<i64> = l.songs.iter().map(|s| s.3).collect();
+        assert!(firsts.contains(&(t0 - day)), "\"a\" carries its first play, before the window");
+        assert_eq!(l.days.iter().map(|(_, s)| s).sum::<i64>(), 90);
+        assert_eq!(l.hours.iter().map(|(_, _, s)| s).sum::<i64>(), 90);
+        assert_eq!(l.day_numbers.len(), 4, "the whole history, not the window");
+        assert_eq!(l.today, *l.day_numbers.last().unwrap() + 1);
+    }
+
+    /// On Repeat's old `plays` table moves into `listens`, length standing in for time heard.
+    #[test]
+    fn opening_the_db_moves_plays_into_listens() {
+        let dir = qtest_dir("plays-to-listens");
+        let path = dir.join("veluna.sqlite");
+        {
+            let conn = rusqlite::Connection::open(&path).unwrap();
+            conn.execute_batch(SCHEMA_V0_8_1).unwrap();
+            for (id, at, json) in [
+                ("a", 100, r#"{"video_id":"a","title":"A","artists":"X","duration":"3:05"}"#),
+                ("a", 200, r#"{"video_id":"a","title":"A2","artists":"X","duration":"3:05"}"#),
+                ("b", 150, r#"{"video_id":"b","title":"B","artists":"Y"}"#),
+            ] {
+                conn.execute(
+                    "INSERT INTO plays(video_id, played_at, song_json) VALUES(?1, ?2, ?3)",
+                    rusqlite::params![id, at, json],
+                )
+                .unwrap();
             }
         }
-        tx.commit()?;
-        Ok(())
-    })
+        let d = Db::open(&path).unwrap();
+        let mut songs = d.listening(0, 1_000).songs;
+        songs.sort_by_key(|s| s.2);
+        assert_eq!(songs.len(), 2);
+        assert_eq!((songs[0].1, songs[0].2), (1, 0), "no length, no time");
+        assert_eq!((songs[1].1, songs[1].2), (2, 370), "3:05 twice");
+        assert!(songs[1].0.contains("A2"), "the latest metadata wins");
+        let gone: bool = d
+            .0
+            .lock()
+            .unwrap()
+            .query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE name = 'plays')", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert!(!gone, "the old table is dropped");
+        drop(d);
+        assert_eq!(Db::open(&path).unwrap().listening(0, 1_000).songs.len(), 2, "runs once");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The key follows the Google account, not the jar: the `__Secure-3PAPISID` alias resolves to
+    /// the same one, and a jar with no SAPISID is not an account at all.
+    #[test]
+    fn account_key_needs_a_sapisid() {
+        assert_eq!(account_key("SID=abc; PREF=xyz"), None);
+        let sapisid = account_key("SAPISID=secret123; SID=abc").unwrap();
+        let secure = account_key("__Secure-3PAPISID=secret123; SID=abc").unwrap();
+        assert_eq!(sapisid, secure, "the alias resolves to the same key");
+        assert_ne!(sapisid, account_key("SAPISID=other").unwrap());
+    }
+
+    /// A re-login refreshes an account's row without resetting its place in the list, and a
+    /// cookie from a different Google account lands in its own row keyed on its SAPISID.
+    #[test]
+    fn accounts_round_trip_refresh_and_remove() {
+        let d = db();
+        let a = StoredAccount {
+            id: account_key("SAPISID=aaa").unwrap(),
+            session_cookie: "SAPISID=aaa".into(),
+            data_sync_id: Some("channel-a".into()),
+            selected_identity_json: Some(r#"{"data_sync_id":"channel-a"}"#.into()),
+            account_json: Some(r#"{"name":"A"}"#.into()),
+            visitor_data: Some("vd-a".into()),
+            added_at: 100,
+        };
+        d.upsert_account(&a).unwrap();
+        assert_ne!(a.id, account_key("SAPISID=bbb").unwrap(), "keys follow the Google account");
+
+        d.upsert_account(&StoredAccount {
+            id: account_key("SAPISID=bbb").unwrap(),
+            session_cookie: "SAPISID=bbb".into(),
+            data_sync_id: Some("channel-b".into()),
+            selected_identity_json: Some(r#"{"data_sync_id":"channel-b"}"#.into()),
+            account_json: Some(r#"{"name":"B"}"#.into()),
+            visitor_data: None,
+            added_at: 200,
+        })
+        .unwrap();
+        assert_eq!(d.list_accounts().len(), 2);
+
+        // Same Google account re-login: refreshes the row, keeps its original `added_at`.
+        d.upsert_account(&StoredAccount {
+            id: a.id.clone(),
+            session_cookie: "SAPISID=aaa; __Secure-3PSID=new".into(),
+            data_sync_id: Some("channel-a".into()),
+            selected_identity_json: Some(r#"{"data_sync_id":"channel-a"}"#.into()),
+            account_json: Some(r#"{"name":"A renamed"}"#.into()),
+            visitor_data: Some("vd-a2".into()),
+            added_at: 999,
+        })
+        .unwrap();
+        let accounts = d.list_accounts();
+        assert_eq!(accounts.len(), 2);
+        let refreshed = accounts.iter().find(|acc| acc.id == a.id).unwrap();
+        assert_eq!(refreshed.session_cookie, "SAPISID=aaa; __Secure-3PSID=new");
+        assert_eq!(refreshed.account_json.as_deref(), Some(r#"{"name":"A renamed"}"#));
+        assert_eq!(refreshed.added_at, 100, "re-login must not reorder the list");
+        assert_eq!(d.get_account(&a.id).unwrap().visitor_data.as_deref(), Some("vd-a2"));
+
+        // Rotation writes the jar back without disturbing the identity fields.
+        d.update_account_cookie(&a.id, "SAPISID=aaa; __Secure-3PSIDTS=rotated");
+        let rotated = d.get_account(&a.id).unwrap();
+        assert_eq!(rotated.session_cookie, "SAPISID=aaa; __Secure-3PSIDTS=rotated");
+        assert_eq!(rotated.account_json.as_deref(), Some(r#"{"name":"A renamed"}"#));
+
+        d.remove_account(&a.id);
+        assert!(d.get_account(&a.id).is_none());
+        assert_eq!(d.list_accounts().len(), 1);
+    }
+
+    /// Switching to a saved account flips the `active_account` pointer in the same transaction as
+    /// the restored projections, so a crash between them can't leave the pointer disagreeing with
+    /// the projections a restart will actually use.
+    #[test]
+    fn restore_account_moves_the_active_pointer_with_the_projections() {
+        let d = db();
+        let account = StoredAccount {
+            id: account_key("SAPISID=bbb").unwrap(),
+            session_cookie: "SAPISID=bbb".into(),
+            data_sync_id: Some("channel-b".into()),
+            selected_identity_json: Some(r#"{"data_sync_id":"channel-b"}"#.into()),
+            account_json: Some(r#"{"name":"B"}"#.into()),
+            visitor_data: Some("vd-b".into()),
+            added_at: 200,
+        };
+        d.upsert_account(&account).unwrap();
+        d.set_setting("active_account", &account_key("SAPISID=aaa").unwrap());
+
+        d.restore_account(&account).unwrap();
+        assert_eq!(
+            d.get_setting("active_account").as_deref(),
+            Some(account.id.as_str()),
+            "the pointer flips alongside the restored projections"
+        );
+        assert_eq!(d.get_setting("session_cookie").as_deref(), Some("SAPISID=bbb"));
+        assert_eq!(d.get_setting("data_sync_id").as_deref(), Some("channel-b"));
+        assert_eq!(
+            d.get_setting("selected_identity_json").as_deref(),
+            Some(r#"{"data_sync_id":"channel-b"}"#)
+        );
+        assert_eq!(d.get_setting("account_json").as_deref(), Some(r#"{"name":"B"}"#));
+        assert_eq!(d.get_setting("visitor_data").as_deref(), Some("vd-b"));
+        assert_eq!(d.get_setting("account_selection_pending"), None);
+    }
+
+    /// Rows filed under a key the current `account_key` no longer computes (the pre-release SHA-1
+    /// scheme) are folded onto their canonical id on open, and a duplicate of an account that is
+    /// already there is merged away rather than left to show up twice in the menu.
+    #[test]
+    fn opening_the_db_rekeys_and_dedupes_accounts() {
+        let path = std::env::temp_dir().join("veluna-accounts-rekey-test.sqlite");
+        std::fs::remove_file(&path).ok();
+        let canonical = account_key("SAPISID=aaa").unwrap();
+        {
+            let d = Db::open(&path).unwrap();
+            let conn = d.0.lock().unwrap();
+            // Two accounts under stale ids; only one of them also has a canonical row.
+            for (id, cookie, added_at) in [
+                ("ga-staleaaa", "SAPISID=aaa", 100),
+                (canonical.as_str(), "SAPISID=aaa", 500),
+                ("ga-stalebbb", "SAPISID=bbb", 200),
+            ] {
+                conn.execute(
+                    "INSERT INTO accounts(id, session_cookie, data_sync_id, \
+                     selected_identity_json, account_json, visitor_data, added_at) \
+                     VALUES(?1, ?2, NULL, NULL, NULL, NULL, ?3)",
+                    rusqlite::params![id, cookie, added_at],
+                )
+                .unwrap();
+            }
+            conn.execute(
+                "INSERT INTO settings(key, value) VALUES('active_account', 'ga-stalebbb')",
+                [],
+            )
+            .unwrap();
+        }
+        {
+            let d = Db::open(&path).unwrap();
+            let accounts = d.list_accounts();
+            assert_eq!(accounts.len(), 2, "the duplicate of SAPISID=aaa is merged away");
+            let a = d.get_account(&canonical).unwrap();
+            assert_eq!(a.added_at, 100, "the surviving row keeps the earlier place in the list");
+            let b = account_key("SAPISID=bbb").unwrap();
+            assert!(d.get_account(&b).is_some(), "a stale id with no canonical row is moved");
+            assert_eq!(
+                d.get_setting("active_account").as_deref(),
+                Some(b.as_str()),
+                "the active pointer follows the move"
+            );
+        }
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// Databases written before multi-account migrate their single session into `accounts` once.
+    #[test]
+    fn opening_the_db_migrates_the_legacy_session() {
+        let path = std::env::temp_dir().join("veluna-accounts-migration-test.sqlite");
+        std::fs::remove_file(&path).ok();
+        {
+            let d = Db::open(&path).unwrap();
+            d.set_setting("session_cookie", "SAPISID=legacy");
+            d.set_setting("data_sync_id", "channel-x");
+            d.set_setting("account_json", r#"{"name":"Legacy"}"#);
+            d.set_setting("visitor_data", "vd-x");
+        }
+        {
+            let d = Db::open(&path).unwrap();
+            let accounts = d.list_accounts();
+            assert_eq!(accounts.len(), 1);
+            assert_eq!(accounts[0].session_cookie, "SAPISID=legacy");
+            assert_eq!(accounts[0].data_sync_id.as_deref(), Some("channel-x"));
+            assert_eq!(
+                d.get_setting("active_account").as_deref(),
+                Some(accounts[0].id.as_str()),
+                "the migrated session is the active account"
+            );
+        }
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// A fresh directory per test: these run in parallel and each one moves files around.
+    fn qtest_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("veluna-qtest-{}-{name}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn open_or_quarantine_moves_a_corrupt_file_aside() {
+        let dir = qtest_dir("corrupt");
+        let path = dir.join("veluna.sqlite");
+        std::fs::write(&path, b"this is not a sqlite file").unwrap();
+        {
+            let (d, aside) = Db::open_or_quarantine(&path).unwrap();
+            let aside = aside.expect("a corrupt file is moved aside");
+            assert_eq!(std::fs::read(&aside).unwrap(), b"this is not a sqlite file");
+            d.set_setting("k", "v");
+        }
+        let d = Db::open(&path).unwrap();
+        assert_eq!(d.get_setting("k").as_deref(), Some("v"), "the fresh file is a working db");
+        drop(d);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// The recovery path must never fire on a healthy database: it would hand the user an empty
+    /// library for nothing.
+    #[test]
+    fn open_or_quarantine_leaves_a_healthy_file_alone() {
+        let dir = qtest_dir("healthy");
+        let path = dir.join("veluna.sqlite");
+        Db::open(&path).unwrap().set_setting("k", "v");
+        let (d, aside) = Db::open_or_quarantine(&path).unwrap();
+        assert_eq!(aside, None);
+        assert_eq!(d.get_setting("k").as_deref(), Some("v"));
+        let moved = std::fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .any(|e| e.file_name().to_string_lossy().contains("corrupt"));
+        assert!(!moved, "nothing was moved aside");
+        drop(d);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Moving a healthy library aside because it could not be *opened* (locked, permissions) would
+    /// cost the user everything for nothing. A directory at the path is a portable stand-in for
+    /// "cannot open, but not corrupt".
+    #[test]
+    fn open_or_quarantine_leaves_an_unopenable_path_alone() {
+        let dir = qtest_dir("unopenable");
+        let path = dir.join("veluna.sqlite");
+        std::fs::create_dir(&path).unwrap();
+        assert!(Db::open_or_quarantine(&path).is_err());
+        assert!(path.is_dir(), "nothing was moved aside");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// SQLite deletes stray -wal/-shm files itself while failing to open a corrupt main file, so
+    /// they are usually gone before the rename loop runs; the loop is a backstop for any it
+    /// leaves. Either way, the outcome that matters is that the fresh file does not inherit them.
+    #[test]
+    fn open_or_quarantine_drops_the_stale_wal_sidecars() {
+        let dir = qtest_dir("sidecars");
+        let path = dir.join("veluna.sqlite");
+        std::fs::write(&path, b"this is not a sqlite file").unwrap();
+        std::fs::write(dir.join("veluna.sqlite-wal"), b"stale wal").unwrap();
+        std::fs::write(dir.join("veluna.sqlite-shm"), b"stale shm").unwrap();
+        let (d, aside) = Db::open_or_quarantine(&path).unwrap();
+        assert!(aside.is_some_and(|a| a.exists()), "the corrupt file is moved aside");
+        for suffix in ["-wal", "-shm"] {
+            let now =
+                std::fs::read(dir.join(format!("veluna.sqlite{suffix}"))).unwrap_or_default();
+            assert!(!now.starts_with(b"stale"), "the fresh db inherited the old {suffix}");
+        }
+        drop(d);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    // --- upgrading a database an older release wrote ------------------------------------------
+    //
+    // Every other file-backed test here starts from `Db::open`, which means from the *current*
+    // schema, so none of them ever runs the ALTERs and one-shot migrations in `open` against a
+    // file that actually needs them. These do. Each constant is the `execute_batch` SQL one shipped
+    // release ran, copied verbatim from `git show <tag>:src-tauri/src/db.rs`. They are pinned as
+    // literals on purpose: a schema generated from the current code would drift along with it and
+    // stop being a record of what users' files really look like, which is the only thing that
+    // makes the test worth having. Never edit one to make a test pass; add a new tag instead.
+    //
+    // Why these three:
+    // - v0.4.11: `stream_url_cache` is five columns, `local_tracks` has no `album_artist`, no
+    //   `accounts`. Every ALTER in `open` has work to do and both cache wipes fire. The long tail:
+    //   .deb, .rpm and AUR installs never self-update, so some users really are on it.
+    // - v0.5.12: has `is_video` and the ping columns but still no `accounts`, so it isolates the
+    //   legacy single-session migration from most of the column work.
+    // - v0.8.1: the predecessor of 0.8.2, which is where most self-updating installs sit. It lacks
+    //   only `client`, so the one thing opening it does is the `client` wipe. The common path.
+
+    const SCHEMA_V0_4_11: &str = r#"
+            CREATE TABLE IF NOT EXISTS settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS stream_url_cache (
+                video_id    TEXT PRIMARY KEY,
+                url         TEXT NOT NULL,
+                itag        INTEGER NOT NULL,
+                expires_at  INTEGER NOT NULL,
+                loudness_db REAL
+            );
+            CREATE TABLE IF NOT EXISTS lyrics_cache (
+                video_id   TEXT PRIMARY KEY,
+                lyrics     TEXT,
+                fetched_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS plays (
+                id        INTEGER PRIMARY KEY,
+                video_id  TEXT NOT NULL,
+                played_at INTEGER NOT NULL,
+                song_json TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS plays_played_at ON plays(played_at);
+            CREATE TABLE IF NOT EXISTS local_tracks (
+                path          TEXT PRIMARY KEY,
+                title         TEXT NOT NULL,
+                artist        TEXT NOT NULL,
+                album         TEXT NOT NULL,
+                album_key     TEXT NOT NULL,
+                track_no      INTEGER NOT NULL,
+                duration_secs INTEGER NOT NULL,
+                cover         TEXT,
+                mtime         INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS local_tracks_album ON local_tracks(album_key);
+            CREATE TABLE IF NOT EXISTS playlist_track (
+                playlist_id TEXT NOT NULL,
+                video_id    TEXT NOT NULL,
+                PRIMARY KEY (playlist_id, video_id)
+            ) WITHOUT ROWID;
+            CREATE INDEX IF NOT EXISTS playlist_track_video ON playlist_track(video_id);
+            "#;
+
+    const SCHEMA_V0_5_12: &str = r#"
+            CREATE TABLE IF NOT EXISTS settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS stream_url_cache (
+                video_id    TEXT PRIMARY KEY,
+                url         TEXT NOT NULL,
+                itag        INTEGER NOT NULL,
+                expires_at  INTEGER NOT NULL,
+                loudness_db REAL,
+                is_video    INTEGER,
+                ping_url    TEXT,
+                ping_client TEXT
+            );
+            CREATE TABLE IF NOT EXISTS lyrics_cache (
+                video_id   TEXT PRIMARY KEY,
+                lyrics     TEXT,
+                fetched_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS plays (
+                id        INTEGER PRIMARY KEY,
+                video_id  TEXT NOT NULL,
+                played_at INTEGER NOT NULL,
+                song_json TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS plays_played_at ON plays(played_at);
+            CREATE TABLE IF NOT EXISTS local_tracks (
+                path          TEXT PRIMARY KEY,
+                title         TEXT NOT NULL,
+                artist        TEXT NOT NULL,
+                album         TEXT NOT NULL,
+                album_key     TEXT NOT NULL,
+                album_artist  TEXT,
+                track_no      INTEGER NOT NULL,
+                duration_secs INTEGER NOT NULL,
+                cover         TEXT,
+                mtime         INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS local_tracks_album ON local_tracks(album_key);
+            CREATE TABLE IF NOT EXISTS playlist_track (
+                playlist_id TEXT NOT NULL,
+                video_id    TEXT NOT NULL,
+                PRIMARY KEY (playlist_id, video_id)
+            ) WITHOUT ROWID;
+            CREATE INDEX IF NOT EXISTS playlist_track_video ON playlist_track(video_id);
+            "#;
+
+    const SCHEMA_V0_8_1: &str = r#"
+            CREATE TABLE IF NOT EXISTS settings (
+                key   TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS stream_url_cache (
+                video_id    TEXT PRIMARY KEY,
+                url         TEXT NOT NULL,
+                itag        INTEGER NOT NULL,
+                expires_at  INTEGER NOT NULL,
+                loudness_db REAL,
+                is_video    INTEGER,
+                ping_url    TEXT,
+                ping_client TEXT
+            );
+            CREATE TABLE IF NOT EXISTS lyrics_cache (
+                video_id   TEXT PRIMARY KEY,
+                lyrics     TEXT,
+                fetched_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS plays (
+                id        INTEGER PRIMARY KEY,
+                video_id  TEXT NOT NULL,
+                played_at INTEGER NOT NULL,
+                song_json TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS plays_played_at ON plays(played_at);
+            CREATE TABLE IF NOT EXISTS local_tracks (
+                path          TEXT PRIMARY KEY,
+                title         TEXT NOT NULL,
+                artist        TEXT NOT NULL,
+                album         TEXT NOT NULL,
+                album_key     TEXT NOT NULL,
+                album_artist  TEXT,
+                track_no      INTEGER NOT NULL,
+                duration_secs INTEGER NOT NULL,
+                cover         TEXT,
+                mtime         INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS local_tracks_album ON local_tracks(album_key);
+            CREATE TABLE IF NOT EXISTS playlist_track (
+                playlist_id TEXT NOT NULL,
+                video_id    TEXT NOT NULL,
+                PRIMARY KEY (playlist_id, video_id)
+            ) WITHOUT ROWID;
+            CREATE INDEX IF NOT EXISTS playlist_track_video ON playlist_track(video_id);
+            CREATE TABLE IF NOT EXISTS accounts (
+                id                     TEXT PRIMARY KEY,
+                session_cookie         TEXT NOT NULL,
+                data_sync_id           TEXT,
+                selected_identity_json TEXT,
+                account_json           TEXT,
+                visitor_data           TEXT,
+                added_at               INTEGER NOT NULL
+            );
+            "#;
+
+    const LEGACY_COOKIE: &str = "SAPISID=legacy-sapisid; SID=legacy-sid";
+
+    /// Builds a database file the way the release behind `schema` left it, then runs everything a
+    /// user upgrading from it would need to be true, through `Db` itself.
+    ///
+    /// The old file is written with raw rusqlite, never `Db`, which would migrate it before the
+    /// test got a look. The seeded rows use only columns the oldest schema has, so the same seed
+    /// fits all three. `migrated_account` says whether that release had already moved the sign-in
+    /// into `accounts` (0.8.x did, on its own first launch); either way the legacy `settings` rows
+    /// are there, because every release keeps them as projections of the active account.
+    fn assert_upgrades_cleanly(tag: &str, schema: &str, migrated_account: bool) {
+        let dir = qtest_dir(&format!("upgrade-{tag}"));
+        let path = dir.join("veluna.sqlite");
+        let now = now_secs();
+        let later = now + 6 * 3600;
+        let id = account_key(LEGACY_COOKIE).unwrap();
+        {
+            let conn = rusqlite::Connection::open(&path).unwrap();
+            conn.execute_batch(schema).unwrap();
+            for (key, value) in [
+                ("volume", "0.42"),
+                ("session_cookie", LEGACY_COOKIE),
+                ("data_sync_id", "channel-legacy"),
+                ("selected_identity_json", r#"{"data_sync_id":"channel-legacy"}"#),
+                ("account_json", r#"{"name":"Legacy"}"#),
+                ("visitor_data", "vd-legacy"),
+            ] {
+                conn.execute("INSERT INTO settings(key, value) VALUES(?1, ?2)", [key, value])
+                    .unwrap();
+            }
+            if migrated_account {
+                conn.execute(
+                    "INSERT INTO accounts(id, session_cookie, data_sync_id, \
+                     selected_identity_json, account_json, visitor_data, added_at) \
+                     VALUES(?1, ?2, 'channel-legacy', '{\"data_sync_id\":\"channel-legacy\"}', \
+                     '{\"name\":\"Legacy\"}', 'vd-legacy', 100)",
+                    [&id, LEGACY_COOKIE],
+                )
+                .unwrap();
+                conn.execute(
+                    "INSERT INTO settings(key, value) VALUES('active_account', ?1)",
+                    [&id],
+                )
+                .unwrap();
+            }
+            // Unexpired, so if it disappears it was the migration's wipe and not the expiry sweep.
+            conn.execute(
+                "INSERT INTO stream_url_cache(video_id, url, itag, expires_at, loudness_db) \
+                 VALUES('old-row', 'https://x/old', 251, ?1, -3.5)",
+                [later],
+            )
+            .unwrap();
+            for (video_id, song_json) in
+                [("dQw4w9WgXcQ", r#"{"yt":1}"#), ("LOCAL:/music/a.mp3", r#"{"local":1}"#)]
+            {
+                conn.execute(
+                    "INSERT INTO plays(video_id, played_at, song_json) VALUES(?1, 1000, ?2)",
+                    [video_id, song_json],
+                )
+                .unwrap();
+            }
+            conn.execute(
+                "INSERT INTO local_tracks(path, title, artist, album, album_key, track_no, \
+                 duration_secs, cover, mtime) \
+                 VALUES('/music/a.mp3', 'A', 'Artist', 'Album', 'artist--album', 1, 200, NULL, 5)",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO playlist_track(playlist_id, video_id) VALUES('VL1', 'dQw4w9WgXcQ')",
+                [],
+            )
+            .unwrap();
+        }
+
+        // Checkpoints 1 and 6 in one call: `open_or_quarantine` tries `Db::open` first and returns
+        // `None` only when that succeeded, so this is both "it opens" and "an old file is not
+        // mistaken for a damaged one and moved aside, taking the library with it".
+        let (d, aside) = Db::open_or_quarantine(&path).unwrap();
+        assert_eq!(aside, None, "{tag}: an old but healthy database was quarantined");
+
+        // Checkpoint 2, through the real accessors rather than `PRAGMA table_info`: `put_stream`
+        // and `get_stream` name every column the current code reads and writes, and both swallow
+        // errors, so a column the migration failed to add shows up here as a row that never
+        // comes back.
+        let fresh = CachedStream {
+            url: "https://x/fresh".into(),
+            itag: 251,
+            expires_at: later,
+            loudness_db: Some(-2.0),
+            is_video: Some(true),
+            ping_url: Some("https://s.youtube.com/api/stats/playback".into()),
+            ping_client: Some("WEB_REMIX".into()),
+            client: Some("VISIONOS".into()),
+        };
+        d.put_stream("fresh", &fresh, now);
+        let got = d.get_stream("fresh", now).unwrap_or_else(|| {
+            panic!("{tag}: the current cache query does not work on the upgraded file")
+        });
+        assert_eq!(
+            (got.url.as_str(), got.loudness_db, got.is_video, got.client.as_deref()),
+            ("https://x/fresh", Some(-2.0), Some(true), Some("VISIONOS")),
+            "{tag}"
+        );
+        assert_eq!(got.ping_client.as_deref(), Some("WEB_REMIX"), "{tag}");
+        // Every one of these releases predates `client`, so the pre-column row has to be gone:
+        // its headers cannot be rebuilt. Checked after the round trip above, which is what
+        // proves `None` here means "deleted" and not "the query failed".
+        assert!(d.get_stream("old-row", now).is_none(), "{tag}: the stale cache row survived");
+
+        // Checkpoint 3: the user's history and library come through untouched. On Repeat still
+        // leaves out the local play, which moved into `listens` with the rest.
+        assert_eq!(d.get_setting("volume").as_deref(), Some("0.42"), "{tag}");
+        assert_eq!(d.top_plays(0, 20), vec![(r#"{"yt":1}"#.to_string(), 1)], "{tag}");
+        let tracks = d.local_tracks(None);
+        assert_eq!(tracks.len(), 1, "{tag}");
+        assert_eq!((tracks[0].path.as_str(), tracks[0].title.as_str()), ("/music/a.mp3", "A"));
+        assert_eq!(tracks[0].album_artist, None, "{tag}: a new column reads as unknown");
+        assert_eq!(d.playlist_memberships()["dQw4w9WgXcQ"], vec!["VL1"], "{tag}");
+        // The playlists-on-this-device tables are new in 1.0.0, so every older file must get them.
+        let mine = d.create_local_playlist("Mine", now).unwrap();
+        assert_eq!(
+            d.add_local_playlist_tracks(mine, &[("v".into(), "{}".into())], now).unwrap(),
+            [true]
+        );
+
+        // Checkpoint 4: still signed in. One account, keyed the way this build computes it,
+        // carrying the identity the old release stored, and pointed at as the active one.
+        let accounts = d.list_accounts();
+        assert_eq!(accounts.len(), 1, "{tag}: expected exactly the one signed-in account");
+        let a = &accounts[0];
+        assert_eq!(a.id, id, "{tag}");
+        assert_eq!(a.session_cookie, LEGACY_COOKIE, "{tag}");
+        assert_eq!(a.data_sync_id.as_deref(), Some("channel-legacy"), "{tag}");
+        assert_eq!(
+            a.selected_identity_json.as_deref(),
+            Some(r#"{"data_sync_id":"channel-legacy"}"#),
+            "{tag}"
+        );
+        assert_eq!(a.account_json.as_deref(), Some(r#"{"name":"Legacy"}"#), "{tag}");
+        assert_eq!(a.visitor_data.as_deref(), Some("vd-legacy"), "{tag}");
+        if migrated_account {
+            assert_eq!(a.added_at, 100, "{tag}: an existing account row was rewritten");
+        }
+        assert_eq!(d.get_setting("active_account").as_deref(), Some(id.as_str()), "{tag}");
+        assert_eq!(d.get_setting("session_cookie").as_deref(), Some(LEGACY_COOKIE), "{tag}");
+        drop(d);
+
+        // Checkpoint 5: the wipes are one-shot. They key off an ALTER succeeding, so if one ever
+        // reported success on a file that already had the column, every launch would empty the
+        // cache and nothing else would notice. The row written above has to outlive a relaunch.
+        let d = Db::open(&path).unwrap();
+        assert!(d.get_stream("fresh", now).is_some(), "{tag}: the cache was wiped again");
+        assert_eq!(d.list_accounts().len(), 1, "{tag}: a relaunch duplicated the account");
+        drop(d);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_v0_4_11_database_upgrades_cleanly() {
+        assert_upgrades_cleanly("v0.4.11", SCHEMA_V0_4_11, false);
+    }
+
+    #[test]
+    fn a_v0_5_12_database_upgrades_cleanly() {
+        assert_upgrades_cleanly("v0.5.12", SCHEMA_V0_5_12, false);
+    }
+
+    #[test]
+    fn a_v0_8_1_database_upgrades_cleanly() {
+        assert_upgrades_cleanly("v0.8.1", SCHEMA_V0_8_1, true);
+    }
+
+    #[test]
+    fn auth_identity_projections_are_updated_and_cleared_together() {
+        let d = db();
+        d.set_auth_identity(
+            "SAPISID=cookie-a",
+            r#"{"data_sync_id":"channel-a"}"#,
+            Some("channel-a"),
+            r#"{"name":"Channel A"}"#,
+        )
+        .unwrap();
+        assert_eq!(d.get_setting("data_sync_id").as_deref(), Some("channel-a"));
+        assert_eq!(
+            d.get_setting("selected_identity_json").as_deref(),
+            Some(r#"{"data_sync_id":"channel-a"}"#)
+        );
+        assert_eq!(d.get_setting("account_json").as_deref(), Some(r#"{"name":"Channel A"}"#));
+        assert_eq!(d.get_setting("session_cookie").as_deref(), Some("SAPISID=cookie-a"));
+
+        d.set_pending_auth_selection("SAPISID=cookie-b", None).unwrap();
+        assert_eq!(d.get_setting("session_cookie").as_deref(), Some("SAPISID=cookie-b"));
+        assert_eq!(d.get_setting("selected_identity_json"), None);
+        assert_eq!(d.get_setting("data_sync_id"), None);
+        assert_eq!(d.get_setting("account_json"), None);
+        assert_eq!(d.get_setting("account_selection_pending").as_deref(), Some("true"));
+
+        d.set_pending_auth_selection("SAPISID=cookie-c", Some("ga-c")).unwrap();
+        assert_eq!(d.get_setting("active_account").as_deref(), Some("ga-c"));
+
+        d.set_auth_identity(
+            "SAPISID=cookie-b",
+            r#"{"data_sync_id":null}"#,
+            None,
+            r#"{"name":"Single channel"}"#,
+        )
+        .unwrap();
+        assert_eq!(d.get_setting("data_sync_id"), None, "a stale delegated id must be deleted");
+        assert_eq!(d.get_setting("account_selection_pending"), None);
+
+        d.clear_auth_identity().unwrap();
+        assert_eq!(d.get_setting("selected_identity_json"), None);
+        assert_eq!(d.get_setting("data_sync_id"), None);
+        assert_eq!(d.get_setting("account_json"), None);
+    }
 }
 
-pub fn index_local_track_fts(
-    title: &str,
-    artist: &str,
-    album: &str,
-    path: &str,
-) -> Result<(), String> {
-    index_local_tracks_fts_batch(&[(title, artist, album, path)])
-}
-
-pub fn remove_local_track_fts(path: &str) -> Result<(), String> {
-    with_db_mut(|conn| {
-        conn.execute("DELETE FROM library_fts WHERE path = ?1", params![path])?;
-        Ok(())
-    })
-}
-
-pub fn update_local_track_path(old_path: &str, new_path: &str) -> Result<(), String> {
-    with_db_mut(|conn| {
-        let tx = conn.transaction()?;
-        tx.execute(
-            "UPDATE library_fts SET path = ?1 WHERE path = ?2",
-            params![new_path, old_path],
-        )?;
-
-        let old_local_uri = format!("local://{}", old_path);
-        let new_local_uri = format!("local://{}", new_path);
-        tx.execute(
-            "UPDATE playlist_tracks SET url = ?1 WHERE url = ?2",
-            params![new_path, old_path],
-        )?;
-        tx.execute(
-            "UPDATE playlist_tracks SET url = ?1 WHERE url = ?2",
-            params![new_local_uri, old_local_uri],
-        )?;
-
-        tx.commit()?;
-        Ok(())
-    })
-}
-
-fn chrono_now_iso() -> String {
-    let now = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-    format!("{}", now)
-}
+// Queue persistence lives in the `settings` KV as a JSON blob (`queue_json`) + `queue_position`,
+// so restore round-trips the full SongItem losslessly via serde (context/11 §state).

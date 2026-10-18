@@ -1,0 +1,36 @@
+{
+  "responseContext": {
+    "visitorData": "CgtSANITIZEDVISITOR",
+    "mainAppWebResponseContext": {
+      "datasyncId": "personal-sync||device-sync"
+    }
+  },
+  "actions": [
+    {
+      "openPopupAction": {
+        "popup": {
+          "multiPageMenuRenderer": {
+            "sections": [
+              {
+                "activeAccountHeaderRenderer": {
+                  "accountName": { "runs": [{ "text": "Personal channel" }] },
+                  "channelHandle": { "runs": [{ "text": "@personal" }] },
+                  "email": { "runs": [{ "text": "listener@example.invalid" }] },
+                  "accountPhoto": {
+                    "thumbnails": [
+                      { "url": "https://example.invalid/avatar-small.jpg" },
+                      { "url": "https://example.invalid/avatar-large.jpg" }
+                    ]
+                  },
+                  "navigationEndpoint": {
+                    "browseEndpoint": { "browseId": "UCSANITIZEDPERSONAL" }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

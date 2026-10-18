@@ -11,8 +11,8 @@ on:
 
 jobs:
   check-linux:
-    name: 'Linux build'
-    runs-on: ubuntu-22.04
+    name: 'Linux check'
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
@@ -21,8 +21,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 26
+          node-version: 22
           cache: 'npm'
+          cache-dependency-path: 'ui/package-lock.json'
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -36,27 +37,30 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
+            libmpv-dev \
             libwebkit2gtk-4.1-dev \
-            build-essential \
-            curl \
-            wget \
-            file \
-            libxdo-dev \
+            libgtk-3-dev \
+            librsvg2-dev \
             libssl-dev \
+            libdbus-1-dev \
             libayatana-appindicator3-dev \
-            librsvg2-dev
-
-      - name: Install frontend dependencies
-        run: npm ci
+            rpm \
+            zstd \
+            libarchive-tools
 
       - name: Build Frontend
-        run: npm run build
+        run: |
+          cd ui
+          npm ci
+          npm run build
 
-      - name: Check Rust Backend
-        run: cargo check --manifest-path src-tauri/Cargo.toml
+      - name: Check Rust Backend & Tests
+        run: |
+          cargo check --workspace
+          cargo test --workspace
 
   check-windows:
-    name: 'Windows build'
+    name: 'Windows check'
     runs-on: windows-latest
 
     steps:
@@ -66,8 +70,75 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 26
+          node-version: 22
           cache: 'npm'
+          cache-dependency-path: 'ui/package-lock.json'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Setup MSVC developer tools
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Download and setup Windows libmpv
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $headers = @{ "User-Agent" = "veluna-ci" }
+          if ($env:GITHUB_TOKEN) { $headers["Authorization"] = "Bearer $env:GITHUB_TOKEN" }
+          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest" -Headers $headers
+          $asset = $release.assets | Where-Object { $_.name -match '^mpv-dev-x86_64-\d+.*\.7z$' } | Select-Object -First 1
+          if (-not $asset) {
+            $asset = $release.assets | Where-Object { $_.name -match '^mpv-dev-x86_64-.*\.7z$' -and $_.name -notmatch 'v3' } | Select-Object -First 1
+          }
+          Write-Host "Downloading $($asset.name)..."
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile mpv-dev.7z
+          7z x mpv-dev.7z -ompv-dev -y
+
+          $names = dumpbin /exports mpv-dev\libmpv-2.dll |
+            Select-String -Pattern '^\s+\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+(\w+)' |
+            ForEach-Object { $_.Matches[0].Groups[1].Value }
+          @("EXPORTS") + ($names | ForEach-Object { "    $_" }) | Set-Content mpv-dev\mpv.def -Encoding ascii
+          lib /def:mpv-dev\mpv.def /name:libmpv-2.dll /out:mpv-dev\mpv.lib /machine:x64
+          Copy-Item mpv-dev\libmpv-2.dll src-tauri\libmpv-2.dll -Force
+
+      - name: Build Frontend
+        shell: pwsh
+        run: |
+          cd ui
+          npm ci
+          npm run build
+          cd ..
+
+      - name: Check Rust Backend
+        shell: pwsh
+        env:
+          RUSTFLAGS: -L native=${{ github.workspace }}\mpv-dev
+        run: |
+          cargo check --workspace
+
+  check-macos:
+    name: 'macOS check'
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: 'ui/package-lock.json'
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -77,17 +148,17 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
 
-      - name: Download Windows bundled binaries
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install macOS dependencies
         run: |
-          node ./scripts/setup-deps.js
-
-      - name: Install frontend dependencies
-        run: npm ci
+          brew install mpv
 
       - name: Build Frontend
-        run: npm run build
+        run: |
+          cd ui
+          npm ci
+          npm run build
 
       - name: Check Rust Backend
-        run: cargo check --manifest-path src-tauri/Cargo.toml
+        run: |
+          export LIBRARY_PATH="$(brew --prefix)/lib:$LIBRARY_PATH"
+          cargo check --workspace

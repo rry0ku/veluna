@@ -1,0 +1,13 @@
+# Match the formatting this code is already written in, so `cargo fmt` is close to a no-op instead
+# of a 450-line rewrite of files nobody touched. PR #13 hit exactly that: 21 of its 27 changed files
+# were reformatting, which buried the 900 lines of real work.
+
+# How the code is actually written: line lengths across the workspace sit at 100 at the 99th
+# percentile, and this is rustfmt's default anyway.
+max_width = 100
+
+# The real fix. rustfmt's default heuristics derive much tighter sub-limits from max_width (function
+# calls 60 chars, struct literals 18, chains 60), so a one-line call or struct literal that fits
+# comfortably inside 100 still gets exploded across four lines. "Max" lets all of them use the full
+# width, which is how this code was written by hand.
+use_small_heuristics = "Max"

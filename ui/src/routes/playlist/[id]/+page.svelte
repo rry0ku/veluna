@@ -1,0 +1,1425 @@
+<script lang="ts">
+	import { untrack } from 'svelte';
+	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
+	import { HugeiconsIcon } from '@hugeicons/svelte';
+	import {
+		PlayIcon,
+		ShuffleIcon,
+		PencilEdit02Icon,
+		Delete02Icon,
+		MoreVerticalIcon,
+		Radio02Icon,
+		ArrowUpNarrowWideIcon,
+		ArrowDownWideNarrowIcon,
+		DashboardSquare02Icon,
+		PlayListAddIcon,
+		Share08Icon,
+		BookmarkAdd02Icon,
+		BookmarkCheck02Icon,
+		BookmarkMinus02Icon,
+		ListRestartIcon,
+		Sorting01Icon,
+		ArrowUpDownIcon,
+		ComputerIcon,
+		SpotifyIcon,
+		Search01Icon
+	} from '@hugeicons/core-free-icons';
+	import { Button } from '$lib/components/ui/button';
+	import * as RadioGroup from '$lib/components/ui/radio-group';
+	import * as AlertDialog from '$lib/components/ui/alert-dialog';
+	import { Skeleton } from '$lib/components/ui/skeleton';
+	import TrackRow from '$lib/components/TrackRow.svelte';
+	import TrackColumns, { chosen, loadMyPlays, myPlays } from '$lib/components/TrackColumns.svelte';
+	import { availableColumns } from '$lib/trackcolumns';
+	import TrackSelectionBar from '$lib/components/TrackSelectionBar.svelte';
+	import TrackSelectButton from '$lib/components/TrackSelectButton.svelte';
+	import { trackSelection } from '$lib/selection.svelte';
+	import { subtitleCount, withSubtitleCount } from '$lib/trackcount';
+	import EditPlaylistDialog from '$lib/components/EditPlaylistDialog.svelte';
+	import TrackFilter, { filterTracks } from '$lib/components/TrackFilter.svelte';
+	import TrackRowSkeleton from '$lib/components/TrackRowSkeleton.svelte';
+	import PlaylistSuggestions from '$lib/components/PlaylistSuggestions.svelte';
+	import ErrorState from '$lib/components/ErrorState.svelte';
+	import * as api from '$lib/api';
+	import { ON_REPEAT_ID } from '$lib/api';
+	import type { BrowseItem, PlaylistPage, SongItem } from '$lib/api';
+	import { getCached, putCached, invalidateCachedPrefix } from '$lib/pagecache';
+	import { thumb } from '$lib/thumb';
+	import { appearance } from '$lib/theme.svelte';
+	import { anchorMenu, fitMenu, NO_ANCHOR } from '$lib/menu';
+	import { rowWindow } from '$lib/rows';
+	import { rowScroller } from '$lib/rows.svelte';
+	import { t } from '$lib/i18n.svelte';
+	import { imp, updateFromSpotify } from '$lib/import.svelte';
+	import {
+		SORTS,
+		fetchSort,
+		persistedSort,
+		sortSongs,
+		storedExactly,
+		type SortKey
+	} from '$lib/sort';
+	import {
+		addPick,
+		addToLibrary,
+		auth,
+		library,
+		ownedByUser,
+		removeFromLibrary,
+		enqueue,
+		isSaved,
+		isSynced,
+		playback,
+		openAddToPlaylist,
+		openAddManyToPlaylist,
+		openShare,
+		playFrom,
+		startRadio,
+		toast,
+		toggleSaved,
+		bumpLibraryTrackCount,
+		noteSavedIn,
+		noteUnsavedFrom,
+		setRating,
+		patchLibraryPlaylist,
+		forgetPlaylist,
+		lastPlaylistAdd,
+		lastPlaylistRemove
+	} from '$lib/player.svelte';
+
+	// `$state.raw`, not `$state`: a deep proxy makes every read of a row go through a trap and
+	// create a signal, and this list runs to five figures. Measured at 5,000 rows, one filter pass
+	// is 0.6ms over a plain array and 6.4ms through the proxy, and both the filter box and a local
+	// sort do that pass on every keystroke and on every continuation page that lands. Raw is safe
+	// here because every write below reassigns the whole object (`pl = { ...pl, … }`); nothing
+	// mutates `pl` in place. Keep it that way, or the page stops updating.
+	let pl = $state.raw<PlaylistPage | null>(null);
+	let loading = $state(true);
+	let error = $state<string | null>(null);
+	let loadingMore = $state(false);
+	let moreError = $state(false);
+	let inflight: Promise<void> | null = null;
+	// The delete confirmation dialog, and the request it is waiting on.
+	let confirmingDelete = $state(false);
+	let deleting = $state(false);
+	// A random song's cover, the hero backdrop when the playlist has no cover of its own.
+	let bgImage = $state<string | null>(null);
+
+	// ⋯ options menu, positioned `fixed` at the button so it isn't clipped (matches TrackRow).
+	let menuOpen = $state(false);
+	let anchor = $state(NO_ANCHOR);
+
+	// "Edit playlist": name, description, visibility and a cover of your own.
+	let editing = $state(false);
+	// The header's description, clamped to two lines until "More" is pressed.
+	let expanded = $state(false);
+	// ponytail: character count, not a measured overflow. It only decides whether the More button
+	// is worth drawing, and a blurb that short reads fine in full either way; measure the paragraph
+	// (and re-measure on resize) only if the button starts showing up under one-liners.
+	const longDescription = $derived((pl?.description?.length ?? 0) > 120);
+	// The artwork on the page: whatever the user picked on this machine, else YouTube's own.
+	const art = $derived(thumb(pl?.cover ?? pl?.thumbnail, 400));
+
+	// Header filter box: matches title / artist / album over the rows loaded so far.
+	//
+	// Two values, not one. `query` is what the input holds, so typing never waits on anything.
+	// `applied` is what the list is actually narrowed by, and it lags by `FILTER_DEBOUNCE_MS`,
+	// because the two things a query sets off are both expensive: a pass over every loaded row
+	// (five figures on Liked Music), and `loadAll()`, which is up to 50 sequential requests for
+	// the pages a filter has to cover. Typing "beat" should not start that walk at "b".
+	const FILTER_DEBOUNCE_MS = 300;
+	let query = $state('');
+	let applied = $state('');
+	let filterTimer: ReturnType<typeof setTimeout> | undefined;
+	// Set when the box takes focus, so the walk below starts while the query is still being typed
+	// rather than after it: on a 4,000-track playlist that walk is 40 chained requests (#316).
+	let searchOpened = $state(false);
+	$effect(() => {
+		const q = query;
+		// Clearing the box is instant: there is nothing to compute and nothing to fetch, and a
+		// list that stays narrowed for a third of a second after you hit the ✕ reads as broken.
+		if (!q.trim()) {
+			clearTimeout(filterTimer);
+			applied = '';
+			return;
+		}
+		filterTimer = setTimeout(() => (applied = q), FILTER_DEBOUNCE_MS);
+		return () => clearTimeout(filterTimer);
+	});
+
+	const id = $derived(page.params.id ?? '');
+	const nowId = $derived(playback.now?.videoId);
+	// The liked-music auto-playlist isn't a user playlist — no rename/delete, but shuffle is fine.
+	const isLiked = $derived(id === api.LIKED_MUSIC_ID);
+	// On Repeat is built locally from play counts: no artwork, and no radio to seed autoplay from.
+	const isOnRepeat = $derived(id === ON_REPEAT_ID);
+	// Kept on this machine (#251): no YouTube item behind it, so no radio and nothing to share, and
+	// every row is already here (no pages to walk).
+	const isLocalList = $derived(api.isLocalPlaylist(id));
+	// Imported from a Spotify link (#375): the header offers to bring it up to date with Spotify.
+	let spotifyUrl = $state<string | null>(null);
+	$effect(() => {
+		const pid = id;
+		spotifyUrl = null;
+		api
+			.importSource(pid)
+			.then((url) => {
+				if (pid === id) spotifyUrl = url;
+			})
+			.catch(() => {});
+	});
+	const updatingFromSpotify = $derived(imp.snapshot?.update === id);
+	// YouTube's auto-built 2x2 collage of the first four tracks. It comes off yt3 with an `=s<size>`
+	// suffix; every cover somebody actually chose (uploaded here, in YTM, or in Studio) arrives as
+	// `=w<n>-h<n>-...` or straight off i.ytimg. Checked against live browse responses, 2026-09-02.
+	const COLLAGE = /yt3\.(ggpht|googleusercontent)\.com\/.*=s\d+/;
+	// The backdrop: a cover the playlist really has, else a random song's art. The collage isn't a
+	// cover anyone picked, and blown up behind the header it just repeats the rows below it.
+	// A playlist on this machine has the same problem: its thumbnail is only its first track's art.
+	// Blurred (#461), it is a 96px thumbnail: the 24px blur throws away everything finer, and the
+	// sharp 1200px one is what showed its pixels once stretched to the page's width.
+	const backdrop = $derived.by(() => {
+		const own =
+			pl?.cover ??
+			(pl?.thumbnail && !COLLAGE.test(pl.thumbnail) && !isLocalList ? pl.thumbnail : null);
+		if (appearance.blurPlaylistHeader) return thumb(own ?? bgImage, 96);
+		return thumb(own, 1200) ?? bgImage;
+	});
+	// Only offer rename/delete on playlists the signed-in user actually owns (backend `owned` flag).
+	// Liked Music reports owned but can't be renamed/deleted, so exclude it explicitly.
+	const editable = $derived((pl?.owned ?? false) && !isLiked);
+	// Saving someone else's playlist keeps it on this machine, signed in or not: YouTube has no
+	// "save" for a playlist that doesn't cost an account, and the local one works offline. Your own
+	// playlists, Liked Music and On Repeat are in the library already by definition.
+	// Once the sync button has put it on the account, the account owns the save: removing only the
+	// local copy would leave it in the library grid, so the entry hides until the user signs out.
+	// On the account already (pushed from here, or saved on another device): the local copy is not
+	// what holds it in the library any more, so the menu says so instead of offering a second save.
+	const inAccount = $derived(
+		!!auth.account?.signedIn && (isSynced(id) || library.items.some((i) => i.id === id))
+	);
+	const savable = $derived(!isOnRepeat && !isLiked && !editable && !inAccount);
+	const savedHere = $derived(isSaved(id));
+	// YouTube's header count includes rows that never make it into the list (unavailable or
+	// region-blocked tracks), so it reads high. Once every page is in, we know the real number, so
+	// swap it in. Until then the header's own count is the only estimate of the total there is.
+	// A playlist on this machine is always all here, so its count is just the rows, in the UI's words.
+	const subtitle = $derived(
+		pl && isLocalList
+			? pl.items.length === 1
+				? t('library.songs_count_one')
+				: t('library.songs_count', { count: pl.items.length })
+			: pl && !pl.continuation && pl.items.length
+				? withSubtitleCount(pl.subtitle ?? '', pl.items.length)
+				: pl?.subtitle
+	);
+	// --- sorting (`$lib/sort`) ---------------------------------------------------------------
+	let sort = $state<SortKey>('default');
+	let desc = $state(false);
+	let sortOpen = $state(false);
+	let sortAnchor = $state(NO_ANCHOR);
+	let preparing = $state(false);
+	// A YouTube sort is a round trip, so the rows on screen are the previous order until it lands.
+	// Dim them meanwhile, or picking a sort looks like it did nothing.
+	let resorting = $state(false);
+
+	const sortLabel = $derived(
+		sort === 'default' ? t('sort.label') : t(`sort.${sort}`)
+	);
+	// "Most played" ranks by the local listening history, the same counts the Your plays column
+	// shows. Read when the sort is picked, and when a list opens already on it.
+	$effect(() => {
+		if (sort === 'plays') untrack(loadMyPlays);
+	});
+
+	// YouTube offers a sort menu for this list, so it does the ordering — all of it except "Most
+	// played", which is our own listening history and means nothing to YouTube.
+	const serverSorted = $derived(!!pl?.sortMenu && sort !== 'plays');
+	// …and on a playlist we own the choice is a write, so every other client follows it.
+	const storable = $derived(pl?.sortMenu?.editable ?? false);
+	// Liked Music has no editable menu, but YouTube remembers whichever order it was last asked
+	// for anyway. Someone else's playlist remembers nothing, so that one falls to localStorage.
+	const keepsSort = $derived(!!pl?.sortMenu && (storable || isLiked));
+
+	const sortedItems = $derived.by(() => {
+		const items = pl?.items ?? [];
+		// The rows already arrived in order, reversed ones included. The single order YouTube has
+		// no params for is a reversed *manual* order, so that one reverse stays here.
+		if (serverSorted) return sort === 'default' && desc ? items.slice().reverse() : items;
+		// Liked Music is the one playlist YouTube hands back newest-addition-first.
+		return sortSongs(items, sort, isLiked, desc, myPlays.counts);
+	});
+
+	// The rows actually on screen: the sorted list, narrowed by the header's filter box. Identical
+	// to `sortedItems` with no query typed.
+	const shown = $derived(filterTracks(sortedItems, applied));
+	const selection = trackSelection(() => sortedItems, () => shown,
+		() => `${auth.epoch}:${id}`, () => !pl?.continuation,
+		// A filter's matches are only the loaded ones, and typing one walks the list anyway, so the
+		// header count would be the wrong number to offer there.
+		() => (filtering ? undefined : headerCount), loadAll);
+	const filtering = $derived(!!applied.trim());
+	// YouTube's own count, which is what the subtitle under the title shows until every page is in.
+	// An upper bound, not a count: it includes rows that never arrive (unavailable, region-blocked).
+	// With no number to read, Select all falls back to the rows it has.
+	const headerCount = $derived(subtitleCount(pl?.subtitle));
+
+	// The track list's optional columns (`TrackColumns`): what this list can fill, and of that, what
+	// the user has chosen. Not Date added on a collaborative playlist: the value it reads is what
+	// "Top voted" sorts by, and it was only ever checked to be the add time where nobody votes.
+	const availCols = $derived(
+		availableColumns(pl?.items ?? []).filter((c) => c !== 'added' || !pl?.collaborative)
+	);
+	const cols = $derived(availCols.filter((c) => chosen.list.includes(c)));
+
+	// A sort has to cover the whole playlist, not the pages scrolled so far, so pull the rest in.
+	// Stops on a failed page (`moreError`), on navigation, and on any pass that made no progress.
+	// Answers whether it got the lot: a queue built from a short list is missing tracks for good,
+	// so the caller has to be able to say so rather than quietly handing over half a playlist.
+	async function loadAll(): Promise<boolean> {
+		const pid = id;
+		moreError = false; // a page that failed earlier gets another go on an explicit action
+		while (pl?.continuation && !moreError) {
+			const token = pl.continuation;
+			await loadMore();
+			if (pid !== id) return false;
+			if (pl?.continuation === token) break; // no progress, and nothing left to try
+		}
+		return !pl?.continuation;
+	}
+
+	// Sorting rows here is only honest once every page is in. A YouTube sort already covers the
+	// whole list (and its continuation token pages on in that same order), so the walk is down to
+	// the two orders it cannot produce: our play counts, and a reversed manual order.
+	const sorting = $derived(
+		serverSorted ? sort === 'default' && desc : sort !== 'default' || desc
+	);
+
+	// Everything that hands tracks to the queue goes through here first: a sorted queue is only
+	// honest once every page is in.
+	async function ready(): Promise<boolean> {
+		if (!sorting) return true;
+		if (sort === 'plays') await loadMyPlays(); // queueing before they land would sort by nothing
+		if (!pl?.continuation) return true;
+		preparing = true;
+		try {
+			return await loadAll();
+		} finally {
+			preparing = false;
+		}
+	}
+
+	// Sorted, but a page never arrived. The queue is a snapshot, so the tracks that did not load
+	// are gone from it for good — play them anyway and say so, rather than refusing to play at all
+	// over one failed request. The list's own "Try again" sits at the bottom of the page.
+	function warnPartial(what: 'queued' | 'added') {
+		toast.error(t(what === 'queued' ? 'toasts.partial_playlist_queued' : 'toasts.partial_playlist_added'));
+	}
+
+	// One cache entry per order asked for. "No order asked for" keeps the bare key, because the
+	// artist page and the community cards cache a playlist under that one too.
+	const cacheKey = (pid: string, s: SortKey | null, d: boolean) =>
+		!s || (s === 'default' && !d) ? `playlist:${pid}` : `playlist:${pid}:${s}${d ? ':desc' : ''}`;
+	// The key the rows on screen came from, so an optimistic mutation writes back to the entry it
+	// actually read and never overwrites a different order's. Set by every load.
+	let loadedKey = '';
+
+	// Only what YouTube will not hold for us goes in here: "Most played", a reversed
+	// Title/Artist/Album, and any sort on a list it stores none for (someone else's playlist, a
+	// radio mix). Everything else is read back off the browse response instead, so a sort changed
+	// in YouTube Music turns up here too.
+	const SORT_STORE = 'playlist_sort';
+	type SavedSort = { sort: SortKey; desc: boolean };
+
+	function readSort(pid: string): SavedSort | null {
+		try {
+			return JSON.parse(localStorage.getItem(SORT_STORE) ?? '{}')[pid] ?? null;
+		} catch {
+			return null;
+		}
+	}
+
+	function rememberSort(pid: string, keptByYouTube: boolean) {
+		try {
+			const all = JSON.parse(localStorage.getItem(SORT_STORE) ?? '{}');
+			if (keptByYouTube) delete all[pid];
+			else all[pid] = { sort, desc } satisfies SavedSort;
+			localStorage.setItem(SORT_STORE, JSON.stringify(all));
+		} catch {
+			/* a disabled or full store just means this one sort isn't remembered */
+		}
+	}
+
+	function chooseSort(key: SortKey) {
+		sortOpen = false;
+		if (key === sort) return;
+		sort = key;
+		applySort();
+	}
+
+	function toggleDesc() {
+		desc = !desc;
+		applySort();
+	}
+
+	// A sort change is a different request, not a different view of the same one: YouTube owns the
+	// order, so the rows have to come back from it. Storing the choice first is what makes the sort
+	// outlive the visit and show up in YouTube Music.
+	async function applySort() {
+		const pid = id;
+		rememberSort(pid, keepsSort && storedExactly(sort, desc));
+		if (!pl?.sortMenu) {
+			// Nothing to ask YouTube for. Sort the rows here instead, once they are all here.
+			if (sorting) loadAll();
+			return;
+		}
+		// Store it before re-reading, so the page that comes back is the one other clients see too.
+		const store = storable ? persistedSort(sort, desc) : null;
+		if (store) {
+			try {
+				await api.setPlaylistSort(pid, store);
+			} catch (e) {
+				// The order still applies here; only the carry-over to other clients is lost.
+				toast.error(t('toasts.sort_not_saved', { error: String(e) }));
+			}
+			if (pid !== id) return;
+		}
+		await fetchSorted(pid);
+		// "Most played" and a reversed manual order are still ours to do, over the whole list.
+		if (pid === id && sorting) loadAll();
+	}
+
+	// Ask YouTube for the list in the current order. `key` doubles as the identity of this request:
+	// picking a second sort while the first is in the air must not let the first one land on top.
+	async function fetchSorted(pid: string) {
+		const key = cacheKey(pid, sort, desc);
+		const current = () => pid === id && key === cacheKey(id, sort, desc);
+		const hit = getCached<PlaylistPage>(key);
+		if (hit) {
+			loadedKey = key;
+			pl = hit;
+			return;
+		}
+		resorting = true;
+		try {
+			const fresh = await api.getPlaylist(pid, fetchSort(sort), desc);
+			putCached(key, fresh); // still the right rows for that order, superseded or not
+			if (!current()) return;
+			loadedKey = key;
+			pl = fresh;
+		} catch (e) {
+			if (current()) toast.error(t('toasts.sort_failed', { error: String(e) }));
+		} finally {
+			// Only the newest pick clears it; an older one finishing late must not un-dim the list.
+			if (current()) resorting = false;
+		}
+	}
+
+	// Right-anchored, unlike the ⋯ menu: this button sits at the far end of the header, so a menu
+	// wider than it would run off the page opening leftwards from its left edge.
+	function openSort(e: MouseEvent) {
+		sortAnchor = anchorMenu(e, { align: 'right' });
+		sortOpen = true;
+	}
+
+	// Page 1 and the header agree, so the rows `a` walked in past page 1 are still the list's.
+	const sameRows = (a: PlaylistPage, b: PlaylistPage) =>
+		a.subtitle === b.subtitle && b.items.every((t, i) => a.items[i]?.video_id === t.video_id);
+
+	async function load(pid: string) {
+		// A sort YouTube keeps is read back off the response below; this store only holds the ones
+		// it cannot (see `rememberSort`), so an entry here means "ask for exactly this".
+		const saved = readSort(pid);
+		sort = saved?.sort ?? 'default';
+		desc = saved?.desc ?? false;
+		const key = cacheKey(pid, saved && sort, desc);
+		loadedKey = key;
+		const hit = getCached<PlaylistPage>(key);
+		confirmingDelete = false;
+		editing = false;
+		expanded = false;
+		sortOpen = false;
+		query = '';
+		applied = '';
+		searchOpened = false;
+		clearTimeout(filterTimer);
+		// A page that failed on the last playlist would otherwise keep this one's retry state
+		// showing, and block the filter's own walk (`loadAll` bails while it's set).
+		moreError = false;
+		if (hit) {
+			pl = hit;
+			if (!saved) sort = hit.sortMenu?.selected ?? 'default';
+			bgImage = pickCover(hit.items);
+			loading = false;
+		} else {
+			loading = true;
+			pl = null;
+			bgImage = null;
+		}
+		error = null;
+		const [askedSort, askedDesc] = [sort, desc];
+		try {
+			// Nothing saved means asking for no order at all: what comes back is the order the
+			// account already has this list in, which is the one YouTube Music would show.
+			const fresh = await api.getPlaylist(pid, saved ? fetchSort(sort) : undefined, desc);
+			// Superseded by navigation, or by a sort picked off the cached rows while this was in
+			// the air — either way `fetchSorted` owns the page now, so drop this response.
+			if (pid !== id || sort !== askedSort || desc !== askedDesc) return;
+			// This re-reads page 1 only. When it and the header ("4,012 tracks") still match the rows
+			// on screen, keep the pages walked in behind them: dropping those is what made every
+			// search on a long playlist walk the whole list again (#316).
+			// ponytail: an edit made elsewhere that leaves page 1 and the count alone (one track
+			// swapped for another deep in the list) shows only once the cache entry expires.
+			const next =
+				pl && sameRows(pl, fresh)
+					? { ...fresh, items: pl.items, continuation: pl.continuation }
+					: fresh;
+			pl = next;
+			if (!saved) sort = fresh.sortMenu?.selected ?? 'default';
+			bgImage = pickCover(fresh.items);
+			putCached(key, next);
+		} catch (e) {
+			if (pid !== id) return;
+			if (!hit) error = String(e);
+		} finally {
+			if (pid === id) loading = false;
+		}
+	}
+
+	// Reload whenever the route param changes (playlist → playlist navigation), and *only* then.
+	// untrack: `load` both reads and writes `sort`/`desc` — it adopts the order YouTube has the list
+	// in — so tracking them would make every finished load re-run this effect and fetch the playlist
+	// again, forever, on any list not sitting on Default.
+	$effect(() => {
+		const pid = id;
+		if (pid) untrack(() => load(pid));
+	});
+
+	// Songs added to THIS playlist via the picker (e.g. from the queue) appear immediately.
+	// Epoch-guarded so an add is applied once; adds to other playlists are just marked seen.
+	let seenAddEpoch = lastPlaylistAdd.epoch;
+	$effect(() => {
+		if (lastPlaylistAdd.epoch === seenAddEpoch) return;
+		seenAddEpoch = lastPlaylistAdd.epoch;
+		if (!pl || lastPlaylistAdd.playlistId !== id) return;
+		// Stamped now, as the playlist itself stamps it, so Date added fills in at once. A song
+		// picked off another playlist would otherwise bring that one's date along.
+		const added_at = Math.floor(Date.now() / 1000);
+		const songs = lastPlaylistAdd.songs.map((s) => ({ ...s, added_at }));
+		pl = { ...pl, items: [...pl.items, ...songs] };
+		cacheCurrent();
+		fillSetVideoIds();
+	});
+
+	// Removed from THIS playlist somewhere else (the player's track menu, on a song playing out of
+	// it): drop the row here too. Same epoch guard as the add above.
+	let seenRemoveEpoch = lastPlaylistRemove.epoch;
+	$effect(() => {
+		if (lastPlaylistRemove.epoch === seenRemoveEpoch) return;
+		seenRemoveEpoch = lastPlaylistRemove.epoch;
+		if (!pl || lastPlaylistRemove.playlistId !== id) return;
+		const gone = lastPlaylistRemove.setVideoId;
+		pl = { ...pl, items: pl.items.filter((t) => t.set_video_id !== gone) };
+		cacheCurrent();
+	});
+
+	// A suggestion (#395) joins the list the moment it is picked, and leaves again if YouTube
+	// refuses it. Answers whether it is in the playlist, so the shelf knows whether to take it back.
+	async function addSuggestion(song: SongItem): Promise<boolean> {
+		if (!pl) return false;
+		const pid = id;
+		const row: SongItem = { ...song, set_video_id: undefined };
+		// Picked from the dock with pages still to come, the foot of the list isn't loaded: appended
+		// here the row would sit mid-list, then come again with the last page. It arrives with that.
+		if (!pl.continuation) {
+			pl = { ...pl, items: [...pl.items, row] };
+			cacheCurrent();
+		}
+		const drop = () => {
+			if (pid !== id || !pl) return;
+			pl = { ...pl, items: pl.items.filter((t) => t !== row) };
+			cacheCurrent();
+		};
+		try {
+			const added = await api.addToPlaylist(pid, song.video_id);
+			noteSavedIn(pid, [song.video_id]);
+			if (!added) {
+				// Already in it (added elsewhere since the page loaded): the optimistic row would be
+				// a second copy, and the suggestion is spent either way.
+				drop();
+				toast(t('toasts.already_in', { playlist: pl?.title ?? '' }));
+				return true;
+			}
+			bumpLibraryTrackCount(pid, 1);
+			if (pid === id) fillSetVideoIds();
+			return true;
+		} catch (e) {
+			drop();
+			toast.error(String(e));
+			return false;
+		}
+	}
+
+	// One refetch loop at a time: picking five suggestions in a row would otherwise start five, each
+	// re-reading page 1 up to three times. A row added while one runs is caught by its next pass, or
+	// by the pass queued here.
+	let filling = false;
+	let fillQueued = false;
+	async function fillSetVideoIds() {
+		if (filling) {
+			fillQueued = true;
+			return;
+		}
+		filling = true;
+		try {
+			do {
+				fillQueued = false;
+				await fillPass();
+			} while (fillQueued);
+		} finally {
+			filling = false;
+		}
+	}
+
+	// Optimistic rows lack set_video_id, so "Remove from playlist" is hidden on them. Refetch and
+	// patch the real ids into place (merge, not replace — keeps loadMore pages and any row YouTube
+	// hasn't reflected yet). Retries because the add is eventually-consistent on YouTube's side.
+	async function fillPass() {
+		if (isLiked) return;
+		const pid = id;
+		for (const delay of [0, 2000, 4000]) {
+			if (delay) await new Promise((r) => setTimeout(r, delay));
+			if (pid !== id || !pl) return;
+			try {
+				// Same order the rows on screen are in, so the two lists line up row for row.
+				const fresh = await api.getPlaylist(pid, fetchSort(sort), desc);
+				if (pid !== id || !pl) return;
+				const used = new Set(pl.items.map((t) => t.set_video_id).filter(Boolean));
+				pl = {
+					...pl,
+					subtitle: fresh.subtitle, // header track count catches up too
+					items: pl.items.map((t) => {
+						if (t.set_video_id) return t;
+						const match = fresh.items.find(
+							(f) => f.video_id === t.video_id && f.set_video_id && !used.has(f.set_video_id)
+						);
+						if (!match) return t;
+						used.add(match.set_video_id);
+						return { ...t, set_video_id: match.set_video_id };
+					})
+				};
+				cacheCurrent();
+				if (pl.items.every((t) => t.set_video_id)) return;
+			} catch {
+				/* retry on the next pass */
+			}
+		}
+	}
+
+	// Keep the page cache in step with optimistic mutations so a revisit within the TTL never
+	// resurrects pre-mutation data (the optimistic-UI contract). context: plans/007.
+	function cacheCurrent() {
+		if (pl && loadedKey) putCached(loadedKey, pl);
+	}
+
+	// Same, for a write that removed rows: the entries for every *other* order this playlist was
+	// fetched in still hold them, and `fetchSorted` serves a hit without revalidating, so changing
+	// the sort would bring the removed tracks back.
+	function cacheAfterRemoval() {
+		invalidateCachedPrefix(`playlist:${id}`);
+		cacheCurrent();
+	}
+
+	// One page at a time, shared: the scroll sentinel and the "load the rest before playing" walk
+	// both go through here, so they can never fire overlapping requests for the same token.
+	function loadMore(): Promise<void> {
+		inflight ??= fetchPage().finally(() => (inflight = null));
+		return inflight;
+	}
+
+	async function fetchPage() {
+		const token = pl?.continuation;
+		if (!token) return;
+		loadingMore = true;
+		moreError = false;
+		try {
+			const more = await api.getPlaylistMore(token);
+			if (pl?.continuation !== token) return; // stale (navigated or mutated mid-flight)
+			pl = {
+				...pl,
+				items: [...pl.items, ...more.items],
+				// An empty page would leave the sentinel in view with nothing to show — that's the end.
+				continuation: more.items.length ? more.continuation : undefined
+			};
+			cacheCurrent();
+		} catch {
+			// Stop auto-loading and offer a retry — auto-retrying a visible sentinel would spin.
+			moreError = true;
+		} finally {
+			loadingMore = false;
+		}
+	}
+
+	// Only the rows around the viewport are rendered; the rest are two padded boxes (`rows.ts`).
+	// A Liked Songs list runs to five figures, and `content-visibility` spares the layout and the
+	// paint but not the DOM node, the style or the component.
+	const sc = rowScroller();
+	// The header scrolls away with the rows, so the window is measured from where row 0 sits
+	// rather than from the top of the scroller.
+	const win = $derived(
+		rowWindow(sc.scrollTop - sc.offsetPx, sc.viewportPx, shown.length, sc.rowPx)
+	);
+
+	// One page per approach to the bottom: the observer only fires when the sentinel *enters* view,
+	// so an appended page that pushes it back out is required before the next fetch. rootMargin
+	// starts the fetch early enough that the rows are usually there by the time you reach them.
+	function sentinel(node: HTMLElement) {
+		const io = new IntersectionObserver(([e]) => e.isIntersecting && loadMore(), {
+			rootMargin: '600px 0px'
+		});
+		io.observe(node);
+		return () => io.disconnect();
+	}
+
+	// A filter can only match rows that have arrived, and a narrowed list never pushes the sentinel
+	// back out of view, so the observer fires once and stops. Same walk a sort needs, for the same
+	// reason: the search has to cover the whole playlist, not the pages scrolled so far. The flag
+	// keeps one walk running rather than starting a fresh one on every page it lands.
+	//
+	// Keyed on the playlist id rather than a bare boolean because this component is reused across
+	// playlist-to-playlist navigation (that's why `load` above is itself driven by an `$effect` on
+	// `id`, not a fresh mount). A walk started on playlist A can still be in flight when you
+	// navigate to B and filter there; a plain `walking` flag would still read true from A, block
+	// B's walk from ever starting, and then A's `finally` would clear a flag B never got to set,
+	// so B's filter would search only whatever it happened to have loaded and could wrongly show
+	// "No tracks match" with real matches still unfetched. Comparing against the current `id`
+	// means a different playlist is never blocked by someone else's walk, and capturing the id a
+	// walk started for (`pid`) into its own `finally` means a stale walk can only ever clear its
+	// own marker, never a fresher walk's.
+	let walkingFor: string | null = null;
+	// The continuation a walk gave up on. `loadAll` stops when a page comes back on the same token,
+	// but the page it just appended re-runs this effect, and without this the walk would restart,
+	// re-fetch that page and append it again for as long as the filter or the pending selection
+	// holds. Tokens belong to one playlist, so navigating away needs no reset, and a successful
+	// Retry moves the token on and lets the walk continue.
+	let stalledAt: string | null = null;
+	$effect(() => {
+		// Recover selected occurrences in the new server order before enabling bulk actions.
+		if ((!filtering && !searchOpened && !selection.pending) || !pl?.continuation || walkingFor === id || moreError) return;
+		if (stalledAt === pl.continuation) return;
+		const pid = id;
+		walkingFor = pid;
+		loadAll().then((done) => {
+			stalledAt = done ? null : (pl?.continuation ?? null);
+			if (walkingFor === pid) walkingFor = null;
+		});
+	});
+
+	// This playlist as a card, for the sidebar's last-played sort and the Shortcuts grid.
+	// Saving goes through the shared path (local row, plus the account write when signed in), so a
+	// playlist saved here is in the library everywhere and not only until the next sync. Removal
+	// stays local: undoing YouTube's own copy is what `inAccount` hides this row for.
+	async function saveToLibrary() {
+		if (savedHere) {
+			toggleSaved(asItem());
+			toast.success(t('library.removed_from_library'));
+			return;
+		}
+		try {
+			const result = await addToLibrary(asItem());
+			toast.success(
+				result === 'already' ? t('toasts.already_in_library') : t('library.saved_to_library')
+			);
+		} catch (e) {
+			toast.error(String(e));
+		}
+	}
+
+	async function unsaveFromLibrary() {
+		try {
+			await removeFromLibrary(asItem());
+			toast.success(t('library.removed_from_library'));
+		} catch (e) {
+			toast.error(String(e));
+		}
+	}
+
+	const asItem = (): BrowseItem => ({
+		kind: 'playlist',
+		id,
+		title: pl?.title ?? t('common.playlist_singular'),
+		subtitle,
+		// On Repeat stays artwork-free wherever it's rendered (shortcuts, recents) so it always
+		// draws its icon rather than one of its songs' covers.
+		thumbnail: isOnRepeat ? undefined : (pl?.cover ?? pl?.thumbnail ?? bgImage ?? undefined)
+	});
+
+	// `sourceId` points autoplay at that playlist's radio. On Repeat has no YouTube id, so pass
+	// none and let autoplay seed off the last video instead. The queue is the whole playlist, not
+	// the pages scrolled so far, but waiting for it here is what made long playlists take forever
+	// to start: YouTube hands out tracks 100 at a time and the tokens are chained, so the backend
+	// takes the token and walks the rest into the queue while page 1 is already playing.
+	//
+	// A YouTube sort keeps the token: the pages behind it continue that same order, so the backend
+	// walking them is exactly right. The two orders it cannot produce (our play counts, a reversed
+	// manual order) do drop it, because there the token would walk YouTube's order in behind a
+	// queue sorted here; `ready()` has walked those pages into `pl.items` instead. The queue is a
+	// snapshot either way, so a later sort change never touches one that is already playing.
+	//
+	// A filter narrows which rows are on screen but never what gets queued: it finds a track, it
+	// doesn't decide what plays after it, so playing a match leaves the same queue behind as
+	// scrolling to that row would.
+	async function playAll(start: number | null) {
+		if (!pl) return;
+		const pid = id;
+		// Resolve the clicked row to a track first: awaiting the walk can grow and re-sort the list
+		// under it, which would leave the index pointing at a different song.
+		const pick = start === null ? null : shown[start];
+		const whole = await ready();
+		// Navigating while that walk ran would otherwise play the playlist you left for.
+		if (!pl || pid !== id) return;
+		if (!whole) warnPartial('queued');
+		const items = sortedItems;
+		const at = pick ? items.indexOf(pick) : -1;
+		playFrom(
+			asItem(),
+			items,
+			at >= 0 ? at : null,
+			isOnRepeat ? undefined : id,
+			undefined,
+			sorting ? undefined : pl.continuation
+		);
+	}
+
+	// Random cover from the songs, picked once per load so it stays stable while browsing
+	// (loadMore appends tracks without changing it).
+	function pickCover(items: SongItem[]): string | null {
+		const withThumb = items.filter((t) => t.thumbnail);
+		if (!withThumb.length) return null;
+		const url = withThumb[Math.floor(Math.random() * withThumb.length)].thumbnail!;
+		return hiRes(url);
+	}
+
+	// List thumbnails come at a small size; YouTube/Google encode the size in the URL, so bump it
+	// for a crisp full-width backdrop.
+	function hiRes(url: string): string {
+		return url.replace(/=w\d+-h\d+/, '=w1200-h1200').replace(/=s\d+/, '=s1200');
+	}
+
+	// Same deal as `playAll` for a long playlist: the loaded pages go in now and the token hands
+	// the rest to the backend to walk in behind them.
+	// A "Play next" block stays capped at the loaded tracks either way (see `enqueue`), so only
+	// "Add to queue" is worth waiting on the rest of the playlist for.
+	async function queue(next: boolean) {
+		if (!pl?.items.length) return;
+		const pid = id;
+		const whole = next || (await ready());
+		if (!pl || pid !== id) return;
+		if (!whole) warnPartial('added');
+		enqueue(sortedItems, next, pl.title, sorting ? undefined : pl.continuation);
+	}
+
+	// Copying a playlist means all of it, not the pages scrolled so far, and nothing walks the rest
+	// for us here: the queue gets a continuation token the backend follows, an add has no such
+	// thing. So pull the pages in first and keep the menu row disabled while that runs.
+	let copying = $state(false);
+	async function saveToPlaylist() {
+		if (!pl?.items.length || copying) return;
+		const pid = id;
+		copying = true;
+		let whole: boolean;
+		try {
+			whole = await loadAll();
+		} finally {
+			copying = false;
+		}
+		if (!pl || pid !== id) return;
+		if (!whole) warnPartial('added');
+		menuOpen = false;
+		openAddManyToPlaylist(sortedItems);
+	}
+
+	// Untouched by the sort: the backend shuffles the whole playlist (continuation pages included),
+	// so what order it was handed is irrelevant.
+	function shufflePlay() {
+		if (!pl?.items.length) return;
+		// Real order + shuffle flag — the backend owns shuffling, so the shuffle toggle can
+		// restore the true playlist order and every re-shuffle is fresh. It also mixes each page
+		// it walks into the unplayed tail, so this stays a shuffle of the whole playlist rather
+		// than of the pages that happen to be loaded.
+		playFrom(asItem(), pl.items, null, isOnRepeat ? undefined : id, true, pl.continuation);
+	}
+
+	function openMenu(e: MouseEvent) {
+		anchor = anchorMenu(e);
+		menuOpen = true;
+	}
+	function run(action: () => void) {
+		menuOpen = false;
+		action();
+	}
+
+	// The dialog hands over what it changed (and hands the old values back if YouTube refused it),
+	// so the page never waits on a refetch to show an edit. The sidebar/Library row follows.
+	function applyEdit(patch: {
+		title?: string;
+		description?: string;
+		privacy?: string;
+		cover?: string;
+		thumbnail?: string;
+	}) {
+		if (!pl) return;
+		pl = { ...pl, ...patch };
+		cacheCurrent();
+		if ('title' in patch || 'cover' in patch || 'thumbnail' in patch) {
+			// A row has to keep a name: a page whose header never gave us a title would otherwise
+			// blank the sidebar entry on a cover change.
+			patchLibraryPlaylist(id, {
+				...(pl.title ? { title: pl.title } : {}),
+				thumbnail: pl.cover ?? pl.thumbnail
+			});
+		}
+	}
+
+	// The liked-music auto-playlist can't be edited like a normal one — removing = un-liking.
+	async function removeTrack(track: SongItem) {
+		if (!pl) return;
+		if (!isLiked && !track.set_video_id) return;
+		const prev = pl.items;
+		// Reassign `pl` (not mutate `pl.items`) so the list re-renders immediately. Match by the
+		// per-instance setVideoId on normal playlists (duplicates), by videoId on liked music.
+		const kept = pl.items.filter((t) =>
+			isLiked ? t.video_id !== track.video_id : t.set_video_id !== track.set_video_id
+		);
+		pl = { ...pl, items: kept };
+		try {
+			if (isLiked) {
+				// Through the shared path, not `api.rate`: an unlike is a rating write wherever it
+				// is spelled as a removal, and the override, the player bar and the index all have
+				// to follow it.
+				await setRating(track, 'indifferent');
+				toast.success(t('toasts.removed_from_liked'));
+			} else {
+				await api.removeFromPlaylist(id, track.video_id, track.set_video_id!);
+				bumpLibraryTrackCount(id, -1);
+				noteUnsavedFrom(id, track.video_id);
+				toast.success(t('toasts.removed_from_playlist'));
+			}
+			cacheAfterRemoval();
+		} catch (e) {
+			pl = { ...pl, items: prev }; // revert
+			cacheCurrent();
+			toast.error(String(e));
+		}
+	}
+
+	/** The bulk bar's Remove. One request for a normal playlist; Liked Music has only per-song
+	 *  unrate, so that one loops and keeps whichever rows failed. */
+	async function removeSelected(tracks: SongItem[]) {
+		if (!pl) return;
+		const targets = tracks.filter((t) => isLiked || t.set_video_id);
+		if (!targets.length) return;
+		const prev = pl.items;
+		const idOf = (row: SongItem) => (isLiked ? row.video_id : row.set_video_id) ?? '';
+		const gone = new Set(targets.map(idOf));
+		const failed = new Set<string>();
+		let lastError: unknown;
+		pl = { ...pl, items: prev.filter((row) => !gone.has(idOf(row))) };
+		try {
+			if (isLiked) {
+				for (const row of targets) {
+					try {
+						await setRating(row, 'indifferent');
+					} catch (e) {
+						lastError = e;
+						failed.add(idOf(row));
+					}
+				}
+				if (failed.size === targets.length) throw lastError;
+				if (failed.size) toast.error(String(lastError));
+				else toast.success(t('toasts.removed_from_liked'));
+			} else {
+				await api.removeManyFromPlaylist(
+					id,
+					targets.map((s) => [s.video_id, s.set_video_id!] as [string, string])
+				);
+				bumpLibraryTrackCount(id, -targets.length);
+				for (const s of targets) noteUnsavedFrom(id, s.video_id);
+				toast.success(t('toasts.removed_from_playlist'));
+			}
+			// A partial liked-music removal puts the rows that survived back where they were.
+			if (failed.size)
+				pl = { ...pl, items: prev.filter((row) => !gone.has(idOf(row)) || failed.has(idOf(row))) };
+			cacheAfterRemoval();
+			selection.clear();
+		} catch (e) {
+			pl = { ...pl, items: prev }; // revert
+			cacheCurrent();
+			toast.error(String(e));
+		}
+	}
+
+	// The dialog stays up until the delete lands: a YouTube playlist is a round trip, and the page
+	// should not look deleted while it might still come back with an error.
+	async function deleteThisPlaylist() {
+		if (deleting) return;
+		deleting = true;
+		try {
+			await api.deletePlaylist(id);
+			invalidateCachedPrefix(`playlist:${id}`);
+			forgetPlaylist(id);
+			toast.success(t('toasts.playlist_deleted'));
+			goto('/library');
+		} catch (e) {
+			toast.error(String(e));
+		} finally {
+			deleting = false;
+			confirmingDelete = false;
+		}
+	}
+</script>
+
+<div class="flex h-full flex-col">
+	{#if loading}
+		<div class="flex items-end gap-6 p-6">
+			<Skeleton class="h-40 w-40 shrink-0 rounded-xl" />
+			<div class="flex-1 space-y-3">
+				<Skeleton class="h-3 w-16 rounded" />
+				<Skeleton class="h-10 w-2/3 rounded-lg" />
+				<Skeleton class="h-4 w-40 rounded" />
+				<Skeleton class="h-9 w-24 rounded-4xl" />
+			</div>
+		</div>
+		<div class="p-4">
+			{#each Array(8) as _, i (i)}
+				<TrackRowSkeleton />
+			{/each}
+		</div>
+	{:else if error}
+		<div class="p-6"><ErrorState message={error} onRetry={() => load(id)} /></div>
+	{:else if pl}
+		<!-- One scroller for the whole page: the header scrolls away above the rows, same as the
+		     album page. -->
+		<div class="content-in min-h-0 flex-1 overflow-y-auto" {@attach sc.attach}>
+			<div class="relative flex min-h-[38vh] shrink-0 items-end gap-6 overflow-hidden p-6">
+				<!-- The backdrop and its fade share one layer (`art-wash` on the wrapper): see HomeHero. -->
+				<div class="art-wash pointer-events-none absolute inset-0 overflow-hidden">
+					{#if backdrop}
+						<img
+							src={backdrop}
+							alt=""
+							class="absolute inset-0 h-full w-full object-cover object-center"
+							class:scale-110={appearance.blurPlaylistHeader}
+							style:filter={appearance.blurPlaylistHeader ? 'blur(24px)' : undefined}
+						/>
+					{/if}
+					<!-- Fade the cover into the page so the text stays readable: solid at the bottom and on the
+					     left (behind the title), the image itself visible toward the top-right. -->
+					<div
+						class="absolute inset-0 bg-gradient-to-t from-background via-background/60 to-background/20"
+					></div>
+					<div class="absolute inset-0 bg-gradient-to-r from-background via-background/50 to-transparent"></div>
+				</div>
+				{#if isOnRepeat}
+					<div
+						class="relative flex h-40 w-40 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-lg"
+					>
+						<HugeiconsIcon icon={ListRestartIcon} class="h-20 w-20" />
+					</div>
+				{:else if art}
+					<img src={art} alt="" class="relative h-40 w-40 rounded-xl object-cover shadow-lg" />
+				{:else}
+					<div class="relative h-40 w-40 rounded-xl bg-muted"></div>
+				{/if}
+				<div class="relative min-w-0 flex-1">
+					<div class="flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
+						{t('common.playlist_singular')}
+						{#if isLocalList}
+							<span
+								class="flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary"
+								title={t('library.on_this_device_tooltip')}
+							>
+								<HugeiconsIcon icon={ComputerIcon} class="h-3 w-3" />
+								{t('library.on_this_device')}
+							</span>
+						{/if}
+						{#if pl.collaborative}
+							<span
+								class="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary"
+								title={t('library.collab_tooltip')}>{t('library.collab')}</span
+							>
+						{/if}
+						{#if spotifyUrl && (pl.owned || isLocalList)}
+							<button
+								class="flex cursor-pointer items-center gap-1.5 rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary transition-colors hover:bg-primary/25 disabled:cursor-default disabled:opacity-60"
+								title={t('import.update_tooltip')}
+								disabled={updatingFromSpotify}
+								onclick={() => updateFromSpotify(id)}
+							>
+								<HugeiconsIcon icon={SpotifyIcon} class="h-3 w-3" />
+								<span>{t('import.from_spotify')}</span>
+								<span class="opacity-70">{updatingFromSpotify ? t('import.updating') : t('import.update')}</span>
+							</button>
+						{/if}
+					</div>
+					<h1 class="mt-1 font-heading text-4xl font-bold tracking-tight drop-shadow-lg">
+						{pl.title ?? t('common.playlist_singular')}
+					</h1>
+					{#if subtitle}<p class="mt-2 text-sm text-muted-foreground">{subtitle}</p>{/if}
+					{#if pl.description}
+						<!-- Two lines, then More/Less, same as the album page. -->
+						<div class="mt-2 max-w-2xl">
+							<p class="whitespace-pre-line text-sm text-foreground/80 {expanded ? '' : 'line-clamp-2'}">
+								{pl.description}
+							</p>
+							{#if longDescription}
+								<button
+									class="mt-1 cursor-pointer text-xs font-semibold uppercase text-muted-foreground hover:text-foreground"
+									onclick={() => (expanded = !expanded)}
+								>
+									{expanded ? t('common.less') : t('common.more')}
+								</button>
+							{/if}
+						</div>
+					{/if}
+					<div class="mt-4 flex items-center justify-between gap-2">
+						<div class="flex items-center gap-2">
+							<Button
+								class="gap-2"
+								onclick={() => playAll(null)}
+								disabled={!pl.items.length || preparing || resorting}
+							>
+								<HugeiconsIcon icon={PlayIcon} class="h-4 w-4" />
+								{preparing || resorting ? t('common.sorting') : t('player.play')}
+							</Button>
+							<Button
+								variant="ghost"
+								size="icon"
+								aria-label={t('a11y.playlist_options')}
+								onclick={openMenu}
+							>
+								<HugeiconsIcon icon={MoreVerticalIcon} class="h-5 w-5 text-muted-foreground" />
+							</Button>
+							<TrackSelectButton
+								{selection}
+								class="-ml-2 flex h-9 w-9 cursor-pointer items-center justify-center rounded-full transition hover:bg-muted hover:text-foreground"
+							/>
+						</div>
+						<!-- Pushed to the far end of the header, away from the play controls. -->
+						<div class="flex items-center gap-1">
+							<Button
+								variant="ghost"
+								size="sm"
+								class="gap-2 {sort === 'default' ? 'text-muted-foreground' : ''}"
+								onclick={openSort}
+								disabled={!pl.items.length}
+							>
+								<HugeiconsIcon icon={Sorting01Icon} class="h-4 w-4" />
+								{sortLabel}
+							</Button>
+							<Button
+								variant="ghost"
+								size="icon"
+								class={desc ? '' : 'text-muted-foreground'}
+								aria-label={t('sort.direction', { dir: desc ? t('sort.descending') : t('sort.ascending') })}
+								onclick={toggleDesc}
+								disabled={!pl.items.length}
+							>
+								<HugeiconsIcon icon={ArrowUpDownIcon} class="h-4 w-4" />
+							</Button>
+						</div>
+					</div>
+				</div>
+				<div class="absolute right-6 top-6">
+					<TrackFilter
+						bind:value={query}
+						placeholder={t('common.search_this_playlist')}
+						onfocus={() => (searchOpened = true)}
+					/>
+				</div>
+			</div>
+			<TrackSelectionBar
+				{selection}
+				from={pl.title}
+				onRemove={isLiked || editable ? removeSelected : undefined}
+			/>
+			<div
+				class="p-4 transition-opacity {resorting ? 'opacity-50' : ''}"
+				aria-busy={resorting}
+			>
+				{#if shown.length}
+					<!-- A size container: the columns' widths read it (`trackcolumns.ts`). -->
+					<div class="@container">
+						<TrackColumns available={availCols} columns={cols} selecting={selection.active} />
+						<!-- The padding stands in for the rows outside the window, so the scrollbar is the
+						     length of the whole playlist even though only ~30 rows exist.
+						     data-rows: what the scroller measures row 0's position from. -->
+						<div data-rows style="padding-top:{win.padTop}px;padding-bottom:{win.padBottom}px">
+							{#each shown.slice(win.start, win.end) as item, i (JSON.stringify([item.video_id, win.start + i]))}
+								{@const n = win.start + i}
+								<!-- data-row: what the scroller measures a row's real height from. -->
+								<div data-row>
+									<TrackRow
+										song={item}
+										{selection}
+										selectionKey={selection.visibleKeys[n]}
+										index={n}
+										columns={cols}
+										active={item.video_id === nowId}
+										onplay={() => playAll(n)}
+										onAdd={() => openAddToPlaylist(item)}
+										onRemove={isLiked || item.set_video_id
+											? () => removeTrack(item)
+											: undefined}
+									/>
+								</div>
+							{/each}
+						</div>
+					</div>
+				{:else if filtering}
+					<p class="p-4 text-sm text-muted-foreground">
+						{t('library.no_tracks_match_loading', {
+							query: applied.trim(),
+							loading: pl.continuation && !moreError ? t('library.still_loading') : ''
+						})}
+					</p>
+				{:else}
+					<p class="p-4 text-sm text-muted-foreground">{t('library.empty_playlist')}</p>
+					<!-- One of yours, so say how to fill it: the add lives on every song's menu, which is
+					     nowhere near this page. -->
+					{#if editable}
+						<div class="flex flex-wrap items-center gap-3 px-4">
+							<p class="text-sm text-muted-foreground">{t('library.empty_playlist_hint')}</p>
+							<Button variant="outline" size="sm" class="gap-2" href="/search">
+								<HugeiconsIcon icon={Search01Icon} class="h-4 w-4" /> {t('nav.search')}
+							</Button>
+						</div>
+					{/if}
+				{/if}
+				{#if pl.continuation}
+					{#if moreError}
+						<div class="p-3 text-center">
+							<Button variant="outline" size="sm" onclick={loadMore} disabled={loadingMore}>
+								{loadingMore ? t('common.loading') : t('common.try_again')}
+							</Button>
+						</div>
+					{:else}
+						<!-- The sentinel sits above the skeletons: it triggers the next page as it scrolls
+						     into range, so the rest of a long playlist arrives without a button. -->
+						<div aria-busy={loadingMore}>
+							<div {@attach sentinel}></div>
+							{#if loadingMore}
+								{#each Array(4) as _, i (i)}
+									<TrackRowSkeleton />
+								{/each}
+							{/if}
+						</div>
+					{/if}
+				{/if}
+			</div>
+			<!-- After the last row, so only once every page is in (`inline`; the corner dock reaches it
+			     before then), and not under a filter's matches, which it would read as part of. Kept
+			     mounted under a filter all the same, so clearing one doesn't fetch a fresh batch. Outside
+			     the list's wrapper so a re-sort doesn't dim it. Every playlist of yours on YouTube: one
+			     with no shelf of its own gets its radio's. -->
+			{#if editable && !isLocalList}
+				{#key id}
+					<PlaylistSuggestions
+						playlistId={id}
+						token={pl.suggestions}
+						current={() => pl?.items ?? []}
+						onadd={addSuggestion}
+						inline={!pl.continuation && !filtering}
+					/>
+				{/key}
+			{/if}
+		</div>
+	{/if}
+</div>
+
+{#if sortOpen}
+	<button
+		class="fixed inset-0 z-40 cursor-default"
+		onclick={() => (sortOpen = false)}
+		aria-label={t('a11y.close_menu')}
+	></button>
+	<div
+		class="fixed z-50 min-w-44 animate-in rounded-lg border bg-popover p-1 text-popover-foreground shadow-xl duration-150 fade-in-0 zoom-in-95"
+		style={sortAnchor.style}
+		{@attach fitMenu(sortAnchor)}
+	>
+		<RadioGroup.Root
+			value={sort}
+			onValueChange={(v) => chooseSort(v as SortKey)}
+			class="gap-0"
+		>
+			{#each SORTS as key (key)}
+				<label
+					class="flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/10"
+				>
+					<RadioGroup.Item value={key} />
+					{t(`sort.${key}`)}
+				</label>
+			{/each}
+		</RadioGroup.Root>
+	</div>
+{/if}
+
+{#if menuOpen}
+	<button
+		class="fixed inset-0 z-40 cursor-default"
+		onclick={() => (menuOpen = false)}
+		oncontextmenu={(e) => {
+			e.preventDefault();
+			menuOpen = false;
+		}}
+		aria-label={t('a11y.close_menu')}
+	></button>
+	<div
+		class="fixed z-50 min-w-52 animate-in rounded-lg border bg-popover p-1 text-popover-foreground shadow-xl duration-150 fade-in-0 zoom-in-95"
+		style={anchor.style}
+		{@attach fitMenu(anchor)}
+	>
+		<button
+			class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/10"
+			onclick={() => run(shufflePlay)}
+			disabled={!pl?.items.length}
+		>
+			<HugeiconsIcon icon={ShuffleIcon} class="h-4 w-4" /> {t('player.shuffle_play')}
+		</button>
+		<button
+			class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/10"
+			onclick={() => run(() => queue(true))}
+			disabled={!pl?.items.length}
+		>
+			<HugeiconsIcon icon={ArrowUpNarrowWideIcon} class="h-4 w-4" /> {t('player.play_next')}
+		</button>
+		<button
+			class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/10"
+			onclick={() => run(() => queue(false))}
+			disabled={!pl?.items.length}
+		>
+			<HugeiconsIcon icon={ArrowDownWideNarrowIcon} class="h-4 w-4" /> {t('player.add_to_queue')}
+		</button>
+		<!-- On Repeat is built from local play counts, and a playlist on this machine is no YouTube
+		     playlist either: neither has a radio to seed. -->
+		{#if !isOnRepeat && !isLocalList}
+			<button
+				class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/10"
+				onclick={() => run(() => startRadio('playlist', id, pl?.title))}
+			>
+				<HugeiconsIcon icon={Radio02Icon} class="h-4 w-4" /> {t('player.start_radio')}
+			</button>
+		{/if}
+		<!-- Copies the tracks into another of your playlists. On Repeat is built from local play
+		     counts, so there is nothing YouTube would take. -->
+		{#if !isOnRepeat}
+			<button
+				class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/10 disabled:opacity-50"
+				onclick={saveToPlaylist}
+				disabled={copying || !pl?.items.length}
+			>
+				<HugeiconsIcon icon={PlayListAddIcon} class="h-4 w-4" /> {t('player.save_to_playlist')}
+			</button>
+		{/if}
+		<button
+			class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/10"
+			onclick={() => run(() => addPick(asItem()))}
+		>
+			<HugeiconsIcon icon={DashboardSquare02Icon} class="h-4 w-4" /> {t('player.add_to_shortcuts')}
+		</button>
+		{#if !isOnRepeat && !isLocalList}
+			<button
+				class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/10"
+				onclick={() => run(() => openShare(asItem()))}
+			>
+				<HugeiconsIcon icon={Share08Icon} class="h-4 w-4" /> {t('player.share')}
+			</button>
+		{/if}
+		{#if savable}
+			<button
+				class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/10"
+				onclick={() => run(saveToLibrary)}
+			>
+				<!-- altIcon/showAlt, not a ternary: `icon` is read once at mount. -->
+				<HugeiconsIcon
+					icon={BookmarkAdd02Icon}
+					altIcon={BookmarkMinus02Icon}
+					showAlt={savedHere}
+					class="h-4 w-4"
+				/>
+				{savedHere ? t('library.remove_from_library') : t('library.save_to_library')}
+			</button>
+		{:else if inAccount && !isOnRepeat && !isLiked && !editable}
+			{#if ownedByUser(asItem())}
+				<div class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground">
+					<HugeiconsIcon icon={BookmarkCheck02Icon} class="h-4 w-4" /> {t('library.in_library')}
+				</div>
+			{:else}
+				<button
+					class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/10"
+					onclick={() => run(unsaveFromLibrary)}
+				>
+					<HugeiconsIcon icon={BookmarkMinus02Icon} class="h-4 w-4" />
+					{t('library.remove_from_library')}
+				</button>
+			{/if}
+		{/if}
+		{#if editable}
+			<button
+				class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/10"
+				onclick={() => run(() => (editing = true))}
+			>
+				<HugeiconsIcon icon={PencilEdit02Icon} class="h-4 w-4" /> {t('player.edit_playlist')}
+			</button>
+			<button
+				class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-destructive hover:bg-destructive/10"
+				onclick={() => run(() => (confirmingDelete = true))}
+			>
+				<HugeiconsIcon icon={Delete02Icon} class="h-4 w-4" /> {t('player.delete_playlist')}
+			</button>
+		{/if}
+	</div>
+{/if}
+
+{#if editable}
+	<EditPlaylistDialog
+		bind:open={editing}
+		{id}
+		title={pl?.title}
+		description={pl?.description}
+		privacy={pl?.privacy}
+		cover={pl?.cover}
+		fallback={pl?.thumbnail}
+		onchange={applyEdit}
+	/>
+{/if}
+
+{#if editable}
+	<!-- Closing it mid-request is refused: the delete is already on its way, and a dialog that
+	     vanished would leave its answer (an error toast, or the jump to Library) unexplained. -->
+	<AlertDialog.Root bind:open={() => confirmingDelete, (v) => !deleting && (confirmingDelete = v)}>
+		<AlertDialog.Content>
+			<AlertDialog.Header>
+				<AlertDialog.Media class="bg-destructive/10 text-destructive">
+					<HugeiconsIcon icon={Delete02Icon} />
+				</AlertDialog.Media>
+				<AlertDialog.Title>{t('library.delete_playlist_confirm')}</AlertDialog.Title>
+				<AlertDialog.Description>
+					{t(isLocalList ? 'library.delete_playlist_desc_local' : 'library.delete_playlist_desc', {
+						title: pl?.title ?? t('common.playlist_singular')
+					})}
+				</AlertDialog.Description>
+			</AlertDialog.Header>
+			<AlertDialog.Footer>
+				<AlertDialog.Cancel disabled={deleting}>{t('common.cancel')}</AlertDialog.Cancel>
+				<!-- bits-ui's Action is a plain button (only Cancel closes the dialog), which is what
+				     keeps it open until the request answers. -->
+				<AlertDialog.Action variant="destructive" onclick={deleteThisPlaylist} disabled={deleting}>
+					{deleting ? t('common.loading') : t('common.delete')}
+				</AlertDialog.Action>
+			</AlertDialog.Footer>
+		</AlertDialog.Content>
+	</AlertDialog.Root>
+{/if}

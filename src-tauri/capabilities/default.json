@@ -1,20 +1,29 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
+  "description": "enables the default permissions",
   "windows": [
-    "main"
+    "main",
+    "mini"
   ],
   "permissions": [
     "core:default",
-    "core:app:default",
-    "core:window:default",
-    "core:webview:default",
-    "core:event:default",
-    "core:path:default",
-    "dialog:default",
+    "core:webview:allow-set-webview-zoom",
+    "updater:default",
+    "process:default",
+    "core:window:allow-show",
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-internal-toggle-maximize",
+    "core:window:allow-close",
+    "core:window:allow-start-dragging",
+    "core:window:allow-start-resize-dragging",
+    "core:window:allow-is-maximized",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen",
     "dialog:allow-open",
-    "opener:default",
-    "opener:allow-open-url"
+    "dialog:allow-save",
+    "clipboard-manager:allow-write-text",
+    "global-shortcut:default"
   ]
 }

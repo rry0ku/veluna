@@ -1,62 +1,34 @@
-# Logs
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
-# Node / Vite
-node_modules/
-dist/
-dist-ssr/
-.vite/
-
-# Environment
-.env
-.env.*
-*.local
-
-# Rust / Tauri
-target/
-src-tauri/target/
-
-# Tauri bundles
-src-tauri/gen/
-src-tauri/bundle/
-src-tauri/binaries/*.exe
-src-tauri/binaries/*.zip
-src-tauri/binaries/*.7z
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Editors
+/target
+.mcp.json
 .idea/
-.agents/
-.vscode/
+# rustypipe scratch (older builds wrote these into CWD; now redirected to temp)
+rustypipe_cache.json
+rustypipe_reports/
 
-# Misc editor files
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.swp
-*.swo
-*~
+# Windows and Linux local build artifacts — libmpv is fetched or linked locally, never committed.
+/src-tauri/libmpv-2.dll
+/.libmpv/
+/libmpv/
+/.cargo/lib/
 
-# Coverage / caches
-coverage/
-.nyc_output/
-.cache/
-.eslintcache
+# Local tool state
+/.freebuff/
 
-# Temporary files
-tmp/
-temp/
-*.tmp
+# Last.fm API credentials — read by src-tauri/build.rs, never committed (public repo).
+/src-tauri/lastfm.keys
 
-# Others
-SKILLS.md
+# Local design notes & tooling — kept out of the public repo
+/context/
+/progress/
+/ui/perf/
+/spikes/
+/.agents/
+/.claude/
+/CLAUDE.md
+/PHASE1-PROMPT.md
+/RELEASING.md
+/TWEETING.md
+/skills-lock.json
+/plans
+scripts/bench.sh
+scripts/triage.py

@@ -1,0 +1,74 @@
+{
+  "responseContext": {
+    "mainAppWebResponseContext": { "datasyncId": "default-sync||device-sync" }
+  },
+  "actions": [
+    {
+      "getMultiPageMenuAction": {
+        "menu": {
+          "multiPageMenuRenderer": {
+            "sections": [
+              {
+                "accountSectionListRenderer": {
+                  "header": {
+                    "googleAccountHeaderRenderer": {
+                      "email": { "runs": [{ "text": "listener@example.invalid" }] }
+                    }
+                  },
+                  "contents": [
+                    {
+                      "accountItemSectionRenderer": {
+                        "contents": [
+                          {
+                            "accountItem": {
+                              "accountName": { "runs": [{ "text": "Default channel" }] },
+                              "channelHandle": { "runs": [{ "text": "@default" }] },
+                              "isSelected": true,
+                              "hasChannel": true,
+                              "serviceEndpoint": {
+                                "selectActiveIdentityEndpoint": {
+                                  "supportedTokens": [
+                                    {
+                                      "datasyncIdToken": {
+                                        "datasyncIdToken": "default-sync"
+                                      }
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "accountItem": {
+                              "accountName": { "runs": [{ "text": "Brand channel" }] },
+                              "channelHandle": { "runs": [{ "text": "@brand" }] },
+                              "accountPhoto": {
+                                "thumbnails": [{ "url": "https://example.invalid/brand.jpg" }]
+                              },
+                              "isSelected": false,
+                              "hasChannel": true,
+                              "navigationEndpoint": {
+                                "browseEndpoint": { "browseId": "UCSANITIZEDBRAND" }
+                              },
+                              "serviceEndpoint": {
+                                "selectActiveIdentityEndpoint": {
+                                  "supportedTokens": [
+                                    { "pageIdToken": { "pageId": "brand-page-id" } }
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

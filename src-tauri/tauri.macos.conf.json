@@ -1,0 +1,30 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": ["app", "dmg"],
+    "macOS": {
+      "minimumSystemVersion": "14.0"
+    }
+  },
+  "app": {
+    "windows": [
+      {
+        "create": false,
+        "title": "Veluna",
+        "width": 1200,
+        "height": 800,
+        "minWidth": 900,
+        "minHeight": 620,
+        "resizable": true,
+        "fullscreen": false,
+        "visible": false,
+        "decorations": true,
+        "transparent": false,
+        "dragDropEnabled": false,
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": { "x": 14, "y": 16 },
+        "hiddenTitle": true
+      }
+    ]
+  }
+}

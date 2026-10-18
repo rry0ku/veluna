@@ -14,11 +14,14 @@ fi
 
 VERSION="${VERSION#v}"
 
-BINARY_PATH="src-tauri/target/release/veluna"
-
-if [ ! -f "${BINARY_PATH}" ]; then
-  echo "Error: Binary not found at ${BINARY_PATH}." >&2
-  echo "Please build the Tauri release binary first ('npm run tauri build' or 'cargo build --release --manifest-path src-tauri/Cargo.toml')." >&2
+BINARY_PATH=""
+if [ -f "target/release/veluna" ]; then
+  BINARY_PATH="target/release/veluna"
+elif [ -f "src-tauri/target/release/veluna" ]; then
+  BINARY_PATH="src-tauri/target/release/veluna"
+else
+  echo "Error: Binary not found at target/release/veluna or src-tauri/target/release/veluna." >&2
+  echo "Please build the Tauri release binary first ('cargo tauri build' or 'cargo build --release')." >&2
   exit 1
 fi
 
@@ -74,8 +77,6 @@ size = ${PKG_SIZE}
 arch = x86_64
 license = MIT
 depend = mpv
-depend = yt-dlp
-depend = ffmpeg
 depend = webkit2gtk-4.1
 depend = libayatana-appindicator
 depend = gtk3

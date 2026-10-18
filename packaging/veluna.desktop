@@ -1,10 +1,10 @@
 [Desktop Entry]
 Name=Veluna
-Comment=Ad-free desktop music streaming powered by YouTube
+Comment=Free, open-source and ad-free desktop music streaming app
 Exec=veluna %U
 Icon=veluna
 Terminal=false
 Type=Application
 Categories=AudioVideo;Audio;Player;Music;
-Keywords=music;player;streaming;youtube;audio;
+MimeType=x-scheme-handler/veluna;
 StartupWMClass=veluna

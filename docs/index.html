@@ -498,14 +498,17 @@ nav.scrolled { background: var(--bg2); box-shadow: 0 8px 24px -16px rgba(0,0,0,.
 .p-ctrl-btn.main svg { width: 16px; height: 16px; }
 
 .dl-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
   margin-top: 44px;
+}
+@media (max-width: 960px) {
+  .dl-grid { grid-template-columns: 1fr; }
 }
 .dl-card {
   border: 1px solid var(--bdr2); border-radius: var(--r-lg);
-  background: var(--bg2); padding: 32px;
+  background: var(--bg2); padding: 26px 22px;
   display: flex; flex-direction: column; gap: 0;
-  transition: border-color .25s, background .25s, transform .2s;
+  transition: border-color .25s, background .25s, transform .2s, box-shadow .25s;
   position: relative; overflow: hidden;
 }
 .dl-card::before {
@@ -514,55 +517,55 @@ nav.scrolled { background: var(--bg2); box-shadow: 0 8px 24px -16px rgba(0,0,0,.
   background: linear-gradient(90deg, transparent, var(--fg4), transparent);
   opacity: .5; transition: opacity .3s;
 }
-.dl-card:hover { border-color: var(--bdr3); background: var(--bg3); transform: translateY(-3px); box-shadow: 0 16px 40px -20px rgba(0,0,0,.6); }
+.dl-card:hover { border-color: var(--bdr3); background: var(--bg3); transform: translateY(-2px); box-shadow: 0 16px 40px -20px rgba(0,0,0,.6); }
 .dl-card:hover::before { opacity: 1; background: linear-gradient(90deg, transparent, var(--fg3), transparent); }
+.dl-card.is-active-os {
+  border-color: #ff2d55;
+  box-shadow: 0 0 24px rgba(255, 45, 85, 0.12);
+}
+.dl-card.is-active-os::before {
+  background: linear-gradient(90deg, transparent, #ff2d55, transparent);
+  opacity: 0.9;
+}
 .dl-card-header {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  margin-bottom: 28px;
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 22px;
 }
-.dl-card-header-left { display: flex; align-items: center; gap: 14px; }
-.dl-os-icon {
-  width: 48px; height: 48px; border-radius: 10px;
-  background: var(--bg4); border: 1px solid var(--bdr2);
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+.dl-card-title-group {
+  display: flex; align-items: center; gap: 12px;
 }
-.dl-os-icon svg, .dl-os-icon img { width: 20px; height: 20px; }
-.dl-os-name { font-family: var(--serif); font-size: 24px; font-weight: 400; color: var(--fg); letter-spacing: -.02em; }
-.dl-os-arch { font-family: var(--mono); font-size: 9px; color: var(--fg4); margin-top: 5px; letter-spacing: .08em; text-transform: uppercase; }
-.dl-os-compat { font-family: var(--mono); font-size: 10px; color: var(--fg4); margin-top: 3px; letter-spacing: .04em; }
-.dl-size-tag {
-  font-family: var(--mono); font-size: 9px; color: var(--fg4);
-  background: var(--bg4); border: 1px solid var(--bdr2);
-  padding: 4px 9px; border-radius: 20px; letter-spacing: .06em;
-  white-space: nowrap; align-self: flex-start; margin-top: 2px;
+.dl-card-title {
+  font-family: var(--sans); font-size: 19px; font-weight: 600; color: var(--fg);
 }
-.dl-main-btn {
-  display: flex; align-items: center; justify-content: center; gap: 10px;
-  background: var(--fg); color: var(--bg);
-  padding: 15px 20px; border-radius: var(--r);
-  font-size: 11px; font-weight: 700; font-family: var(--mono);
-  letter-spacing: .14em; text-decoration: none; text-transform: uppercase;
-  transition: opacity .2s, transform .15s;
+.dl-badge-sys {
+  font-family: var(--sans); font-size: 11px; font-weight: 600;
+  color: #ff4d73; background: rgba(255, 45, 85, 0.15);
+  border: 1px solid rgba(255, 45, 85, 0.35); border-radius: 20px;
+  padding: 3px 10px;
+}
+.dl-btn-stack {
+  display: flex; flex-direction: column; gap: 8px;
   margin-bottom: 20px;
 }
-.dl-main-btn:hover { opacity: .88; transform: translateY(-1px); }
-.dl-main-btn svg { width: 14px; height: 14px; }
-.dl-divider {
-  border: none; border-top: 1px solid var(--bdr);
-  margin: 0 0 18px;
+.dl-btn {
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(255, 255, 255, 0.03); border: 1px solid var(--bdr2);
+  border-radius: 7px; color: var(--fg); font-family: var(--sans);
+  font-size: 13px; font-weight: 500; padding: 12px 14px;
+  text-decoration: none; text-align: center; transition: all 0.2s ease;
 }
-.dl-meta { display: flex; flex-direction: column; gap: 8px; }
-.dl-badge {
-  display: inline-flex; align-items: center; gap: 7px;
-  background: var(--bg3); border: 1px solid var(--bdr2);
-  border-radius: 5px; padding: 6px 11px;
-  font-family: var(--mono); font-size: 9px; font-weight: 500; color: var(--fg2);
-  letter-spacing: .06em; align-self: flex-start;
+.dl-btn:hover {
+  background: rgba(255, 255, 255, 0.08); border-color: var(--bdr3);
+  color: #fff; transform: translateY(-1px);
 }
-.dl-badge svg { width: 11px; height: 11px; }
-.dl-note { font-size: 11px; color: var(--fg3); line-height: 1.75; }
-.dl-note a { color: var(--fg2); text-decoration: underline; text-underline-offset: 2px; }
-.dl-note a:hover { color: var(--fg); }
+.dl-card-desc {
+  font-size: 12px; color: var(--fg3); line-height: 1.65; margin-top: auto;
+}
+.dl-card-desc code {
+  background: var(--bg4); border: 1px solid var(--bdr2);
+  border-radius: 4px; padding: 2px 6px; font-family: var(--mono);
+  font-size: 11px; color: var(--fg);
+}
 
 .version-chip {
   display: inline-flex; align-items: center; gap: 7px;
@@ -1085,62 +1088,74 @@ footer {
     <h2 class="s-head reveal d1">Choose your platform</h2>
     <p class="s-sub reveal d2">No installation wizard, no bundled junk, no account required. Just music.</p>
     <div class="reveal d2" style="margin-top:28px">
-      <div class="version-chip">
+      <div class="version-chip" id="latest-version-chip">
         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,6 5,9 10,3"/></svg>
-        v0.1.6 — Latest Release
+        v1.3.0 — Latest Release
       </div>
       <div class="dl-hero-sub">Get Veluna for your platform. Native performance, zero bloat.</div>
     </div>
     <div class="dl-grid">
-      <div class="dl-card dl-featured">
+      <!-- Linux Card -->
+      <div class="dl-card" id="card-linux">
         <div class="dl-card-header">
-          <div class="dl-card-header-left">
-            <div class="dl-os-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M0 3.449L9.75 2.1v9.451H0m10.95-9.6L24 0v11.4H10.95M0 12.6h9.75v9.451L0 20.699M10.95 12.6H24V24l-13.05-1.851"/></svg>
-            </div>
-            <div>
-              <div class="dl-os-name">Windows</div>
-              <div class="dl-os-arch">64-bit Installer (.exe)</div>
-              <div class="dl-os-compat">Windows 7, 8, 10, 11</div>
-            </div>
+          <div class="dl-card-title-group">
+            <svg viewBox="0 0 24 24" fill="none" stroke="#ff2d55" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px;">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+              <line x1="12" y1="22.08" x2="12" y2="12"/>
+            </svg>
+            <span class="dl-card-title">Linux</span>
           </div>
-          <span class="dl-badge">Recommended</span>
+          <span class="dl-badge-sys" id="badge-linux" style="display:none;">Your system</span>
         </div>
-        <a href="https://github.com/rry0ku/veluna/releases/download/v0.1.6/veluna_0.1.6_x64-setup.exe" class="dl-main-btn" aria-label="Download Veluna for Windows">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Download for Windows
-        </a>
-        <hr class="dl-divider">
-        <div class="dl-meta">
-          <p class="dl-note">Windows may show a SmartScreen warning on first launch.
-            <a href="https://github.com/rry0ku/veluna/wiki/Why-does-Windows-flag-Veluna-as-unsafe%3F" target="_blank" rel="noopener">Why is this?</a>
-          </p>
+        <div class="dl-btn-stack">
+          <a href="https://github.com/rry0ku/veluna/releases/latest" id="dl-appimage" class="dl-btn">.AppImage, any distro</a>
+          <a href="https://github.com/rry0ku/veluna/releases/latest" id="dl-deb" class="dl-btn">.deb, Ubuntu and Debian</a>
+          <a href="https://github.com/rry0ku/veluna/releases/latest" id="dl-rpm" class="dl-btn">.rpm, Fedora and RHEL</a>
+          <a href="https://github.com/rry0ku/veluna/releases/latest" id="dl-arch" class="dl-btn">.pkg.tar.zst, Arch Linux</a>
+        </div>
+        <div class="dl-card-desc">
+          Only the AppImage updates itself. All builds need glibc 2.39 or newer (Ubuntu 24.04+, Debian 13+, Fedora 40+), and the rpm needs mpv-libs installed.
         </div>
       </div>
-      <div class="dl-card">
-        <div class="dl-card-header">
-          <div class="dl-card-header-left">
-            <div class="dl-os-icon">
-              <img src="https://upload.wikimedia.org/wikipedia/commons/3/35/Tux.svg" alt="Linux" style="width:22px;height:22px;filter:grayscale(100%) brightness(1.8)">
-            </div>
-            <div>
-              <div class="dl-os-name">Linux</div>
-              <div class="dl-os-arch">Universal Installer Script (PKGBUILD, DEB, RPM)</div>
-              <div class="dl-os-compat">Arch, Manjaro, Ubuntu, Debian, Mint, Fedora</div>
-            </div>
-          </div>
 
+      <!-- Windows Card -->
+      <div class="dl-card" id="card-windows">
+        <div class="dl-card-header">
+          <div class="dl-card-title-group">
+            <svg viewBox="0 0 24 24" fill="#ff2d55" style="width:22px;height:22px;">
+              <path d="M0 3.449L9.75 2.1v9.451H0m10.95-9.6L24 0v11.4H10.95M0 12.6h9.75v9.451L0 20.699M10.95 12.6H24V24l-13.05-1.851"/>
+            </svg>
+            <span class="dl-card-title">Windows</span>
+          </div>
+          <span class="dl-badge-sys" id="badge-windows" style="display:none;">Your system</span>
         </div>
-        <div style="background:var(--bg3);border:1px solid var(--bdr3);border-radius:var(--r);padding:12px 14px;font-family:var(--mono);font-size:12px;color:var(--fg2);display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;gap:12px;">
-          <span class="no-scrollbar" style="overflow-x:auto;white-space:nowrap;user-select:all;flex:1;scrollbar-width:none;-ms-overflow-style:none;">curl -fsSL https://rry0ku.github.io/veluna/install.sh | sudo bash</span>
-          <button onclick="navigator.clipboard.writeText('curl -fsSL https://rry0ku.github.io/veluna/install.sh | sudo bash');let s=this.querySelector('.copy-txt');s.innerText='Copied!';setTimeout(()=>s.innerText='Copy',2000)" style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--fg);background:var(--bg4);border:1px solid var(--bdr2);border-radius:4px;padding:4px 8px;display:flex;align-items:center;gap:4px;cursor:pointer;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;color:inherit;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-            <span class="copy-txt">Copy</span>
-          </button>
+        <div class="dl-btn-stack">
+          <a href="https://github.com/rry0ku/veluna/releases/latest" id="dl-exe" class="dl-btn">Installer (.exe)</a>
+          <a href="https://github.com/rry0ku/veluna/releases/latest" id="dl-msi" class="dl-btn">MSI package</a>
         </div>
-        <hr class="dl-divider">
-        <div class="dl-meta">
-          <p class="dl-note">Supports Arch (Pacman), DEB (Apt), and RPM (DNF) systems. Automatically installs dependencies (mpv, ffmpeg, yt-dlp).</p>
+        <div class="dl-card-desc">
+          The installer updates itself. The MSI is a plain install with no auto-update.
+        </div>
+      </div>
+
+      <!-- macOS Card -->
+      <div class="dl-card" id="card-macos">
+        <div class="dl-card-header">
+          <div class="dl-card-title-group">
+            <svg viewBox="0 0 24 24" fill="#ff2d55" style="width:22px;height:22px;">
+              <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 6.37c.61-.75 1.04-1.8 1.01-2.87-.96.04-2.08.64-2.73 1.4-.56.64-.99 1.7-.93 2.76 1.05.08 2.08-.54 2.65-1.29z"/>
+            </svg>
+            <span class="dl-card-title">macOS</span>
+          </div>
+          <span class="dl-badge-sys" id="badge-macos" style="display:none;">Your system</span>
+        </div>
+        <div class="dl-btn-stack">
+          <a href="https://github.com/rry0ku/veluna/releases/latest" id="dl-dmg" class="dl-btn">.dmg, Apple Silicon</a>
+          <a href="https://github.com/rry0ku/veluna#building-from-source" id="dl-intel" class="dl-btn">Intel Mac: build from source</a>
+        </div>
+        <div class="dl-card-desc">
+          The app updates itself, but it is not signed with an Apple certificate, so the first launch needs one Terminal command: <code>xattr -dr com.apple.quarantine /Applications/veluna.app</code>
         </div>
       </div>
     </div>
@@ -1189,7 +1204,7 @@ footer {
       <div class="feat reveal d1">
         <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/></svg></div>
         <div class="feat-title">YouTube Audio Streaming</div>
-        <div class="feat-desc">Search and stream any track directly from YouTube — no account, no API key, no ads. Pure audio via yt-dlp.</div>
+        <div class="feat-desc">Search and stream any track directly from YouTube — no account, no API key, no ads. Pure audio via a native Rust core.</div>
       </div>
       <div class="feat reveal d2">
         <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
@@ -1254,11 +1269,11 @@ footer {
         </div>
         <div class="faq-item">
           <button class="faq-q" aria-expanded="false">Where does the music come from?<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/></svg></button>
-          <div class="faq-ans"><div class="faq-ans-inner">Veluna streams audio directly from YouTube using <strong>yt-dlp</strong>. Only the audio stream is extracted — no video is downloaded or rendered. You can also play local files (MP3, Opus, M4A) from the Offline section.</div></div>
+          <div class="faq-ans"><div class="faq-ans-inner">Veluna streams audio directly from YouTube Music using a high-performance native Rust core. Only the audio stream is extracted — no video is downloaded or rendered. You can also play local files (MP3, Opus, M4A) from the Offline section.</div></div>
         </div>
         <div class="faq-item">
           <button class="faq-q" aria-expanded="false">Do I need a YouTube account or API key?<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/></svg></button>
-          <div class="faq-ans"><div class="faq-ans-inner">No. Veluna uses <strong>yt-dlp</strong> directly — no YouTube account, no API key, no Premium subscription needed. Everything works out of the box.</div></div>
+          <div class="faq-ans"><div class="faq-ans-inner">No. Veluna connects directly to YouTube Music — no YouTube account, no API key, no Premium subscription needed. Everything works out of the box.</div></div>
         </div>
         <div class="faq-item">
           <button class="faq-q" aria-expanded="false">Can I download songs for offline use?<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/></svg></button>
@@ -1276,7 +1291,7 @@ footer {
         </div>
         <div class="faq-item">
           <button class="faq-q" aria-expanded="false">Do I need to install dependencies?<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/></svg></button>
-          <div class="faq-ans"><div class="faq-ans-inner">On <strong>Linux</strong>, the installer script supports both <strong>DEB</strong> (Apt) and <strong>RPM</strong> (DNF) systems, installing dependencies (mpv, ffmpeg) automatically via your system package manager. On <strong>Windows</strong>, all binaries are bundled in the installer — nothing extra needed.</div></div>
+          <div class="faq-ans"><div class="faq-ans-inner">On <strong>Linux</strong>, packages (.deb, .rpm, .pkg.tar.zst) and the portable <strong>.AppImage</strong> run smoothly on any modern distribution (glibc 2.39+), with rpm requiring mpv-libs. On <strong>Windows</strong> and <strong>macOS</strong>, all dependencies are fully self-contained in the installers.</div></div>
         </div>
         <div class="faq-item">
           <button class="faq-q" aria-expanded="false">Does it require an internet connection?<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/></svg></button>
@@ -1288,7 +1303,7 @@ footer {
         </div>
         <div class="faq-item">
           <button class="faq-q" aria-expanded="false">What powers the audio engine?<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/></svg></button>
-          <div class="faq-ans"><div class="faq-ans-inner"><strong>yt-dlp</strong> handles audio extraction. <strong>mpv</strong> is the audio engine, controlled via IPC socket on Linux and named pipe on Windows. <strong>ffprobe</strong> powers the Audio Info panel. Variable playback speed and loudness normalisation are piped directly into mpv's filter chain.</div></div>
+          <div class="faq-ans"><div class="faq-ans-inner">A native Rust Innertube client handles metadata and audio stream extraction. <strong>libmpv</strong> is the audio engine, communicating directly with Rust for gapless playback, loudness normalisation, and real-time audio filters.</div></div>
         </div>
         <div class="faq-item">
           <button class="faq-q" aria-expanded="false">Does Veluna track my listening habits?<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/></svg></button>
@@ -1519,6 +1534,60 @@ footer {
     topBtn.classList.toggle('show', window.scrollY > 500);
   }, { passive: true });
   topBtn.addEventListener('click', function() { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+
+  // OS Detection & Download Card Highlighting
+  var ua = navigator.userAgent || '';
+  var isMac = /Macintosh|MacIntel|MacPPC|Mac68K/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var isWin = /Win32|Win64|Windows|WinCE/i.test(ua);
+  var isLinux = /Linux/i.test(ua) && !/Android/i.test(ua);
+
+  var targetId = isLinux ? 'card-linux' : (isWin ? 'card-windows' : (isMac ? 'card-macos' : null));
+  var badgeId = isLinux ? 'badge-linux' : (isWin ? 'badge-windows' : (isMac ? 'badge-macos' : null));
+
+  if (targetId) {
+    var card = document.getElementById(targetId);
+    if (card) card.classList.add('is-active-os');
+    var badge = document.getElementById(badgeId);
+    if (badge) badge.style.display = 'inline-block';
+  }
+
+  // Fetch latest release assets from GitHub API
+  fetch('https://api.github.com/repos/rry0ku/veluna/releases/latest')
+    .then(function(res) { return res.ok ? res.json() : null; })
+    .then(function(rel) {
+      if (!rel || !rel.assets) return;
+      var tag = rel.tag_name || 'v1.3.0';
+      var chip = document.getElementById('latest-version-chip');
+      if (chip) chip.innerHTML = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,6 5,9 10,3"/></svg> ' + tag + ' — Latest Release';
+
+      rel.assets.forEach(function(a) {
+        var name = (a.name || '').toLowerCase();
+        var url = a.browser_download_url;
+        if (name.endsWith('.appimage')) {
+          var el = document.getElementById('dl-appimage');
+          if (el) el.href = url;
+        } else if (name.endsWith('.deb')) {
+          var el = document.getElementById('dl-deb');
+          if (el) el.href = url;
+        } else if (name.endsWith('.rpm')) {
+          var el = document.getElementById('dl-rpm');
+          if (el) el.href = url;
+        } else if (name.includes('.pkg.tar.zst')) {
+          var el = document.getElementById('dl-arch');
+          if (el) el.href = url;
+        } else if (name.endsWith('.exe')) {
+          var el = document.getElementById('dl-exe');
+          if (el) el.href = url;
+        } else if (name.endsWith('.msi')) {
+          var el = document.getElementById('dl-msi');
+          if (el) el.href = url;
+        } else if (name.endsWith('.dmg')) {
+          var el = document.getElementById('dl-dmg');
+          if (el) el.href = url;
+        }
+      });
+    })
+    .catch(function() {});
 
 })();
 </script>

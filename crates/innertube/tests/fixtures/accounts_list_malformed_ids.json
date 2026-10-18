@@ -1,0 +1,75 @@
+{
+  "responseContext": {
+    "mainAppWebResponseContext": { "datasyncId": "active-response-sync||device-sync" }
+  },
+  "actions": [
+    {
+      "getMultiPageMenuAction": {
+        "menu": {
+          "multiPageMenuRenderer": {
+            "sections": [
+              {
+                "accountSectionListRenderer": {
+                  "contents": [
+                    {
+                      "accountItemSectionRenderer": {
+                        "contents": [
+                          {
+                            "accountItem": {
+                              "accountName": { "runs": [{ "text": "Missing token" }] },
+                              "isSelected": true,
+                              "serviceEndpoint": {
+                                "selectActiveIdentityEndpoint": {}
+                              }
+                            }
+                          },
+                          {
+                            "accountItem": {
+                              "accountName": { "runs": [{ "text": "Empty token" }] },
+                              "serviceEndpoint": {
+                                "selectActiveIdentityEndpoint": {
+                                  "supportedTokens": [
+                                    { "datasyncIdToken": { "datasyncIdToken": "||" } }
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "accountItem": {
+                              "accountName": { "runs": [{ "text": "Fallback token" }] },
+                              "serviceEndpoint": {
+                                "selectActiveIdentityEndpoint": {
+                                  "supportedTokens": [
+                                    { "datasyncIdToken": { "datasyncIdToken": "||fallback-sync" } }
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          {
+                            "accountItem": {
+                              "accountName": { "runs": [{ "text": "No channel" }] },
+                              "hasChannel": false,
+                              "serviceEndpoint": {
+                                "selectActiveIdentityEndpoint": {
+                                  "supportedTokens": [
+                                    { "pageIdToken": { "pageId": "must-not-be-used" } }
+                                  ]
+                                }
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

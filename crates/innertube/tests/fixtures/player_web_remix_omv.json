@@ -1,0 +1,225 @@
+{
+ "playabilityStatus": {
+  "status": "OK"
+ },
+ "streamingData": {
+  "expiresInSeconds": "21540",
+  "adaptiveFormats": [
+   {
+    "itag": 313,
+    "mimeType": "video/webm; codecs=\"vp9\"",
+    "bitrate": 18076636,
+    "width": 3840,
+    "height": 2160,
+    "fps": 25,
+    "contentLength": "358608461",
+    "approxDurationMs": "213040",
+    "signatureCipher": "s=REDACTED&sp=sig&url=https%3A%2F%2Frr1---sn-redacted.googlevideo.com%2Fvideoplayback%3Fitag%3D313%26n%3DREDACTED"
+   },
+   {
+    "itag": 271,
+    "mimeType": "video/webm; codecs=\"vp9\"",
+    "bitrate": 8978328,
+    "width": 2560,
+    "height": 1440,
+    "fps": 25,
+    "contentLength": "151103346",
+    "approxDurationMs": "213040",
+    "signatureCipher": "s=REDACTED&sp=sig&url=https%3A%2F%2Frr1---sn-redacted.googlevideo.com%2Fvideoplayback%3Fitag%3D271%26n%3DREDACTED"
+   },
+   {
+    "itag": 137,
+    "mimeType": "video/mp4; codecs=\"avc1.640028\"",
+    "bitrate": 4334157,
+    "width": 1920,
+    "height": 1080,
+    "fps": 25,
+    "contentLength": "80911999",
+    "approxDurationMs": "213040",
+    "signatureCipher": "s=REDACTED&sp=sig&url=https%3A%2F%2Frr1---sn-redacted.googlevideo.com%2Fvideoplayback%3Fitag%3D137%26n%3DREDACTED"
+   },
+   {
+    "itag": 248,
+    "mimeType": "video/webm; codecs=\"vp9\"",
+    "bitrate": 1549172,
+    "width": 1920,
+    "height": 1080,
+    "fps": 25,
+    "contentLength": "30846580",
+    "approxDurationMs": "213040",
+    "signatureCipher": "s=REDACTED&sp=sig&url=https%3A%2F%2Frr1---sn-redacted.googlevideo.com%2Fvideoplayback%3Fitag%3D248%26n%3DREDACTED"
+   },
+   {
+    "itag": 136,
+    "mimeType": "video/mp4; codecs=\"avc1.4d401f\"",
+    "bitrate": 1058310,
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "contentLength": "26455880",
+    "approxDurationMs": "213040",
+    "signatureCipher": "s=REDACTED&sp=sig&url=https%3A%2F%2Frr1---sn-redacted.googlevideo.com%2Fvideoplayback%3Fitag%3D136%26n%3DREDACTED"
+   },
+   {
+    "itag": 247,
+    "mimeType": "video/webm; codecs=\"vp9\"",
+    "bitrate": 867871,
+    "width": 1280,
+    "height": 720,
+    "fps": 25,
+    "contentLength": "17686717",
+    "approxDurationMs": "213040",
+    "signatureCipher": "s=REDACTED&sp=sig&url=https%3A%2F%2Frr1---sn-redacted.googlevideo.com%2Fvideoplayback%3Fitag%3D247%26n%3DREDACTED"
+   },
+   {
+    "itag": 135,
+    "mimeType": "video/mp4; codecs=\"avc1.4d401e\"",
+    "bitrate": 690764,
+    "width": 854,
+    "height": 480,
+    "fps": 25,
+    "contentLength": "14103519",
+    "approxDurationMs": "213040",
+    "signatureCipher": "s=REDACTED&sp=sig&url=https%3A%2F%2Frr1---sn-redacted.googlevideo.com%2Fvideoplayback%3Fitag%3D135%26n%3DREDACTED"
+   },
+   {
+    "itag": 244,
+    "mimeType": "video/webm; codecs=\"vp9\"",
+    "bitrate": 466632,
+    "width": 854,
+    "height": 480,
+    "fps": 25,
+    "contentLength": "9381481",
+    "approxDurationMs": "213040",
+    "signatureCipher": "s=REDACTED&sp=sig&url=https%3A%2F%2Frr1---sn-redacted.googlevideo.com%2Fvideoplayback%3Fitag%3D244%26n%3DREDACTED"
+   },
+   {
+    "itag": 134,
+    "mimeType": "video/mp4; codecs=\"avc1.4d401e\"",
+    "bitrate": 450863,
+    "width": 640,
+    "height": 360,
+    "fps": 25,
+    "contentLength": "8390921",
+    "approxDurationMs": "213040",
+    "signatureCipher": "s=REDACTED&sp=sig&url=https%3A%2F%2Frr1---sn-redacted.googlevideo.com%2Fvideoplayback%3Fitag%3D134%26n%3DREDACTED"
+   },
+   {
+    "itag": 243,
+    "mimeType": "video/webm; codecs=\"vp9\"",
+    "bitrate": 288453,
+    "width": 640,
+    "height": 360,
+    "fps": 25,
+    "contentLength": "6014765",
+    "approxDurationMs": "213040",
+    "signatureCipher": "s=REDACTED&sp=sig&url=https%3A%2F%2Frr1---sn-redacted.googlevideo.com%2Fvideoplayback%3Fitag%3D243%26n%3DREDACTED"
+   },
+   {
+    "itag": 133,
+    "mimeType": "video/mp4; codecs=\"avc1.4d4015\"",
+    "bitrate": 236224,
+    "width": 426,
+    "height": 240,
+    "fps": 25,
+    "contentLength": "4310122",
+    "approxDurationMs": "213040",
+    "signatureCipher": "s=REDACTED&sp=sig&url=https%3A%2F%2Frr1---sn-redacted.googlevideo.com%2Fvideoplayback%3Fitag%3D133%26n%3DREDACTED"
+   },
+   {
+    "itag": 242,
+    "mimeType": "video/webm; codecs=\"vp9\"",
+    "bitrate": 131647,
+    "width": 426,
+    "height": 240,
+    "fps": 25,
+    "contentLength": "2706929",
+    "approxDurationMs": "213040",
+    "signatureCipher": "s=REDACTED&sp=sig&url=https%3A%2F%2Frr1---sn-redacted.googlevideo.com%2Fvideoplayback%3Fitag%3D242%26n%3DREDACTED"
+   },
+   {
+    "itag": 160,
+    "mimeType": "video/mp4; codecs=\"avc1.4d400c\"",
+    "bitrate": 109973,
+    "width": 256,
+    "height": 144,
+    "fps": 25,
+    "contentLength": "2058142",
+    "approxDurationMs": "213040",
+    "signatureCipher": "s=REDACTED&sp=sig&url=https%3A%2F%2Frr1---sn-redacted.googlevideo.com%2Fvideoplayback%3Fitag%3D160%26n%3DREDACTED"
+   },
+   {
+    "itag": 278,
+    "mimeType": "video/webm; codecs=\"vp9\"",
+    "bitrate": 68500,
+    "width": 256,
+    "height": 144,
+    "fps": 25,
+    "contentLength": "1540844",
+    "approxDurationMs": "213040",
+    "signatureCipher": "s=REDACTED&sp=sig&url=https%3A%2F%2Frr1---sn-redacted.googlevideo.com%2Fvideoplayback%3Fitag%3D278%26n%3DREDACTED"
+   },
+   {
+    "itag": 140,
+    "mimeType": "audio/mp4; codecs=\"mp4a.40.2\"",
+    "bitrate": 130677,
+    "contentLength": "3449447",
+    "audioQuality": "AUDIO_QUALITY_MEDIUM",
+    "approxDurationMs": "213089",
+    "signatureCipher": "s=REDACTED&sp=sig&url=https%3A%2F%2Frr1---sn-redacted.googlevideo.com%2Fvideoplayback%3Fitag%3D140%26n%3DREDACTED"
+   },
+   {
+    "itag": 141,
+    "mimeType": "audio/mp4; codecs=\"mp4a.40.2\"",
+    "bitrate": 258454,
+    "contentLength": "6858879",
+    "audioQuality": "AUDIO_QUALITY_HIGH",
+    "approxDurationMs": "213089",
+    "signatureCipher": "s=REDACTED&sp=sig&url=https%3A%2F%2Frr1---sn-redacted.googlevideo.com%2Fvideoplayback%3Fitag%3D141%26n%3DREDACTED"
+   },
+   {
+    "itag": 249,
+    "mimeType": "audio/webm; codecs=\"opus\"",
+    "bitrate": 49496,
+    "contentLength": "1231355",
+    "audioQuality": "AUDIO_QUALITY_LOW",
+    "approxDurationMs": "213061",
+    "signatureCipher": "s=REDACTED&sp=sig&url=https%3A%2F%2Frr1---sn-redacted.googlevideo.com%2Fvideoplayback%3Fitag%3D249%26n%3DREDACTED"
+   },
+   {
+    "itag": 250,
+    "mimeType": "audio/webm; codecs=\"opus\"",
+    "bitrate": 65508,
+    "contentLength": "1628559",
+    "audioQuality": "AUDIO_QUALITY_LOW",
+    "approxDurationMs": "213061",
+    "signatureCipher": "s=REDACTED&sp=sig&url=https%3A%2F%2Frr1---sn-redacted.googlevideo.com%2Fvideoplayback%3Fitag%3D250%26n%3DREDACTED"
+   },
+   {
+    "itag": 251,
+    "mimeType": "audio/webm; codecs=\"opus\"",
+    "bitrate": 136544,
+    "contentLength": "3433755",
+    "audioQuality": "AUDIO_QUALITY_MEDIUM",
+    "approxDurationMs": "213061",
+    "signatureCipher": "s=REDACTED&sp=sig&url=https%3A%2F%2Frr1---sn-redacted.googlevideo.com%2Fvideoplayback%3Fitag%3D251%26n%3DREDACTED"
+   },
+   {
+    "itag": 774,
+    "mimeType": "audio/webm; codecs=\"opus\"",
+    "bitrate": 270204,
+    "contentLength": "6852699",
+    "audioQuality": "AUDIO_QUALITY_HIGH",
+    "approxDurationMs": "213061",
+    "signatureCipher": "s=REDACTED&sp=sig&url=https%3A%2F%2Frr1---sn-redacted.googlevideo.com%2Fvideoplayback%3Fitag%3D774%26n%3DREDACTED"
+   }
+  ]
+ },
+ "videoDetails": {
+  "videoId": "dQw4w9WgXcQ",
+  "title": "Never Gonna Give You Up",
+  "author": "Rick Astley",
+  "lengthSeconds": "213",
+  "musicVideoType": "MUSIC_VIDEO_TYPE_OMV"
+ }
+}

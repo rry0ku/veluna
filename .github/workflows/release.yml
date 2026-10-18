@@ -5,14 +5,19 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v1.3.0)'
+        required: true
+        default: 'v1.3.0'
 
 permissions:
   contents: write
 
 jobs:
   release-linux:
-    name: 'Linux build'
-    runs-on: ubuntu-22.04
+    name: 'Linux packages'
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository
@@ -21,8 +26,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 26
+          node-version: 22
           cache: 'npm'
+          cache-dependency-path: 'ui/package-lock.json'
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -32,50 +38,62 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
 
-      - name: Install Linux system dependencies
+      - name: Install Linux dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
+            libmpv-dev \
             libwebkit2gtk-4.1-dev \
-            build-essential \
-            curl \
-            wget \
-            file \
-            libxdo-dev \
-            libssl-dev \
-            libayatana-appindicator3-dev \
+            libgtk-3-dev \
             librsvg2-dev \
+            libssl-dev \
+            libdbus-1-dev \
+            libayatana-appindicator3-dev \
             rpm \
             zstd \
-            libarchive-tools
+            libarchive-tools \
+            curl \
+            jq
 
-      - name: Install frontend dependencies
-        run: npm ci
+      - name: Build Frontend
+        run: |
+          cd ui
+          npm ci
+          npm run build
 
-      - name: Build Tauri Application & Publish Release
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'v__VERSION__'
-          releaseBody: 'See the assets below to download Veluna for your platform.'
-          releaseDraft: false
-          prerelease: false
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli
+
+      - name: Build Tauri Bundles (.deb, .rpm, .AppImage)
+        run: tauri build
+
+      - name: Patch AppImage for multi-distro portability
+        run: |
+          chmod +x ./scripts/fix-appdir-tls.sh
+          ./scripts/fix-appdir-tls.sh target/release/bundle/appimage || true
 
       - name: Build Arch Linux package (.pkg.tar.zst)
         run: |
           chmod +x ./scripts/build-arch-pkg.sh
-          ./scripts/build-arch-pkg.sh "${{ github.ref_name }}"
+          ./scripts/build-arch-pkg.sh "${{ github.ref_name || inputs.tag }}"
 
-      - name: Upload Arch Linux .pkg.tar.zst to Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Stage Linux packages
         run: |
-          gh release upload ${{ github.ref_name }} veluna-*.pkg.tar.zst --clobber
+          mkdir -p linux-dist
+          cp target/release/bundle/appimage/*.AppImage linux-dist/ 2>/dev/null || true
+          cp target/release/bundle/deb/*.deb linux-dist/ 2>/dev/null || true
+          cp target/release/bundle/rpm/*.rpm linux-dist/ 2>/dev/null || true
+          cp veluna-*.pkg.tar.zst linux-dist/ 2>/dev/null || true
+          ls -la linux-dist/
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-dist
+          path: linux-dist/*
 
   release-windows:
-    name: 'Windows build'
+    name: 'Windows packages'
     runs-on: windows-latest
 
     steps:
@@ -85,8 +103,93 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 26
+          node-version: 22
           cache: 'npm'
+          cache-dependency-path: 'ui/package-lock.json'
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Setup MSVC developer tools
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Download and setup Windows libmpv
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $headers = @{ "User-Agent" = "veluna-ci" }
+          if ($env:GITHUB_TOKEN) { $headers["Authorization"] = "Bearer $env:GITHUB_TOKEN" }
+          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest" -Headers $headers
+          $asset = $release.assets | Where-Object { $_.name -match '^mpv-dev-x86_64-\d+.*\.7z$' } | Select-Object -First 1
+          if (-not $asset) {
+            $asset = $release.assets | Where-Object { $_.name -match '^mpv-dev-x86_64-.*\.7z$' -and $_.name -notmatch 'v3' } | Select-Object -First 1
+          }
+          Write-Host "Downloading $($asset.name)..."
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile mpv-dev.7z
+          7z x mpv-dev.7z -ompv-dev -y
+
+          $names = dumpbin /exports mpv-dev\libmpv-2.dll |
+            Select-String -Pattern '^\s+\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+(\w+)' |
+            ForEach-Object { $_.Matches[0].Groups[1].Value }
+          @("EXPORTS") + ($names | ForEach-Object { "    $_" }) | Set-Content mpv-dev\mpv.def -Encoding ascii
+          lib /def:mpv-dev\mpv.def /name:libmpv-2.dll /out:mpv-dev\mpv.lib /machine:x64
+          Copy-Item mpv-dev\libmpv-2.dll src-tauri\libmpv-2.dll -Force
+
+      - name: Build Frontend
+        shell: pwsh
+        run: |
+          cd ui
+          npm ci
+          npm run build
+          cd ..
+
+      - name: Install Tauri CLI
+        shell: pwsh
+        run: npm install -g @tauri-apps/cli
+
+      - name: Build Tauri Bundles (.exe NSIS and .msi)
+        shell: pwsh
+        env:
+          RUSTFLAGS: -L native=${{ github.workspace }}\mpv-dev
+        run: |
+          tauri build --config src-tauri/tauri.windows.conf.json
+
+      - name: Stage Windows packages
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path windows-dist
+          Get-ChildItem -Path target/release/bundle/nsis/*.exe | Copy-Item -Destination windows-dist
+          Get-ChildItem -Path target/release/bundle/msi/*.msi | Copy-Item -Destination windows-dist
+          Get-ChildItem -Path windows-dist
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-dist
+          path: windows-dist/*
+
+  release-macos:
+    name: 'macOS packages'
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+          cache-dependency-path: 'ui/package-lock.json'
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -96,33 +199,97 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
 
-      - name: Download Windows bundled binaries
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install macOS dependencies
         run: |
-          node ./scripts/setup-deps.js
+          brew install mpv dylibbundler create-dmg
 
-      - name: Create binaries.zip
-        shell: pwsh
+      - name: Build Frontend
         run: |
-          Compress-Archive -Path "src-tauri/binaries/*.exe" -DestinationPath "binaries.zip" -Force
+          cd ui
+          npm ci
+          npm run build
 
-      - name: Install frontend dependencies
-        run: npm ci
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli
 
-      - name: Build Tauri Application & Publish Release
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build Tauri App Bundle
+        run: |
+          export LIBRARY_PATH="$(brew --prefix)/lib:$LIBRARY_PATH"
+          tauri build --config src-tauri/tauri.macos.conf.json --bundles app
+
+      - name: Bundle dynamic libraries & ad-hoc codesign
+        run: |
+          APP="target/release/bundle/macos/veluna.app"
+          BIN="$APP/Contents/MacOS/veluna"
+          dylibbundler -cd -of -b -x "$BIN" -d "$APP/Contents/Frameworks" -p "@executable_path/../Frameworks" -s "$(brew --prefix)/lib"
+          install_name_tool -delete_rpath '@executable_path/../Frameworks/' "$APP/Contents/Frameworks/libmpv.2.dylib" || true
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict "$APP"
+
+      - name: Create DMG package
+        run: |
+          APP="target/release/bundle/macos/veluna.app"
+          mkdir -p target/release/bundle/dmg
+          VERSION="${{ github.ref_name || inputs.tag }}"
+          VERSION="${VERSION#v}"
+          DMG_PATH="target/release/bundle/dmg/veluna_${VERSION}_aarch64.dmg"
+
+          create-dmg \
+            --volname "Veluna" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "veluna.app" 175 190 \
+            --hide-extension "veluna.app" \
+            --app-drop-link 425 190 \
+            "$DMG_PATH" \
+            "$APP" || hdiutil create -volname "Veluna" -srcfolder "$APP" -ov -format UDZO "$DMG_PATH"
+
+      - name: Stage macOS packages
+        run: |
+          mkdir -p macos-dist
+          cp target/release/bundle/dmg/*.dmg macos-dist/ 2>/dev/null || true
+          ls -la macos-dist/
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'v__VERSION__'
-          releaseBody: 'See the assets below to download Veluna for your platform.'
-          releaseDraft: false
-          prerelease: false
+          name: macos-dist
+          path: macos-dist/*
 
-      - name: Upload binaries.zip to Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  publish:
+    name: 'Publish release'
+    needs: [release-linux, release-windows, release-macos]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all-dist
+
+      - name: Consolidate distribution files
         run: |
-          gh release upload ${{ github.ref_name }} binaries.zip --clobber
+          mkdir -p dist
+          find all-dist -type f -exec cp {} dist/ \;
+          echo "=== Release packages ==="
+          ls -lh dist/
+
+      - name: Determine tag name
+        id: vars
+        run: |
+          TAG="${{ github.ref_name }}"
+          if [[ "$TAG" != v* ]]; then
+            TAG="${{ inputs.tag }}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: Veluna ${{ steps.vars.outputs.tag }}
+          files: dist/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
