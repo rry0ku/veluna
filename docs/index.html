@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Veluna — Free, Open-Source & Ad-Free Music Player</title>
-<meta name="description" content="Veluna is the ultimate free, open-source, ad-free desktop music streaming app for Windows, macOS & Linux. Stream millions of tracks powered by YouTube, enjoy high-fidelity audio, synced lyrics, and offline downloads with zero paywalls or tracking.">
+<title>Veluna - Free, Open-Source and Ad-Free Music Player</title>
+<meta name="description" content="Veluna is the ultimate free, open-source, ad-free desktop music streaming app for Windows, macOS and Linux. Stream millions of tracks powered by YouTube, enjoy high-fidelity audio, synced lyrics, and offline downloads with zero paywalls or tracking.">
 <meta name="keywords" content="music player, free music player, ad-free music, spotify alternative, free spotify alternative, ad free spotify alternative, apple music alternative, youtube music alternative, tidal alternative, youtube music desktop, youtube music client, desktop youtube music, stream youtube music, free music streaming, open source music player, high fidelity music, lossless audio, mp3 player, music downloader, youtube music downloader, mp3 downloader, offline music downloader, synchronized lyrics, lrc lyrics, audio equalizer, discord rich presence music, mpris music player, crossfade music player, spotify playlist import, exportify csv import, privacy music player, zero tracking music, tauri music player, veluna, veluna player, veluna music, desktop music streamer, windows music player, linux music player, mac music player, macos music player">
 <meta name="author" content="rry0ku">
 <meta name="robots" content="index, follow, max-image-preview:large">
@@ -13,8 +13,8 @@
 <!-- Open Graph / Facebook -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Veluna">
-<meta property="og:title" content="Veluna — Free, Open-Source & Ad-Free Music Player">
-<meta property="og:description" content="Stream millions of songs with zero ads, zero paywalls, and zero tracking. High-fidelity audio, offline downloads, and synced lyrics for Windows, macOS & Linux.">
+<meta property="og:title" content="Veluna - Free, Open-Source and Ad-Free Music Player">
+<meta property="og:description" content="Stream millions of songs with zero ads, zero paywalls, and zero tracking. High-fidelity audio, offline downloads, and synced lyrics for Windows, macOS and Linux.">
 <meta property="og:url" content="https://rry0ku.github.io/veluna/">
 <meta property="og:image" content="https://rry0ku.github.io/veluna/og-image.png">
 <meta property="og:image:width" content="1907">
@@ -23,8 +23,8 @@
 
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Veluna — Free, Open-Source & Ad-Free Music Player">
-<meta name="twitter:description" content="Stream millions of songs with zero ads, zero paywalls, and zero tracking. High-fidelity audio, offline downloads, and synced lyrics for Windows, macOS & Linux.">
+<meta name="twitter:title" content="Veluna - Free, Open-Source and Ad-Free Music Player">
+<meta name="twitter:description" content="Stream millions of songs with zero ads, zero paywalls, and zero tracking. High-fidelity audio, offline downloads, and synced lyrics for Windows, macOS and Linux.">
 <meta name="twitter:image" content="https://rry0ku.github.io/veluna/og-image.png">
 <meta name="twitter:image:alt" content="Veluna Desktop Music Player Interface">
 
@@ -54,176 +54,233 @@
   }
 }
 </script>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23111010'/%3E%3Cpolygon points='5,8 9,8 16,23 23,8 27,8 16,25' fill='%23d4cfcf'/%3E%3Cpolygon points='9,8 12.5,8 16,19 19.5,8 23,8 16,23' fill='%23111010'/%3E%3C/svg%3E" type="image/svg+xml">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png?v=2">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png?v=2">
+<link rel="icon" type="image/png" href="veluna_icon.png?v=2">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png?v=2">
+<link rel="shortcut icon" href="favicon.ico?v=2">
+<link rel="preload" as="image" href="screenshots/ss2.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,700;1,9..144,300;1,9..144,400;1,9..144,700&family=Geist:wght@300;400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Geist:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg:    #000000;
-  --bg2:   #0a0a0a;
-  --bg3:   #111111;
-  --bg4:   #1a1a1a;
-  --fg:    #f0ece9;
-  --fg2:   #b8b2ae;
-  --fg3:   #8a8480;
-  --fg4:   #5a5654;
-  --bdr:   #1a1a1a;
-  --bdr2:  #242424;
-  --bdr3:  #2e2e2e;
-  --nav-h: 68px;
-  --max:   1080px;
-  --mono:  'Geist', sans-serif;
-  --serif: 'Fraunces', serif;
-  --sans:  'DM Sans', sans-serif;
-  --r:     6px;
-  --r-lg:  10px;
-
-  /* Signature accent — the warm copper glow of a stylus catching light.
-     Used sparingly: focus states, the vinyl's atmosphere, and one CTA glow. */
-  --accent:      #c9793f;
-  --accent-dim:  #8a5730;
-  --accent-glow: rgba(201,121,63,.35);
+  --bg:          #000000;
+  --bg2:         #08080a;
+  --bg3:         #101014;
+  --bg4:         #17171d;
+  --fg:          #f4f4f6;
+  --fg2:         #a1a1aa;
+  --fg3:         #71717a;
+  --fg4:         #47474f;
+  --bdr:         rgba(255, 255, 255, 0.08);
+  --bdr2:        rgba(255, 255, 255, 0.13);
+  --bdr3:        rgba(255, 255, 255, 0.22);
+  --nav-h:       68px;
+  --max:         1160px;
+  --serif:       'Fraunces', serif;
+  --sans:        'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --mono:        'Geist', -apple-system, BlinkMacSystemFont, monospace;
+  --r-sm:        6px;
+  --r:           10px;
+  --r-lg:        16px;
+  --r-xl:        22px;
+  --accent:      #f59e0b;
+  --accent-dim:  #b45309;
+  --accent-glow: rgba(245, 158, 11, 0.32);
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; font-size: 17px; }
+html { scroll-behavior: smooth; font-size: 16px; background-color: var(--bg); }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
 body {
   background: var(--bg);
   color: var(--fg);
   font-family: var(--sans);
-  line-height: 1.65;
+  line-height: 1.6;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
+/* Subtle noise texture */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.025'/%3E%3C/svg%3E");
   pointer-events: none;
   z-index: 9998;
-  opacity: .6;
+  opacity: 0.5;
 }
 
 a { color: inherit; text-decoration: none; }
 button { font-family: var(--sans); cursor: pointer; border: none; background: none; }
 img { max-width: 100%; display: block; }
-strong { font-weight: 600; }
-code { font-family: var(--mono); font-size: .87em; }
+strong { font-weight: 600; color: var(--fg); }
+code { font-family: var(--mono); font-size: 0.88em; }
 
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; scroll-behavior: auto !important; }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 #progress-bar {
   position: fixed; top: 0; left: 0;
-  width: 0%; height: 1px;
-  background: var(--fg2);
+  width: 0%; height: 1.5px;
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
   z-index: 9999; pointer-events: none;
-  transition: width .08s linear;
+  transition: width 0.08s linear;
 }
 
+/* -------------------------------------------------------------
+   TRANSPARENT BLURRY NAVBAR
+------------------------------------------------------------- */
 nav {
   position: fixed; top: 0; left: 0; right: 0;
   height: var(--nav-h);
-  background: var(--bg);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border-bottom: 1px solid var(--bdr);
   display: flex; align-items: center;
-  padding: 0 clamp(20px, 5%, 56px);
+  padding: 0 clamp(20px, 5%, 48px);
   z-index: 1000;
-  transition: background .3s, border-color .3s;
+  transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
 }
-nav.scrolled { background: var(--bg2); box-shadow: 0 8px 24px -16px rgba(0,0,0,.5); }
+nav.scrolled {
+  background: rgba(4, 4, 6, 0.82);
+  border-bottom-color: var(--bdr2);
+  box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.85);
+}
 .nav-inner {
   width: 100%; max-width: var(--max); margin: 0 auto;
-  display: flex; align-items: center;
+  display: flex; align-items: center; justify-content: space-between;
 }
 .nav-brand {
-  display: flex; align-items: center; gap: 9px;
-  font-family: var(--mono); font-size: 14px; font-weight: 500;
-  letter-spacing: .12em; color: var(--fg);
+  display: flex; align-items: center; gap: 10px;
+  font-family: var(--sans); font-size: 16px; font-weight: 600;
+  letter-spacing: -0.02em; color: var(--fg);
   text-transform: lowercase; flex-shrink: 0;
+  transition: opacity 0.2s ease;
 }
-.v-mark { width: 28px; height: 28px; flex-shrink: 0; }
+.nav-brand:hover { opacity: 0.85; }
+.nav-logo { width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0; display: block; object-fit: contain; image-rendering: -webkit-optimize-contrast; }
+
 .nav-links {
   display: flex; align-items: center;
-  gap: 0; margin: 0 auto;
+  gap: 4px;
 }
 .nav-link {
   position: relative;
-  font-family: var(--mono); font-size: 14px; font-weight: 400; color: var(--fg2);
-  padding: 6px 13px; border-radius: 4px;
-  letter-spacing: .06em;
-  transition: color .2s, background .2s;
+  font-size: 14px; font-weight: 500; color: var(--fg2);
+  padding: 8px 16px; border-radius: 8px;
+  letter-spacing: -0.01em;
+  transition: color 0.2s ease, background 0.2s ease;
   white-space: nowrap;
 }
-.nav-link:hover { color: var(--fg); background: var(--bg3); }
+.nav-link:hover { color: var(--fg); background: rgba(255, 255, 255, 0.05); }
 .nav-link.active { color: var(--fg); }
 .nav-link.active::after {
-  content: ''; position: absolute; left: 13px; right: 13px; bottom: 1px;
-  height: 1.5px; background: var(--accent); border-radius: 1px;
+  content: ''; position: absolute; left: 16px; right: 16px; bottom: 2px;
+  height: 2px; background: var(--accent); border-radius: 1px;
 }
-.nav-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: auto; }
+
+.nav-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 
 .gh-btn {
-  display: flex; align-items: center; gap: 7px;
-  font-size: 13px; font-weight: 500; color: var(--fg2);
-  font-family: var(--mono);
-  padding: 8px 14px; border-radius: 6px;
-  border: 1px solid var(--bdr2);
-  background: var(--bg2);
-  letter-spacing: .04em;
-  transition: color .2s, border-color .2s, background .2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg2);
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--bdr);
+  background: rgba(255, 255, 255, 0.03);
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
   white-space: nowrap;
 }
-.gh-btn:hover { color: var(--fg); border-color: var(--bdr3); background: var(--bg3); }
-.gh-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
+.gh-btn:hover {
+  color: var(--fg);
+  border-color: var(--bdr2);
+  background: rgba(255, 255, 255, 0.07);
+}
+.gh-btn svg.gh-icon,
+.gh-btn > svg:first-child {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.gh-star-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 3px;
+  color: var(--fg);
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.gh-star-icon {
+  width: 13px;
+  height: 13px;
+  color: #fbbf24;
+  fill: #fbbf24;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 3px rgba(251, 191, 36, 0.45));
+}
 
 .dl-nav-btn {
-  display: inline-flex; align-items: center; gap: 6px;
-  font-size: 13px; font-weight: 600; color: var(--bg);
-  font-family: var(--mono); letter-spacing: .08em;
-  padding: 9px 18px; border-radius: 6px;
-  background: var(--fg);
-  transition: opacity .2s;
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: 600; color: #000000;
+  padding: 8px 18px; border-radius: 9999px;
+  background: transparent;
+  transition: opacity 0.2s ease, transform 0.15s ease;
   white-space: nowrap;
 }
-.dl-nav-btn:hover { opacity: .85; }
+.dl-nav-btn:hover { opacity: 1; transform: translateY(-1px); }
 
 .ham {
   display: none; flex-direction: column; gap: 5px;
-  padding: 8px; border-radius: 6px; cursor: pointer;
-  background: var(--bg3); border: 1px solid var(--bdr2);
+  padding: 8px; border-radius: 8px; cursor: pointer;
+  background: rgba(255, 255, 255, 0.04); border: 1px solid var(--bdr);
 }
-.ham span { display: block; width: 18px; height: 1.5px; background: var(--fg2); border-radius: 2px; transition: background .2s; }
+.ham span { display: block; width: 18px; height: 1.5px; background: var(--fg2); border-radius: 2px; transition: background 0.2s; }
 .ham:hover span { background: var(--fg); }
 
-/* Drawer overlay */
+/* Mobile navigation drawer */
 .mobile-overlay {
   display: none; position: fixed; inset: 0;
-  background: rgba(0,0,0,.5); z-index: 998;
-  backdrop-filter: blur(2px);
+  background: rgba(0, 0, 0, 0.7); z-index: 1098;
+  backdrop-filter: blur(8px);
 }
 .mobile-overlay.open { display: block; }
 
-/* Slide-in drawer from right */
 .mobile-nav {
   display: flex; flex-direction: column;
   position: fixed; top: 0; right: 0; bottom: 0;
-  width: min(280px, 80vw);
-  background: var(--bg2); border-left: 1px solid var(--bdr);
-  padding: 24px 20px; gap: 4px; z-index: 999;
+  width: min(300px, 82vw);
+  background: rgba(12, 12, 16, 0.96);
+  backdrop-filter: blur(24px);
+  border-left: 1px solid var(--bdr);
+  padding: 24px 20px; gap: 6px; z-index: 1099;
   transform: translateX(100%);
-  transition: transform .3s cubic-bezier(.16,1,.3,1);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   overflow-y: auto;
 }
 .mobile-nav.open { transform: translateX(0); }
@@ -233,730 +290,955 @@ nav.scrolled { background: var(--bg2); box-shadow: 0 8px 24px -16px rgba(0,0,0,.
   border-bottom: 1px solid var(--bdr);
 }
 .mobile-nav-brand {
-  font-family: var(--mono); font-size: 13px; font-weight: 500;
-  color: var(--fg2); letter-spacing: .1em;
+  font-size: 16px; font-weight: 600;
+  color: var(--fg); letter-spacing: -0.02em;
 }
 .mobile-close {
-  width: 32px; height: 32px; border-radius: 6px;
-  background: var(--bg3); border: 1px solid var(--bdr2);
+  width: 32px; height: 32px; border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05); border: 1px solid var(--bdr);
   display: flex; align-items: center; justify-content: center;
   color: var(--fg3); cursor: pointer; flex-shrink: 0;
 }
-.mobile-close:hover { background: var(--bg4); color: var(--fg); }
-.mobile-close svg { width: 14px; height: 14px; }
+.mobile-close:hover { background: rgba(255, 255, 255, 0.1); color: var(--fg); }
+.mobile-close svg { width: 15px; height: 15px; }
 .mobile-nav a {
-  font-family: var(--mono); font-size: 15px; color: var(--fg2);
-  padding: 15px 14px; border-radius: 7px;
-  letter-spacing: .06em;
-  transition: color .2s, background .2s;
+  font-size: 15px; font-weight: 500; color: var(--fg2);
+  padding: 12px 14px; border-radius: 8px;
+  transition: color 0.2s, background 0.2s;
 }
-.mobile-nav a:hover { color: var(--fg); background: var(--bg3); }
+.mobile-nav a:hover { color: var(--fg); background: rgba(255, 255, 255, 0.06); }
 .mobile-nav a.m-dl {
-  margin-top: 16px; background: var(--fg); color: var(--bg);
-  font-family: var(--mono); font-size: 14px; font-weight: 600;
-  letter-spacing: .08em; text-align: center; border-radius: 7px;
-  padding: 16px;
+  margin-top: 18px; background: #ffffff; color: #000000;
+  font-size: 14px; font-weight: 600; text-align: center;
+  border-radius: 9999px; padding: 13px;
 }
-.mobile-nav a.m-dl:hover { opacity: .88; background: var(--fg); color: var(--bg); }
+.mobile-nav a.m-dl:hover { opacity: 0.9; }
 
-.section { padding: clamp(80px, 11vw, 130px) clamp(20px, 5%, 56px); }
-.section-inner { max-width: var(--max); margin: 0 auto; }
-.divider { border: none; border-top: 1px solid var(--bdr3); margin: 0; }
-
-.s-label {
-  font-family: var(--mono); font-size: 17px; font-weight: 500;
-  letter-spacing: .2em; text-transform: uppercase; color: var(--fg3);
-  display: block; margin-bottom: 18px;
-}
-.s-head {
-  font-family: var(--serif);
-  font-size: clamp(34px, 5vw, 56px); font-weight: 400;
-  color: var(--fg); line-height: 1.1; letter-spacing: -.02em;
-  margin-bottom: 18px;
-}
-.s-sub {
-  font-size: 16px; color: var(--fg2); max-width: 520px;
-  line-height: 1.85;
-}
-
-.reveal {
-  opacity: 0; transform: translateY(20px);
-  transition: opacity .7s cubic-bezier(.16,1,.3,1),
-              transform .7s cubic-bezier(.16,1,.3,1);
-}
-.reveal.d1 { transition-delay: .07s; }
-.reveal.d2 { transition-delay: .14s; }
-.reveal.d3 { transition-delay: .21s; }
-.reveal.d4 { transition-delay: .28s; }
-.reveal.visible { opacity: 1; transform: none; }
-
+/* -------------------------------------------------------------
+   HERO SECTION WITH CURVED HORIZON STAGE
+------------------------------------------------------------- */
 .hero {
-  min-height: 100vh;
-  display: flex; align-items: center;
-  padding: calc(var(--nav-h) + 80px) clamp(20px, 5%, 56px) 100px clamp(20px, 5%, 56px);
-  position: relative; overflow: hidden;
-}
-
-/* Vinyl record */
-.hero-vinyl-wrap {
-  position: absolute;
-  right: clamp(20px, 6vw, 80px); top: 50%;
-  transform: translateY(-50%);
-  width: clamp(320px, 42vw, 580px);
-  height: clamp(320px, 42vw, 580px);
-  pointer-events: none;
-}
-.hero-vinyl-wrap::before {
-  content: '';
-  position: absolute; inset: -18%;
-  background: radial-gradient(circle, var(--accent-glow) 0%, transparent 68%);
-  opacity: .3;
-  filter: blur(4px);
-}
-.hero-vinyl {
-  width: 100%; height: 100%;
-  opacity: .13;
-  animation: vinyl-spin 28s linear infinite;
   position: relative;
-}
-@keyframes vinyl-spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding-top: calc(var(--nav-h) + 64px);
+  padding-bottom: 100px;
+  overflow: hidden;
+  background: transparent;
+  z-index: 2;
 }
 
-/* Tonearm — static, sits on top of the spinning vinyl */
-.hero-tonearm {
+/* Animated subtle ambient glows */
+.hero-bg-glows {
   position: absolute;
-  top: 4%; right: 4%;
-  width: 38%; height: 55%;
-  opacity: .18;
-  transform-origin: 88% 8%;
-  transform: rotate(22deg);
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 1;
 }
 
-@media (max-width: 900px) {
-  .hero-vinyl-wrap { opacity: .6; right: clamp(10px, 3vw, 40px); }
+.glow-orb {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform, opacity;
 }
 
-.hero-bg-lines {
-  position: absolute; right: 0; top: 0; bottom: 0;
-  width: 50%; pointer-events: none; overflow: hidden; opacity: .06;
-}
-.hero-bg-lines svg { width: 100%; height: 100%; }
-
-.hero-inner {
-  max-width: var(--max); margin: 0 auto; width: 100%;
-  display: flex; flex-direction: column;
-  position: relative; z-index: 2;
-}
-@media (min-width: 1024px) {
-  .hero-inner { position: relative; left: -110px; z-index: 2; }
+.glow-orb-1 {
+  top: 26%;
+  left: 50%;
+  width: min(960px, 95vw);
+  height: 540px;
+  background: radial-gradient(ellipse at center, rgba(245, 158, 11, 0.36) 0%, rgba(217, 119, 6, 0.18) 40%, rgba(245, 158, 11, 0.05) 65%, transparent 80%);
+  filter: blur(65px);
+  transform: translate(-50%, -50%);
+  animation: orb-drift-1 7s ease-in-out infinite alternate;
 }
 
-.hero-left { display: flex; flex-direction: column; }
-.hero-eyebrow {
-  font-family: var(--mono); font-size: 11px; font-weight: 500;
-  letter-spacing: .18em; text-transform: uppercase; color: var(--fg2);
-  margin-bottom: 32px;
-  display: flex; align-items: center; gap: 10px;
+.glow-orb-2 {
+  top: 16%;
+  left: 32%;
+  width: min(760px, 82vw);
+  height: 460px;
+  background: radial-gradient(ellipse at center, rgba(251, 191, 36, 0.28) 0%, rgba(245, 158, 11, 0.12) 45%, transparent 70%);
+  filter: blur(75px);
+  transform: translate(-50%, -50%);
+  animation: orb-drift-2 9s ease-in-out infinite alternate;
 }
-.hero-eyebrow::before {
-  content: ''; display: block; width: 24px; height: 1px; background: var(--fg3);
+
+.glow-orb-3 {
+  top: 64%;
+  left: 50%;
+  width: min(1200px, 98vw);
+  height: 560px;
+  background: radial-gradient(ellipse at center, rgba(245, 158, 11, 0.38) 0%, rgba(217, 119, 6, 0.2) 45%, transparent 75%);
+  filter: blur(70px);
+  transform: translate(-50%, -50%);
+  animation: orb-drift-3 6s ease-in-out infinite alternate;
 }
-.hero-title {
-  font-family: var(--serif);
-  font-size: clamp(72px, 12vw, 140px); font-weight: 300;
-  line-height: .95; letter-spacing: -.03em; color: var(--fg);
-  margin-bottom: 36px;
+
+@keyframes orb-drift-1 {
+  0% {
+    transform: translate(-50%, -50%) scale(1) rotate(0deg);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translate(-45%, -55%) scale(1.18) rotate(18deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-55%, -45%) scale(0.9) rotate(-16deg);
+    opacity: 0.8;
+  }
 }
-.hero-title em { font-style: italic; font-weight: 300; color: var(--fg3); }
-.hero-title strong { font-weight: 700; font-style: normal; }
-.hero-desc {
-  font-size: 17px; color: var(--fg2);
-  line-height: 1.85; margin-bottom: 44px;
-  max-width: 600px;
+
+@keyframes orb-drift-2 {
+  0% {
+    transform: translate(-50%, -50%) scale(0.92);
+    opacity: 0.7;
+  }
+  50% {
+    transform: translate(-40%, -46%) scale(1.22);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-58%, -54%) scale(0.88);
+    opacity: 0.65;
+  }
 }
-.hero-desc strong { color: var(--fg); font-weight: 600; }
-.hero-ctas { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+@keyframes orb-drift-3 {
+  0% {
+    transform: translate(-50%, -50%) scale(0.92);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translate(-50%, -43%) scale(1.15);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(0.92);
+    opacity: 0.8;
+  }
+}
+
+.hero-content {
+  position: relative;
+  z-index: 2;
+  max-width: 900px;
+  margin: 0 auto;
+  text-align: center;
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
 .hero-proof {
-  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
-  margin-top: 30px;
-  font-family: var(--mono); font-size: 12px; color: var(--fg3);
-  letter-spacing: .03em;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+  margin-bottom: 24px;
+  font-family: var(--sans);
+  font-size: 13px;
+  color: var(--fg3);
+  letter-spacing: 0.01em;
 }
 .hero-proof-item {
-  display: inline-flex; align-items: center; gap: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .hero-proof-item svg {
-  width: 14px; height: 14px; color: var(--accent); flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  color: var(--accent);
+  flex-shrink: 0;
 }
 .hero-proof-item strong {
-  color: var(--fg); font-weight: 600;
+  color: var(--fg);
+  font-weight: 600;
 }
 .hero-proof-sep {
   color: var(--bdr3);
 }
 
-.hero-v-wrap {
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
+.hero-title {
+  font-family: var(--serif);
+  font-size: clamp(62px, 9.8vw, 122px);
+  font-weight: 300;
+  line-height: 0.94;
+  letter-spacing: -0.035em;
+  color: var(--fg);
+  margin-bottom: 30px;
+  max-width: 960px;
 }
-.hero-v-svg {
-  width: clamp(200px, 28vw, 380px);
-  height: clamp(200px, 28vw, 380px);
-  opacity: .35;
-  transition: opacity .3s;
+.hero-title em {
+  font-style: italic;
+  font-weight: 300;
+  color: #ffffff;
+}
+.hero-title strong {
+  font-weight: 700;
+  font-style: normal;
+  color: #ffffff;
+}
+
+.hero-desc {
+  font-size: clamp(16px, 2.2vw, 20px);
+  color: #92929e;
+  line-height: 1.6;
+  max-width: 640px;
+  margin-bottom: 36px;
+  letter-spacing: -0.01em;
+}
+
+.hero-ctas {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
 }
 
 .btn-primary {
-  display: inline-flex; align-items: center; gap: 8px;
-  background: var(--fg); color: var(--bg);
-  font-size: 15px; font-weight: 600; font-family: var(--mono);
-  letter-spacing: .08em; padding: 14px 26px; border-radius: var(--r);
-  transition: opacity .2s, transform .15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: transparent;
+  color: #000000;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  padding: 14px 30px;
+  border-radius: 9999px;
+  transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.25s ease;
 }
-.btn-primary:hover { opacity: .95; transform: translateY(-1px); box-shadow: 0 8px 24px -8px var(--accent-glow); }
-.btn-primary svg { width: 16px; height: 16px; }
+.btn-primary:hover {
+  transform: translateY(-2px);
+}
+.btn-primary svg { width: 17px; height: 17px; flex-shrink: 0; }
+
+/* -------------------------------------------------------------
+   GOOEY BLOB BUTTON HOVER EFFECT
+------------------------------------------------------------- */
+.blob-btn {
+  z-index: 1;
+  position: relative;
+  text-align: center;
+  color: #000000;
+  font-weight: 600;
+  background-color: transparent !important;
+  outline: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 9999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  transition: color 0.4s ease, transform 0.2s ease, box-shadow 0.3s ease;
+  isolation: isolate;
+}
+
+.blob-btn::before {
+  content: ;
+  z-index: 1;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  border: 2px solid var(--accent);
+  border-radius: 9999px;
+  pointer-events: none;
+  transition: border-color 0.3s ease;
+}
+
+.blob-btn::after {
+  content: ;
+  z-index: -2;
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 100%;
+  height: 100%;
+  background: rgba(245, 158, 11, 0.4);
+  border-radius: 9999px;
+  transition: all 0.3s 0.15s ease;
+  pointer-events: none;
+}
+
+.blob-btn:hover {
+  color: #000000;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 24px rgba(245, 158, 11, 0.45);
+}
+
+.blob-btn:hover::after {
+  transition: all 0.3s ease;
+  left: 0;
+  top: 0;
+  background: rgba(245, 158, 11, 0.7);
+}
+
+.blob-btn__inner {
+  z-index: -1;
+  overflow: hidden;
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  background: #ffffff;
+  pointer-events: none;
+}
+
+.blob-btn__blobs {
+  position: relative;
+  display: block;
+  height: 100%;
+  filter: url('#goo');
+}
+
+.blob-btn__blob {
+  position: absolute;
+  top: 0;
+  width: 34%;
+  height: 100%;
+  background: var(--accent);
+  border-radius: 100%;
+  transform: translate3d(0, 150%, 0) scale(1.7);
+  transition: transform 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@supports (filter: url('#goo')) {
+  .blob-btn__blob {
+    transform: translate3d(0, 150%, 0) scale(1.4);
+  }
+}
+
+.blob-btn__blob:nth-child(1) { left: 0%; transition-delay: 0s; }
+.blob-btn__blob:nth-child(2) { left: 28%; transition-delay: 0.08s; }
+.blob-btn__blob:nth-child(3) { left: 56%; transition-delay: 0.16s; }
+.blob-btn__blob:nth-child(4) { left: 84%; transition-delay: 0.24s; }
+
+.blob-btn:hover .blob-btn__blob {
+  transform: translateZ(0) scale(1.7);
+}
+
+@supports (filter: url('#goo')) {
+  .blob-btn:hover .blob-btn__blob {
+    transform: translateZ(0) scale(1.4);
+  }
+}
+
+.blob-btn__text {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
 
 .btn-secondary {
-  display: inline-flex; align-items: center; gap: 8px;
-  border: 1px solid var(--bdr3); color: var(--fg2);
-  font-size: 15px; font-weight: 500; font-family: var(--mono);
-  letter-spacing: .06em;
-  padding: 13px 22px; border-radius: var(--r);
-  background: transparent;
-  transition: color .2s, border-color .2s, background .2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--bdr2);
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  padding: 13px 26px;
+  border-radius: 9999px;
+  backdrop-filter: blur(10px);
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
 }
-.btn-secondary:hover { color: var(--fg); border-color: var(--fg4); background: var(--bg2); }
-.btn-secondary svg { width: 16px; height: 16px; }
+.btn-secondary:hover {
+  border-color: var(--bdr3);
+  background: rgba(255, 255, 255, 0.09);
+  transform: translateY(-2px);
+}
+.btn-secondary svg { width: 17px; height: 17px; }
 
-.hero-right {
-  display: flex; flex-direction: column;
-  border: 1px solid var(--bdr); border-radius: var(--r-lg);
-  overflow: hidden; background: var(--bg2);
+/* -------------------------------------------------------------
+   HORIZON STAGE & APP MOCKUP
+------------------------------------------------------------- */
+.hero-stage {
+  position: relative;
+  width: 100%;
+  max-width: 1200px;
+  margin-top: 54px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 0 20px;
+  z-index: 2;
 }
 
-.hero-showcase {
-  display: flex; flex-direction: column;
-  padding: 10px 0;
+/* Animated sweeping horizon beam */
+.horizon-beam {
+  position: absolute;
+  top: 110px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(900px, 85vw);
+  height: 160px;
+  background: radial-gradient(ellipse 65% 55% at 50% 0%, rgba(245, 158, 11, 0.55) 0%, rgba(251, 191, 36, 0.28) 35%, transparent 70%);
+  filter: blur(28px);
+  pointer-events: none;
+  z-index: 2;
+  animation: beam-sweep 7s ease-in-out infinite alternate;
 }
-.showcase-line {
-  display: flex; align-items: center; gap: 16px;
-  padding: 14px 28px;
-  border-bottom: 1px solid var(--bdr);
-  transition: background .2s;
+
+@keyframes beam-sweep {
+  0% {
+    transform: translateX(-62%) scaleX(0.88);
+    opacity: 0.65;
+  }
+  50% {
+    transform: translateX(-50%) scaleX(1.18);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-38%) scaleX(0.88);
+    opacity: 0.65;
+  }
 }
-.showcase-line:last-child { border-bottom: none; }
-.showcase-line:hover { background: var(--bg3); }
-.showcase-icon {
-  width: 32px; height: 32px; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center;
+
+/* Curved spherical horizon dome across screen */
+.horizon-arc {
+  position: absolute;
+  top: 130px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 160%;
+  max-width: 1900px;
+  height: 540px;
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  background: radial-gradient(ellipse 70% 90% at 50% 100%, #242735 0%, #151822 35%, #0c0d14 70%, #000000 100%);
+  border-top: 1.5px solid rgba(255, 255, 255, 0.35);
+  box-shadow: 0 -25px 90px rgba(245, 158, 11, 0.3), 0 -10px 40px rgba(251, 191, 36, 0.18), inset 0 2px 35px rgba(255, 255, 255, 0.2);
+  pointer-events: none;
+  z-index: 1;
+  animation: horizon-breathe 8s ease-in-out infinite alternate;
+}
+
+@keyframes horizon-breathe {
+  0% {
+    box-shadow: 0 -20px 70px rgba(245, 158, 11, 0.22), 0 -8px 30px rgba(255, 255, 255, 0.1), inset 0 2px 24px rgba(255, 255, 255, 0.12);
+    border-top-color: rgba(255, 255, 255, 0.28);
+  }
+  50% {
+    box-shadow: 0 -35px 140px rgba(245, 158, 11, 0.5), 0 -15px 60px rgba(251, 191, 36, 0.35), inset 0 3px 45px rgba(255, 255, 255, 0.28);
+    border-top-color: rgba(251, 191, 36, 0.85);
+  }
+  100% {
+    box-shadow: 0 -20px 70px rgba(245, 158, 11, 0.22), 0 -8px 30px rgba(255, 255, 255, 0.1), inset 0 2px 24px rgba(255, 255, 255, 0.12);
+    border-top-color: rgba(255, 255, 255, 0.28);
+  }
+}
+
+/* Desktop App Mockup Window resting on horizon */
+.mockup-window {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  max-width: 1040px;
+  background: #09090d;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 40px 100px -20px rgba(0, 0, 0, 0.98), 0 0 50px rgba(255, 255, 255, 0.04);
+  transition: box-shadow 0.3s ease;
+  animation: mockup-float 8s ease-in-out infinite;
+}
+.mockup-window:hover {
+  animation-play-state: paused;
+  box-shadow: 0 45px 120px -20px rgba(0, 0, 0, 1), 0 0 70px rgba(245, 158, 11, 0.08);
+}
+
+@keyframes mockup-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-7px); }
+}
+
+.mockup-header {
+  height: 38px;
+  background: #111116;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  position: relative;
+  user-select: none;
+}
+
+.mockup-dots {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  z-index: 2;
+}
+.mockup-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.mockup-dot.red { background: #ff5f56; }
+.mockup-dot.yellow { background: #ffbd2e; }
+.mockup-dot.green { background: #27c93f; }
+
+.mockup-title {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  font-weight: 500;
   color: var(--fg3);
-  transition: color .2s;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  pointer-events: none;
+  transition: color 0.2s ease;
 }
-.showcase-line:hover .showcase-icon { color: var(--fg2); }
-.showcase-icon svg { width: 16px; height: 16px; }
-.showcase-text {
-  font-family: var(--mono); font-size: 12px; font-weight: 400;
-  color: var(--fg2); letter-spacing: .03em; line-height: 1.5;
+.mockup-viewport {
+  position: relative;
+  width: 100%;
+  background: #09090d;
+  overflow: hidden;
 }
-.showcase-line:hover .showcase-text { color: var(--fg); }
 
+.mockup-track {
+  display: flex;
+  width: 100%;
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+  transform: translateX(0%);
+}
 
-.hero-player-mock {
-  padding: 24px 24px 28px;
+.mockup-slide {
+  flex: 0 0 100%;
+  width: 100%;
+  min-width: 100%;
+  line-height: 0;
 }
-.player-track-info {
-  display: flex; align-items: center; gap: 14px; margin-bottom: 20px;
-}
-.player-art {
-  width: 48px; height: 48px; border-radius: 5px;
-  background: var(--bg4); border: 1px solid var(--bdr2);
-  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-  color: var(--fg4);
-}
-.player-art svg { width: 18px; height: 18px; }
-.player-track-name {
-  font-size: 13px; font-weight: 600; color: var(--fg);
-  margin-bottom: 3px; font-family: var(--sans);
-}
-.player-track-artist {
-  font-family: var(--mono); font-size: 10px; color: var(--fg3); letter-spacing: .04em;
-}
-.player-waveform {
-  height: 36px; width: 100%; margin-bottom: 10px;
-  display: flex; align-items: flex-end; gap: 2px;
-}
-.player-waveform span {
-  flex: 1; border-radius: 1px;
-  background: var(--bg4);
+
+.mockup-img {
+  width: 100%;
+  height: auto;
   display: block;
-  transition: background .2s;
 }
-.player-waveform span.played { background: var(--fg3); }
-.player-waveform span.current { background: var(--fg); }
-.player-time-row {
-  display: flex; justify-content: space-between;
-  font-family: var(--mono); font-size: 9px; color: var(--fg4); letter-spacing: .06em;
-  margin-bottom: 18px;
+
+/* Side navigation arrows on image */
+.mockup-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(14, 14, 18, 0.62);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: rgba(255, 255, 255, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 5;
+  transition: opacity 0.2s ease, background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  opacity: 0.35;
 }
-.player-controls {
-  display: flex; align-items: center; justify-content: center; gap: 16px;
+.mockup-window:hover .mockup-arrow {
+  opacity: 0.85;
 }
-.p-ctrl-btn {
-  width: 32px; height: 32px; border-radius: 50%;
+.mockup-arrow:hover {
+  opacity: 1 !important;
+  background: rgba(32, 32, 40, 0.88);
+  border-color: rgba(255, 255, 255, 0.24);
+  color: #ffffff;
+  box-shadow: none;
+  transform: translateY(-50%);
+}
+.mockup-arrow:active {
+  transform: translateY(-50%) scale(0.92);
+}
+.mockup-arrow.prev { left: 12px; }
+.mockup-arrow.next { right: 12px; }
+.mockup-arrow svg {
+  width: 14px;
+  height: 14px;
+}
+
+@media (max-width: 640px) {
+  .mockup-arrow {
+    width: 28px;
+    height: 28px;
+    opacity: 0.75;
+  }
+  .mockup-arrow.prev { left: 8px; }
+  .mockup-arrow.next { right: 8px; }
+  .mockup-arrow svg { width: 12px; height: 12px; }
+}
+
+/* -------------------------------------------------------------
+   SECTIONS GENERAL
+------------------------------------------------------------- */
+.section {
+  padding: clamp(80px, 11vw, 130px) clamp(20px, 5%, 48px);
+  position: relative;
+  background: var(--bg);
+}
+.section-inner { max-width: var(--max); margin: 0 auto; }
+.divider { border: none; border-top: 1px solid var(--bdr); margin: 0; }
+
+.s-label {
+  font-size: 12px; font-weight: 600;
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent);
+  display: block; margin-bottom: 14px;
+}
+.s-head {
+  font-family: var(--sans);
+  font-size: clamp(32px, 5vw, 54px); font-weight: 600;
+  color: var(--fg); line-height: 1.12; letter-spacing: -0.035em;
+  margin-bottom: 16px;
+}
+.s-sub {
+  font-size: 16px; color: var(--fg2); max-width: 580px;
+  line-height: 1.7; letter-spacing: -0.01em;
+}
+
+/* Scroll reveal animations */
+.reveal {
+  opacity: 0; transform: translateY(24px);
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.reveal.d1 { transition-delay: 0.08s; }
+.reveal.d2 { transition-delay: 0.16s; }
+.reveal.d3 { transition-delay: 0.24s; }
+.reveal.d4 { transition-delay: 0.32s; }
+.reveal.visible { opacity: 1; transform: none; }
+
+/* -------------------------------------------------------------
+   FEATURES SECTION
+------------------------------------------------------------- */
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 54px;
+}
+.feat-card {
+  background: var(--bg2);
+  border: 1px solid var(--bdr);
+  border-radius: var(--r-lg);
+  padding: 32px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.25s ease, background 0.25s ease, transform 0.25s ease;
+}
+.feat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.feat-card:hover {
+  background: var(--bg3);
+  border-color: var(--bdr2);
+  transform: translateY(-2px);
+}
+.feat-card:hover::before { opacity: 1; }
+
+.feat-icon-wrap {
+  width: 44px; height: 44px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--bdr);
   display: flex; align-items: center; justify-content: center;
-  color: var(--fg3); cursor: default;
+  color: var(--fg);
+  transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease;
 }
-.p-ctrl-btn.main {
-  width: 40px; height: 40px;
-  background: var(--fg); color: var(--bg); border-radius: 50%;
+.feat-card:hover .feat-icon-wrap {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--accent);
+  border-color: rgba(245, 158, 11, 0.35);
 }
-.p-ctrl-btn svg { width: 14px; height: 14px; }
-.p-ctrl-btn.main svg { width: 16px; height: 16px; }
+.feat-icon-wrap svg { width: 20px; height: 20px; }
+
+.feat-title {
+  font-size: 19px; font-weight: 600;
+  color: var(--fg); letter-spacing: -0.02em; line-height: 1.25;
+}
+.feat-desc {
+  font-size: 14px; color: var(--fg2); line-height: 1.7;
+}
+
+/* -------------------------------------------------------------
+   DOWNLOAD SECTION
+------------------------------------------------------------- */
+.version-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  margin-top: 28px; margin-bottom: 24px;
+  font-size: 12px; font-weight: 500; color: var(--fg2);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--bdr);
+  border-radius: 9999px; padding: 5px 14px;
+}
+.version-chip svg { width: 12px; height: 12px; color: var(--accent); }
 
 .dl-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
-  margin-top: 44px;
-}
-@media (max-width: 960px) {
-  .dl-grid { grid-template-columns: 1fr; }
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px;
+  margin-top: 36px;
 }
 .dl-card {
-  border: 1px solid var(--bdr2); border-radius: var(--r-lg);
-  background: var(--bg2); padding: 26px 22px;
-  display: flex; flex-direction: column; gap: 0;
-  transition: border-color .25s, background .25s, transform .2s, box-shadow .25s;
+  border: 1px solid var(--bdr);
+  border-radius: var(--r-xl);
+  background: var(--bg2);
+  padding: 32px 28px;
+  display: flex; flex-direction: column;
+  transition: border-color 0.25s ease, background 0.25s ease, transform 0.2s ease, box-shadow 0.25s ease;
   position: relative; overflow: hidden;
 }
 .dl-card::before {
   content: '';
   position: absolute; top: 0; left: 0; right: 0; height: 1px;
-  background: linear-gradient(90deg, transparent, var(--fg4), transparent);
-  opacity: .5; transition: opacity .3s;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+  opacity: 0.6;
 }
-.dl-card:hover { border-color: var(--bdr3); background: var(--bg3); transform: translateY(-2px); box-shadow: 0 16px 40px -20px rgba(0,0,0,.6); }
-.dl-card:hover::before { opacity: 1; background: linear-gradient(90deg, transparent, var(--fg3), transparent); }
+.dl-card:hover {
+  border-color: var(--bdr2);
+  background: var(--bg3);
+  transform: translateY(-3px);
+  box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.9);
+}
 .dl-card.is-active-os {
   border-color: var(--accent);
+  box-shadow: 0 0 35px -10px var(--accent-glow);
 }
+
 .dl-card-header {
   display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 22px;
+  margin-bottom: 24px;
 }
 .dl-card-title-group {
   display: flex; align-items: center; gap: 12px;
 }
 .dl-card-title {
-  font-family: var(--sans); font-size: 19px; font-weight: 600; color: var(--fg);
+  font-size: 21px; font-weight: 600; color: var(--fg); letter-spacing: -0.02em;
 }
 .dl-badge-sys {
-  font-family: var(--sans); font-size: 11px; font-weight: 600;
-  color: var(--accent); background: rgba(201, 121, 63, 0.15);
-  border: 1px solid rgba(201, 121, 63, 0.35); border-radius: 20px;
-  padding: 3px 10px;
+  font-size: 11px; font-weight: 600;
+  color: var(--accent); background: rgba(245, 158, 11, 0.12);
+  border: 1px solid rgba(245, 158, 11, 0.35); border-radius: 9999px;
+  padding: 4px 11px;
 }
+
 .dl-btn-stack {
-  display: flex; flex-direction: column; gap: 8px;
-  margin-bottom: 20px;
+  display: flex; flex-direction: column; gap: 9px;
+  margin-bottom: 24px;
 }
 .dl-btn {
   display: flex; align-items: center; justify-content: center;
-  background: rgba(255, 255, 255, 0.03); border: 1px solid var(--bdr2);
-  border-radius: 7px; color: var(--fg); font-family: var(--sans);
-  font-size: 13px; font-weight: 500; padding: 12px 14px;
-  text-decoration: none; text-align: center; transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--bdr);
+  border-radius: var(--r-sm);
+  color: var(--fg);
+  font-size: 13px; font-weight: 500;
+  padding: 13px 16px;
+  text-decoration: none; text-align: center;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
 }
 .dl-btn:hover {
-  background: rgba(255, 255, 255, 0.08); border-color: var(--bdr3);
-  color: #fff; transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.09);
+  border-color: var(--bdr2);
+  color: #ffffff;
+  transform: translateY(-1px);
 }
+
 .dl-card-desc {
-  font-size: 12px; color: var(--fg3); line-height: 1.65; margin-top: auto;
+  font-size: 12px; color: var(--fg3); line-height: 1.7; margin-top: auto;
 }
 .dl-card-desc code {
-  background: var(--bg4); border: 1px solid var(--bdr2);
-  border-radius: 4px; padding: 2px 6px; font-family: var(--mono);
-  font-size: 11px; color: var(--fg);
+  background: var(--bg4); border: 1px solid var(--bdr);
+  border-radius: 4px; padding: 2px 6px; font-size: 11px; color: var(--fg2);
 }
 
-.version-chip {
-  display: inline-flex; align-items: center; gap: 7px;
-  margin-bottom: 30px;
-  font-family: var(--mono); font-size: 11px; color: var(--fg3);
-  letter-spacing: .06em;
+/* -------------------------------------------------------------
+   COMMUNITY SECTION
+------------------------------------------------------------- */
+.community-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 48px;
 }
-.compare-wrap {
-  margin-top: 44px; border-radius: var(--r-lg);
-  border: 1px solid var(--bdr); overflow: hidden;
-}
-.compare-tbl { width: 100%; border-collapse: collapse; background: var(--bg2); }
-.compare-tbl thead tr { border-bottom: 1px solid var(--bdr2); }
-.compare-tbl thead th {
-  padding: 22px 24px; font-size: 10px; font-weight: 600;
-  font-family: var(--mono); letter-spacing: .2em; text-transform: uppercase;
-  color: var(--fg4); text-align: center;
-  background: var(--bg2);
-}
-.compare-tbl thead th:first-child { text-align: left; color: var(--fg4); }
-.compare-tbl thead th.hl {
-  color: var(--fg);
-  background: #1c1510;
-  letter-spacing: .22em;
-  border-left: 1px solid #332518;
-  border-right: 1px solid #332518;
-  font-size: 11px;
-}
-.compare-tbl tbody tr { border-bottom: 1px solid var(--bdr); }
-.compare-tbl tbody tr:last-child { border-bottom: none; }
-.compare-tbl tbody tr:hover td { background: var(--bg3); }
-.compare-tbl tbody tr:hover td.hl { background: #221a0f; }
-.compare-tbl td {
-  padding: 18px 24px; font-size: 13px;
-  text-align: center; vertical-align: middle;
-}
-.compare-tbl td:first-child {
-  text-align: left; color: var(--fg3); font-weight: 400; font-size: 13px;
-  font-family: var(--mono); letter-spacing: .02em;
-}
-.compare-tbl td.hl {
-  background: #1c1510;
-  border-left: 1px solid #332518;
-  border-right: 1px solid #332518;
-}
-
-/* Veluna = warm white, clearly the winner */
-.v-yes {
-  color: #f0e8dc;
-  font-weight: 600; font-family: var(--mono); font-size: 12px;
-  letter-spacing: .04em;
-}
-/* Competitors "Premium only" = amber, clearly readable */
-.v-paid {
-  color: #c4975a;
-  font-family: var(--mono); font-size: 12px; letter-spacing: .02em;
-}
-/* Competitors negative values = muted grey, legible */
-.v-no {
-  color: #6b7280;
-  font-family: var(--mono); font-size: 12px; letter-spacing: .02em;
-}
-
-.features-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 1px; margin-top: 52px;
-  border: 1px solid var(--bdr); border-radius: var(--r-lg);
-  overflow: hidden; background: var(--bdr);
-}
-.feat {
-  background: var(--bg2); padding: 32px 28px;
-  display: flex; flex-direction: column; gap: 14px;
-  transition: background .25s;
-  position: relative;
-}
-.feat:hover { background: var(--bg3); }
-.feat-icon {
-  width: 38px; height: 38px; border-radius: 8px;
-  background: var(--bg3); border: 1px solid var(--bdr2);
-  display: flex; align-items: center; justify-content: center;
-  color: var(--fg2); flex-shrink: 0;
-  transition: background .25s, color .25s, border-color .25s;
-}
-.feat:hover .feat-icon { background: var(--bg4); color: var(--accent); border-color: var(--accent-dim); }
-.feat-icon svg { width: 17px; height: 17px; }
-.feat-title {
-  font-family: var(--serif); font-size: 18px; font-weight: 400;
-  color: var(--fg); letter-spacing: -.01em; line-height: 1.2;
-}
-.feat-desc { font-size: 13px; color: var(--fg2); line-height: 1.75; }
-
-.faq-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 60px; }
-.faq-group-label {
-  font-family: var(--mono); font-size: 12px; font-weight: 500;
-  letter-spacing: .14em; text-transform: uppercase; color: var(--fg3);
-  padding: 0 0 18px; border-bottom: 1px solid var(--bdr); margin-bottom: 4px;
-  display: flex; align-items: center; gap: 9px;
-}
-.faq-group-label svg { width: 15px; height: 15px; }
-.faq-item { border-bottom: 1px solid var(--bdr); }
-.faq-q {
-  display: flex; align-items: center; justify-content: space-between;
-  width: 100%; padding: 22px 0; gap: 16px;
-  font-size: 16px; font-weight: 400; color: var(--fg2);
-  text-align: left; transition: color .2s;
-}
-.faq-q:hover { color: var(--fg); }
-.faq-q[aria-expanded="true"] { color: var(--fg); }
-.faq-q svg {
-  width: 16px; height: 16px; flex-shrink: 0; color: var(--fg3);
-  transition: transform .3s, color .2s;
-}
-.faq-q[aria-expanded="true"] svg { transform: rotate(45deg); color: var(--accent); }
-.faq-ans { overflow: hidden; max-height: 0; transition: max-height .35s cubic-bezier(.16,1,.3,1); }
-.faq-ans-inner { padding: 0 0 22px; font-size: 15px; color: var(--fg2); line-height: 1.9; }
-.faq-ans-inner a { color: var(--fg); text-decoration: underline; text-underline-offset: 2px; }
-.faq-ans-inner a:hover { color: var(--fg); opacity: .8; }
-.faq-ans-inner code { color: var(--fg); background: var(--bg3); padding: 2px 6px; border-radius: 3px; }
-.faq-ans-inner strong { color: var(--fg); }
-
-.community-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 44px; }
 .comm-card {
-  border: 1px solid var(--bdr); border-radius: var(--r-lg);
-  background: var(--bg2); padding: 32px 28px;
-  display: flex; flex-direction: column; gap: 14px;
-  transition: border-color .2s;
+  border: 1px solid var(--bdr);
+  border-radius: var(--r-xl);
+  background: var(--bg2);
+  padding: 36px 32px;
+  display: flex; flex-direction: column; gap: 16px;
+  transition: border-color 0.25s ease, background 0.25s ease, transform 0.2s ease;
 }
-.comm-card:hover { border-color: var(--bdr3); }
+.comm-card:hover {
+  border-color: var(--bdr2);
+  background: var(--bg3);
+  transform: translateY(-2px);
+}
 .comm-icon {
-  width: 44px; height: 44px; border-radius: 10px;
-  background: var(--bg3); border: 1px solid var(--bdr2);
+  width: 48px; height: 48px; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--bdr);
   display: flex; align-items: center; justify-content: center;
+  color: var(--fg);
 }
-.comm-icon svg { width: 22px; height: 22px; }
-.comm-icon.discord { color: var(--fg2); }
-.comm-icon.github { color: var(--fg2); }
-.comm-title { font-family: var(--serif); font-size: 20px; font-weight: 400; color: var(--fg); }
-.comm-desc { font-size: 14px; color: var(--fg2); line-height: 1.8; flex: 1; }
+.comm-icon svg { width: 24px; height: 24px; }
+.comm-title {
+  font-size: 21px; font-weight: 600; color: var(--fg); letter-spacing: -0.02em;
+}
+.comm-desc {
+  font-size: 14px; color: var(--fg2); line-height: 1.75; flex: 1;
+}
 .comm-btn {
   display: inline-flex; align-items: center; gap: 8px;
-  padding: 10px 18px; border-radius: 6px;
-  font-size: 12px; font-weight: 600;
-  border: 1px solid var(--bdr3);
-  background: var(--bg3); color: var(--fg2);
-  font-family: var(--mono); letter-spacing: .06em;
-  transition: color .2s, background .2s, border-color .2s;
+  padding: 11px 20px; border-radius: 8px;
+  font-size: 13px; font-weight: 600;
+  border: 1px solid var(--bdr);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--fg);
+  transition: color 0.2s ease, background 0.2s ease, border-color 0.2s ease;
   text-decoration: none; align-self: flex-start;
 }
-.comm-btn:hover { color: var(--fg); background: var(--bg4); border-color: var(--fg4); }
-.comm-btn svg { width: 13px; height: 13px; }
+.comm-btn:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: var(--bdr2);
+}
+.comm-btn svg { width: 14px; height: 14px; }
 
+/* -------------------------------------------------------------
+   FOOTER
+------------------------------------------------------------- */
 footer {
-  padding: 64px clamp(20px, 5%, 56px) 0;
+  padding: 80px clamp(20px, 5%, 48px) 36px;
   border-top: 1px solid var(--bdr);
+  background: #020204;
 }
 .footer-inner {
   max-width: var(--max); margin: 0 auto;
 }
 .footer-top {
-  display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr;
+  display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr;
   gap: 48px; padding-bottom: 56px;
 }
 .footer-brand-col { display: flex; flex-direction: column; gap: 16px; }
 .footer-brand {
-  display: flex; align-items: center; gap: 9px;
-  font-family: var(--mono); font-size: 15px; font-weight: 500;
-  color: var(--fg); letter-spacing: .1em;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 17px; font-weight: 600;
+  color: var(--fg); letter-spacing: -0.02em;
 }
 .footer-tagline {
-  font-size: 13px; color: var(--fg3); line-height: 1.75;
-  max-width: 220px;
+  font-size: 13px; color: var(--fg3); line-height: 1.7;
+  max-width: 260px;
 }
-.footer-social { display: flex; gap: 10px; margin-top: 4px; }
+.footer-social { display: flex; gap: 10px; margin-top: 6px; }
 .footer-social a {
-  width: 34px; height: 34px; border-radius: 6px;
-  border: 1px solid var(--bdr2); background: var(--bg2);
+  width: 36px; height: 36px; border-radius: 8px;
+  border: 1px solid var(--bdr); background: rgba(255, 255, 255, 0.03);
   display: flex; align-items: center; justify-content: center;
-  color: var(--fg3); transition: color .2s, border-color .2s, background .2s;
+  color: var(--fg3); transition: color 0.2s, border-color 0.2s, background 0.2s;
 }
-.footer-social a:hover { color: var(--fg); border-color: var(--bdr3); background: var(--bg3); }
-.footer-social svg { width: 14px; height: 14px; }
-.footer-col { display: flex; flex-direction: column; gap: 4px; }
+.footer-social a:hover { color: var(--fg); border-color: var(--bdr2); background: rgba(255, 255, 255, 0.08); }
+.footer-social svg { width: 15px; height: 15px; }
+
+.footer-col { display: flex; flex-direction: column; gap: 8px; }
 .footer-col-label {
-  font-family: var(--mono); font-size: 11px; font-weight: 600;
-  letter-spacing: .16em; text-transform: uppercase; color: var(--fg3);
-  margin-bottom: 12px;
+  font-size: 12px; font-weight: 600;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg2);
+  margin-bottom: 8px;
 }
 .footer-col a {
-  font-family: var(--mono); font-size: 13px; color: var(--fg4);
-  letter-spacing: .04em; padding: 4px 0;
-  transition: color .2s;
+  font-size: 13px; color: var(--fg3);
+  padding: 4px 0;
+  transition: color 0.2s ease;
 }
-.footer-col a:hover { color: var(--fg2); }
+.footer-col a:hover { color: var(--fg); }
+
 .footer-bottom {
   border-top: 1px solid var(--bdr);
-  padding: 20px 0 28px;
+  padding-top: 28px;
   display: flex; align-items: center; justify-content: space-between;
   gap: 16px; flex-wrap: wrap;
 }
 .footer-copy {
-  font-family: var(--mono); font-size: 12px; color: var(--fg4); letter-spacing: .06em;
+  font-size: 12px; color: var(--fg4); letter-spacing: -0.01em;
 }
-
-@media (max-width: 860px) {
-  .footer-top { grid-template-columns: 1fr 1fr; gap: 36px; }
-}
-@media (max-width: 500px) {
-  .footer-top { grid-template-columns: 1fr 1fr; gap: 28px 20px; }
-  .footer-brand-col { grid-column: 1 / -1; }
-  .footer-bottom { flex-direction: column; align-items: flex-start; gap: 10px; }
-  .footer-copy { font-size: 11px; }
-}
-
-/* License & privacy section */
-.trust-grid {
-  display: grid; grid-template-columns: 1fr 1fr;
-  gap: 16px; margin-top: 52px;
-}
-.trust-card {
-  border: 1px solid var(--bdr); border-radius: var(--r-lg);
-  background: var(--bg2); padding: 36px 32px;
-  display: flex; flex-direction: column; gap: 20px;
-  transition: border-color .2s;
-}
-.trust-card:hover { border-color: var(--bdr3); }
-.trust-card-header {
-  display: flex; align-items: flex-start; gap: 16px;
-}
-.trust-badge-icon {
-  width: 44px; height: 44px; border-radius: 10px;
-  background: var(--bg3); border: 1px solid var(--bdr2);
-  display: flex; align-items: center; justify-content: center;
-  color: var(--fg2); flex-shrink: 0;
-}
-.trust-badge-icon svg { width: 20px; height: 20px; }
-.trust-card-title {
-  font-family: var(--serif); font-size: 22px; font-weight: 400;
-  color: var(--fg); letter-spacing: -.01em; margin-bottom: 4px;
-}
-.trust-card-sub {
-  font-family: var(--mono); font-size: 11px; color: var(--fg4);
-  letter-spacing: .1em; text-transform: uppercase;
-}
-.trust-card-body { font-size: 14px; color: var(--fg2); line-height: 1.85; }
-.trust-card-body strong { color: var(--fg); font-weight: 600; }
-.trust-pills { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
-.trust-pill {
+.footer-badge {
+  font-size: 11px; color: var(--fg3);
   display: inline-flex; align-items: center; gap: 6px;
-  background: var(--bg3); border: 1px solid var(--bdr2);
-  border-radius: 20px; padding: 5px 12px;
-  font-family: var(--mono); font-size: 11px; color: var(--fg2);
-  letter-spacing: .05em;
-}
-.trust-pill svg { width: 11px; height: 11px; color: var(--fg3); }
-
-@media (max-width: 860px) {
-  .trust-grid { grid-template-columns: 1fr; }
 }
 
+/* Back to top button */
 #back-top {
   position: fixed; bottom: 24px; right: 24px;
-  width: 36px; height: 36px; border-radius: 6px;
-  background: var(--bg3); border: 1px solid var(--bdr2);
-  color: var(--fg3); display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 9999px;
+  background: rgba(18, 18, 24, 0.85);
+  border: 1px solid var(--bdr2);
+  color: var(--fg2);
+  display: flex; align-items: center; justify-content: center;
   opacity: 0; pointer-events: none; z-index: 998;
-  transition: opacity .3s, color .2s, background .2s;
+  backdrop-filter: blur(8px);
+  transition: opacity 0.3s, color 0.2s, border-color 0.2s;
 }
 #back-top.show { opacity: 1; pointer-events: all; }
-#back-top:hover { color: var(--fg); background: var(--bg4); }
-#back-top svg { width: 14px; height: 14px; }
+#back-top:hover { color: var(--fg); border-color: var(--bdr3); }
+#back-top svg { width: 16px; height: 16px; }
 
-@media (max-width: 900px) {
-  .hero-inner { gap: 40px; }
-  .hero-title { font-size: clamp(52px, 11vw, 80px); }
-  .hero-bg-lines { display: none; }
+/* -------------------------------------------------------------
+   RESPONSIVE STYLES
+------------------------------------------------------------- */
+@media (max-width: 960px) {
   .nav-links { display: none; }
   .ham { display: flex; }
-  .hero-v-wrap { display: none; }
-  /* vinyl sits further right on tablet so it doesn't crowd text */
-  .hero-vinyl-wrap { right: -60px; opacity: .7; }
-}
-@media (max-width: 860px) {
-  .dl-grid { grid-template-columns: 1fr; }
   .features-grid { grid-template-columns: 1fr 1fr; }
-  .faq-cols { grid-template-columns: 1fr; gap: 0; }
-  .community-grid { grid-template-columns: 1fr; }
-  .hero-right { max-width: 100%; }
-  .trust-grid { grid-template-columns: 1fr; }
-  .compare-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: var(--r-lg); }
-  .compare-tbl { min-width: 520px; }
-  .compare-tbl thead th, .compare-tbl td { padding: 14px 16px; font-size: 13px; }
-  .compare-tbl td:first-child { font-size: 13px; }
+  .dl-grid { grid-template-columns: 1fr; }
+  .footer-top { grid-template-columns: 1fr 1fr; gap: 36px; }
+  .horizon-arc { width: 180%; height: 380px; }
 }
-@media (max-width: 600px) {
-  /* hero */
+
+@media (max-width: 680px) {
   .hero {
-    padding: calc(var(--nav-h) + 48px) 20px 72px;
-    min-height: unset;
-    align-items: flex-start;
+    padding-top: calc(var(--nav-h) + 40px);
+    padding-bottom: 40px;
   }
-  .hero-vinyl-wrap {
-    right: -20px;
-    opacity: .35;
-    width: clamp(220px, 70vw, 320px);
-    height: clamp(220px, 70vw, 320px);
-    top: 50%;
-  }
-  .hero-tonearm { display: none; }
-  .hero-eyebrow { font-size: 10px; margin-bottom: 24px; }
-  .hero-title { font-size: clamp(48px, 13vw, 72px); margin-bottom: 24px; }
-  .hero-desc { font-size: 15px; margin-bottom: 36px; max-width: 100%; }
-  .hero-ctas { flex-direction: column; align-items: flex-start; gap: 10px; }
-  .hero-proof { margin-top: 22px; gap: 8px 12px; font-size: 11px; }
-  .btn-primary, .btn-secondary { width: 100%; justify-content: center; font-size: 14px; padding: 15px 20px; }
-
-  /* nav */
-  .dl-nav-btn { padding: 8px 10px; }
-  .dl-nav-btn span { display: none; }
-  .dl-nav-btn .dl-nav-icon { display: inline-block !important; }
-  .gh-btn span { display: none; }
+  .hero-title { font-size: clamp(42px, 11vw, 58px); }
+  .hero-desc { font-size: 15px; }
+  .hero-ctas { flex-direction: column; width: 100%; }
+  .btn-primary, .btn-secondary { width: 100%; justify-content: center; }
+  .dl-nav-btn { display: none; }
+  .gh-btn .gh-text { display: none; }
   .gh-btn { padding: 8px 10px; }
-
-  /* sections */
-  .section { padding: clamp(56px, 9vw, 90px) 20px; }
-  .s-label { font-size: 10px; margin-bottom: 14px; }
-  .s-head { font-size: clamp(28px, 8vw, 42px); }
-  .s-sub { font-size: 15px; line-height: 1.75; }
-
-  /* features */
-  .features-grid { grid-template-columns: 1fr; gap: 1px; }
-  .feat { padding: 22px 20px; }
-  .feat-title { font-size: 16px; }
-  .feat-desc { font-size: 13px; }
-
-  /* download cards */
-  .dl-grid { gap: 12px; }
-  .dl-card { padding: 24px 20px; }
-  .dl-os-name { font-size: 20px; }
-  .dl-os-icon { width: 42px; height: 42px; }
-  .dl-main-btn { padding: 15px 20px; font-size: 13px; }
-  .dl-note { font-size: 12px; }
-  .dl-badge { font-size: 10px; padding: 6px 12px; }
-
-  /* comparison table */
-  .compare-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .compare-tbl { min-width: 440px; }
-  .compare-tbl thead th, .compare-tbl td { padding: 12px 12px; font-size: 12px; }
-  .compare-tbl td:first-child { font-size: 12px; min-width: 120px; }
-
-  /* faq */
-  .faq-q { font-size: 15px; padding: 18px 0; }
-  .faq-ans-inner { font-size: 14px; }
-  .faq-group-label { font-size: 11px; }
-
-  /* community */
-  .comm-desc { font-size: 13px; }
-  .comm-card { padding: 22px 18px; }
-
-  /* trust / license */
-  .trust-card { padding: 26px 20px; }
-  .trust-card-title { font-size: 19px; }
-  .trust-card-body { font-size: 13px; }
-  .trust-pill { font-size: 10px; padding: 4px 10px; }
-
-  /* showcase */
-  .showcase-text { font-size: 11px; }
-  .showcase-line { padding: 12px 18px; gap: 12px; }
-
-  /* back to top */
-  #back-top { bottom: 16px; right: 16px; }
-}
-@media (max-width: 400px) {
-  .hero-title { font-size: clamp(38px, 12vw, 52px); }
-  .dl-card { padding: 20px 16px; }
-  .compare-tbl { min-width: 380px; }
-  .trust-card { padding: 22px 16px; }
-  .nav-brand { font-size: 13px; }
-  .v-mark { width: 24px; height: 24px; }
+  .features-grid { grid-template-columns: 1fr; gap: 12px; }
+  .community-grid { grid-template-columns: 1fr; }
+  .footer-top { grid-template-columns: 1fr; gap: 32px; }
+  .footer-bottom { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .horizon-arc { width: 220%; height: 280px; top: 110px; }
 }
 </style>
 </head>
@@ -964,147 +1246,153 @@ footer {
 
 <div id="progress-bar"></div>
 
+<!-- SVG Filter for Gooey Blob Button Effect -->
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" style="position: absolute; width: 0; height: 0; pointer-events: none; opacity: 0; overflow: hidden;" aria-hidden="true">
+  <defs>
+    <filter id="goo">
+      <feGaussianBlur in="SourceGraphic" result="blur" stdDeviation="10"></feGaussianBlur>
+      <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 21 -7" result="goo"></feColorMatrix>
+      <feBlend in2="goo" in="SourceGraphic" result="mix"></feBlend>
+    </filter>
+  </defs>
+</svg>
+
+<!-- Transparent Blurry Navbar -->
 <nav id="nav">
   <div class="nav-inner">
     <a href="#" class="nav-brand">
-      <svg class="v-mark" viewBox="0 0 26 26" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <rect width="26" height="26" rx="5" fill="var(--fg)"/>
-        <polygon points="4,6 8,6 13,19 18,6 22,6 13,21" fill="var(--bg)"/>
-        <polygon points="8,6 10.5,6 13,15 15.5,6 18,6 13,19" fill="var(--fg)"/>
-      </svg>
+      <img src="veluna_icon.png" alt="Veluna" class="nav-logo" width="28" height="28">
       veluna
     </a>
-    <div class="nav-links">
-      <a href="#download" class="nav-link">download</a>
-      <a href="#compare"  class="nav-link">compare</a>
-      <a href="#features" class="nav-link">features</a>
-      <a href="#faq"      class="nav-link">faq</a>
-      <a href="#community" class="nav-link">community</a>
-      <a href="#license"   class="nav-link">license</a>
 
+    <div class="nav-links">
+      <a href="#features" class="nav-link">Features</a>
+      <a href="#download" class="nav-link">Download</a>
+      <a href="#community" class="nav-link">Community</a>
     </div>
+
     <div class="nav-actions">
-      <a href="https://github.com/rry0ku/veluna" class="gh-btn" target="_blank" rel="noopener">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.7C6.73 19.91 6.14 18 6.14 18c-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0 1 12 6.8c.85.004 1.71.115 2.51.337 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10.01 10.01 0 0 0 22 12c0-5.52-4.48-10-10-10z"/></svg>
-        <span>GitHub</span>
+      <a href="https://github.com/rry0ku/veluna" class="gh-btn" target="_blank" rel="noopener" aria-label="GitHub Repository">
+        <svg viewBox="0 0 24 24" fill="currentColor" class="gh-icon"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.7C6.73 19.91 6.14 18 6.14 18c-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0 1 12 6.8c.85.004 1.71.115 2.51.337 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10.01 10.01 0 0 0 22 12c0-5.52-4.48-10-10-10z"/></svg>
+        <span class="gh-text">GitHub</span>
+        <span class="gh-star-wrap">
+          <svg viewBox="0 0 24 24" fill="currentColor" class="gh-star-icon"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <span id="gh-star-count">62</span>
+        </span>
       </a>
-      <a href="https://discord.gg/u7QXUgPcqr" class="gh-btn" target="_blank" rel="noopener">
-        <svg viewBox="0 0 127.14 96.36" fill="currentColor" style="width:15px;height:15px"><path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/></svg>
-        <span>Discord</span>
+      <a href="#download" class="dl-nav-btn blob-btn">
+        <span class="blob-btn__text">
+          <span>Download</span>
+        </span>
+        <span class="blob-btn__inner" aria-hidden="true">
+          <span class="blob-btn__blobs">
+            <span class="blob-btn__blob"></span>
+            <span class="blob-btn__blob"></span>
+            <span class="blob-btn__blob"></span>
+            <span class="blob-btn__blob"></span>
+          </span>
+        </span>
       </a>
-      <a href="#download" class="dl-nav-btn">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;display:none" class="dl-nav-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        <span>Download</span>
-      </a>
-      <button class="ham" id="ham" aria-label="Menu">
+      <button class="ham" id="ham" aria-label="Toggle menu">
         <span></span><span></span><span></span>
       </button>
     </div>
   </div>
 </nav>
 
+<!-- Mobile Navigation Drawer -->
 <div class="mobile-overlay" id="mobile-overlay" onclick="closeMobile()"></div>
 <div class="mobile-nav" id="mobile-nav">
   <div class="mobile-nav-header">
-    <span class="mobile-nav-brand">veluna</span>
+    <div style="display:flex;align-items:center;gap:10px;"><img src="veluna_icon.png" alt="Veluna" class="nav-logo" width="26" height="26"><span class="mobile-nav-brand">veluna</span></div>
     <button class="mobile-close" onclick="closeMobile()" aria-label="Close menu">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
   </div>
-  <a href="#download" onclick="closeMobile()">download</a>
-  <a href="#compare"  onclick="closeMobile()">compare</a>
-  <a href="#features" onclick="closeMobile()">features</a>
-  <a href="#faq"      onclick="closeMobile()">faq</a>
-  <a href="#community" onclick="closeMobile()">community</a>
-  <a href="#license"   onclick="closeMobile()">license</a>
-
-  <a href="#download" class="m-dl" onclick="closeMobile()">Get Veluna</a>
+  <a href="#features" onclick="closeMobile()">Features</a>
+  <a href="#download" onclick="closeMobile()">Download</a>
+  <a href="#community" onclick="closeMobile()">Community</a>
+  <a href="https://github.com/rry0ku/veluna" target="_blank" rel="noopener">GitHub</a>
+  <a href="https://discord.gg/u7QXUgPcqr" target="_blank" rel="noopener">Discord</a>
+  <a href="#download" class="m-dl" onclick="closeMobile()">Download Veluna</a>
 </div>
 
+<!-- HERO SECTION -->
 <header class="hero">
-
-  <!-- Vinyl record + tonearm -->
-  <div class="hero-vinyl-wrap">
-    <svg class="hero-vinyl" viewBox="0 0 500 500" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="250" cy="250" r="248" fill="#f0ece9"/>
-      <circle cx="250" cy="250" r="235" fill="none" stroke="#000" stroke-width="0.6"/>
-      <circle cx="250" cy="250" r="228" fill="none" stroke="#000" stroke-width="0.5"/>
-      <circle cx="250" cy="250" r="221" fill="none" stroke="#000" stroke-width="0.6"/>
-      <circle cx="250" cy="250" r="214" fill="none" stroke="#000" stroke-width="0.5"/>
-      <circle cx="250" cy="250" r="207" fill="none" stroke="#000" stroke-width="0.6"/>
-      <circle cx="250" cy="250" r="200" fill="none" stroke="#000" stroke-width="0.5"/>
-      <circle cx="250" cy="250" r="193" fill="none" stroke="#000" stroke-width="0.6"/>
-      <circle cx="250" cy="250" r="186" fill="none" stroke="#000" stroke-width="0.5"/>
-      <circle cx="250" cy="250" r="179" fill="none" stroke="#000" stroke-width="0.6"/>
-      <circle cx="250" cy="250" r="172" fill="none" stroke="#000" stroke-width="0.5"/>
-      <circle cx="250" cy="250" r="165" fill="none" stroke="#000" stroke-width="0.6"/>
-      <circle cx="250" cy="250" r="158" fill="none" stroke="#000" stroke-width="0.5"/>
-      <circle cx="250" cy="250" r="151" fill="none" stroke="#000" stroke-width="0.6"/>
-      <circle cx="250" cy="250" r="144" fill="none" stroke="#000" stroke-width="0.5"/>
-      <circle cx="250" cy="250" r="137" fill="none" stroke="#000" stroke-width="0.6"/>
-      <circle cx="250" cy="250" r="130" fill="none" stroke="#000" stroke-width="0.5"/>
-      <circle cx="250" cy="250" r="123" fill="none" stroke="#000" stroke-width="0.6"/>
-      <circle cx="250" cy="250" r="115" fill="#1a1a1a"/>
-      <circle cx="250" cy="250" r="95"  fill="#111111"/>
-      <circle cx="250" cy="250" r="78"  fill="#0a0a0a"/>
-      <circle cx="250" cy="250" r="112" fill="none" stroke="#2a2a2a" stroke-width="1"/>
-      <circle cx="250" cy="250" r="96"  fill="none" stroke="#222" stroke-width="0.8"/>
-      <circle cx="250" cy="250" r="94"  fill="#c9793f" opacity="0.55"/>
-      <circle cx="250" cy="250" r="8" fill="#f0ece9"/>
-    </svg>
-
-    <!-- Tonearm — static, does not spin -->
-    <svg class="hero-tonearm" viewBox="0 0 160 260" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <!-- Pivot base circle -->
-      <circle cx="130" cy="18" r="10" fill="#f0ece9" opacity="0.9"/>
-      <circle cx="130" cy="18" r="5"  fill="#0a0a0a"/>
-      <!-- Arm shaft — slightly curved line from pivot down to headshell -->
-      <path d="M 130 28 Q 100 100 42 228" stroke="#f0ece9" stroke-width="3.5" stroke-linecap="round"/>
-      <!-- Headshell -->
-      <line x1="42" y1="228" x2="18" y2="242" stroke="#f0ece9" stroke-width="3" stroke-linecap="round"/>
-      <!-- Stylus tip -->
-      <circle cx="18" cy="243" r="3.5" fill="#f0ece9"/>
-      <!-- Counterweight at top of arm -->
-      <rect x="118" y="8" width="24" height="10" rx="5" fill="#f0ece9" opacity="0.7"/>
-    </svg>
+  <div class="hero-bg-glows" aria-hidden="true">
+    <div class="glow-orb glow-orb-1"></div>
+    <div class="glow-orb glow-orb-2"></div>
+    <div class="glow-orb glow-orb-3"></div>
   </div>
 
-  <div class="hero-inner">
-    <div class="hero-left">
-      <div class="hero-eyebrow reveal">open source · ad-free · zero tracking</div>
-      <h1 class="hero-title reveal d1">
-        your<br><em>music</em><br><strong>deserves better.</strong>
-      </h1>
-      <p class="hero-desc reveal d2">
-        <strong>Veluna</strong> is a free, open-source desktop music player for Windows, macOS, and Linux.
-        Stream from YouTube, manage your local library, download tracks —
-        no ads, no accounts, nothing watching you.
-      </p>
-      <div class="hero-ctas reveal d3">
-        <a href="#download" class="btn-primary">
+  <div class="hero-content">
+    <h1 class="hero-title reveal d1">
+      your<br><em>music</em><br><strong>deserves better.</strong>
+    </h1>
+
+    <p class="hero-desc reveal d2">
+      Ad-free YouTube Music streaming, high-fidelity offline downloads, and native performance. No subscriptions, zero tracking, completely free and open source.
+    </p>
+
+    <div class="hero-ctas reveal d3">
+      <a href="#download" class="btn-primary blob-btn">
+        <span class="blob-btn__text">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          Get Veluna
-        </a>
-        <a href="https://github.com/rry0ku/veluna" class="btn-secondary" target="_blank" rel="noopener">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.7C6.73 19.91 6.14 18 6.14 18c-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0 1 12 6.8c.85.004 1.71.115 2.51.337 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10.01 10.01 0 0 0 22 12c0-5.52-4.48-10-10-10z"/></svg>
-          View Source
-        </a>
+          <span>Download for Free</span>
+        </span>
+        <span class="blob-btn__inner" aria-hidden="true">
+          <span class="blob-btn__blobs">
+            <span class="blob-btn__blob"></span>
+            <span class="blob-btn__blob"></span>
+            <span class="blob-btn__blob"></span>
+            <span class="blob-btn__blob"></span>
+          </span>
+        </span>
+      </a>
+      <a href="https://github.com/rry0ku/veluna" class="btn-secondary" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.7C6.73 19.91 6.14 18 6.14 18c-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0 1 12 6.8c.85.004 1.71.115 2.51.337 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10.01 10.01 0 0 0 22 12c0-5.52-4.48-10-10-10z"/></svg>
+        Star on GitHub
+      </a>
+    </div>
+
+    <div class="hero-proof reveal d4">
+      <div class="hero-proof-item">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span><strong>1,000+</strong> downloads</span>
       </div>
-      <div class="hero-proof reveal d4">
-        <div class="hero-proof-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-          <span><strong>1,000+</strong> downloads</span>
+    </div>
+  </div>
+
+  <!-- Stage with Spherical Horizon and App Mockup -->
+  <div class="hero-stage reveal d4">
+    <div class="horizon-beam"></div>
+    <div class="horizon-arc"></div>
+
+    <div class="mockup-window">
+      <div class="mockup-header">
+        <div class="mockup-dots">
+          <span class="mockup-dot red"></span>
+          <span class="mockup-dot yellow"></span>
+          <span class="mockup-dot green"></span>
         </div>
-        <span class="hero-proof-sep">·</span>
-        <div class="hero-proof-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          <span>Windows, macOS &amp; Linux</span>
+        <div class="mockup-title">Veluna</div>
+      </div>
+      <div class="mockup-viewport">
+        <div class="mockup-track" id="mockup-track">
+          <div class="mockup-slide active">
+            <img src="screenshots/ss1.png" alt="Veluna Desktop Music Player Interface - Home View" class="mockup-img" loading="eager" width="1909" height="988">
+          </div>
+          <div class="mockup-slide">
+            <img src="screenshots/ss2.png" alt="Veluna Desktop Music Player Interface - Synced Lyrics View" class="mockup-img" loading="lazy" width="1909" height="988">
+          </div>
         </div>
-        <span class="hero-proof-sep">·</span>
-        <div class="hero-proof-item">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          <span>GPL-3.0 licensed</span>
-        </div>
+
+        <button type="button" class="mockup-arrow prev" id="mockup-arrow-prev" aria-label="Previous screenshot">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        </button>
+        <button type="button" class="mockup-arrow next" id="mockup-arrow-next" aria-label="Next screenshot">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+        </button>
       </div>
     </div>
   </div>
@@ -1112,18 +1400,114 @@ footer {
 
 <hr class="divider">
 
+<!-- FEATURES SECTION -->
+<section id="features" class="section">
+  <div class="section-inner">
+    <span class="s-label reveal">Features</span>
+    <h2 class="s-head reveal d1">Crafted for Pure Listening</h2>
+    <p class="s-sub reveal d2">Everything you need to enjoy, discover, and own your music library without commercial interference.</p>
+
+    <div class="features-grid">
+      <!-- Feature 1: Streaming & Music Videos -->
+      <div class="feat-card reveal d1">
+        <div class="feat-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/></svg>
+        </div>
+        <div class="feat-title">Ad-Free Music Streaming</div>
+        <div class="feat-desc">Search and stream any song or music video instantly from YouTube Music. Zero advertisements, unrestricted high-fidelity audio, and pure extraction via a native Rust backend.</div>
+      </div>
+
+      <!-- Feature 2: High-Speed Downloader -->
+      <div class="feat-card reveal d2">
+        <div class="feat-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </div>
+        <div class="feat-title">High-Speed Downloader</div>
+        <div class="feat-desc">Save any track or playlist directly to your drive in high-bitrate MP3, Opus, or M4A format with bundled ffmpeg. Complete with automatically embedded ID3 tags and high-resolution album art.</div>
+      </div>
+
+      <!-- Feature 3: Synced & Romanized Lyrics -->
+      <div class="feat-card reveal d3">
+        <div class="feat-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        </div>
+        <div class="feat-title">Synced and Romanized Lyrics</div>
+        <div class="feat-desc">Real-time scrolling lyrics synchronized to playback with an immersive full-screen Theater Mode. Includes automated Romanization transliteration for Japanese, Korean, and Chinese tracks.</div>
+      </div>
+
+      <!-- Feature 4: Listen Together -->
+      <div class="feat-card reveal d1">
+        <div class="feat-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <div class="feat-title">Listen Together</div>
+        <div class="feat-desc">Host or join real-time synchronized listening sessions with friends. Share queues and enjoy the exact same music in perfect lockstep from anywhere.</div>
+      </div>
+
+      <!-- Feature 5: In-App Track Comments -->
+      <div class="feat-card reveal d2">
+        <div class="feat-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <div class="feat-title">In-App Track Comments</div>
+        <div class="feat-desc">Read and explore community discussions directly inside the music player as you listen. Connect with how fellow listeners feel about each track.</div>
+      </div>
+
+      <!-- Feature 6: Tempo and Pitch Controls -->
+      <div class="feat-card reveal d3">
+        <div class="feat-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
+        </div>
+        <div class="feat-title">Tempo and Pitch Controls</div>
+        <div class="feat-desc">Fine-tune your audio with precision tempo adjustment, real-time pitch shifting, variable playback speeds from 0.5x to 2.0x, sleep timers, and gapless transitions.</div>
+      </div>
+
+      <!-- Feature 7: Playlist Import and Export -->
+      <div class="feat-card reveal d1">
+        <div class="feat-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 17 21 12 16 7"/><polyline points="8 7 3 12 8 17"/><line x1="21" y1="12" x2="9" y2="12"/><line x1="3" y1="12" x2="15" y2="12"/></svg>
+        </div>
+        <div class="feat-title">Playlist Import and Export</div>
+        <div class="feat-desc">Effortlessly migrate your library: import Spotify playlists via Exportify CSV or paste any public YouTube playlist URL for automated track matching.</div>
+      </div>
+
+      <!-- Feature 8: Listening Stats and Scrobbling -->
+      <div class="feat-card reveal d2">
+        <div class="feat-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        </div>
+        <div class="feat-title">Listening Stats and Scrobbling</div>
+        <div class="feat-desc">Gain deep insights into your listening habits with interactive charts and time-of-day breakdowns. Integrated dual scrobbling for Last.fm and ListenBrainz, plus Discord Rich Presence.</div>
+      </div>
+
+      <!-- Feature 9: Zero Telemetry & Privacy -->
+      <div class="feat-card reveal d3">
+        <div class="feat-icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <div class="feat-title">Zero Telemetry and Privacy</div>
+        <div class="feat-desc">No tracking scripts, no analytics, no cookies, and zero telemetry. Your playlists, history, and listening stats live strictly on your own device in an encrypted local database.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- DOWNLOAD SECTION -->
 <section id="download" class="section">
   <div class="section-inner">
     <span class="s-label reveal">Download</span>
-    <h2 class="s-head reveal d1">Choose your platform</h2>
-    <p class="s-sub reveal d2">No installation wizard, no bundled junk, no account required. Just music.</p>
-    <div class="reveal d2" style="margin-top:28px">
+    <h2 class="s-head reveal d1">Available on Windows, macOS and Linux</h2>
+    <p class="s-sub reveal d2">Clean native installers with zero adware, zero bloat, and total privacy. Download and start listening in seconds.</p>
+
+    <div class="reveal d2">
       <div class="version-chip" id="latest-version-chip">
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,6 5,9 10,3"/></svg>
-        v0.1.7 — Latest Release
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        v0.1.7 - Latest Release
       </div>
-      <div class="dl-hero-sub">Get Veluna for your platform. Native performance, zero bloat.</div>
     </div>
+
     <div class="dl-grid">
       <!-- Linux Card -->
       <div class="dl-card" id="card-linux">
@@ -1145,7 +1529,7 @@ footer {
           <a href="https://github.com/rry0ku/veluna/releases/latest" id="dl-arch" class="dl-btn">.pkg.tar.zst, Arch Linux</a>
         </div>
         <div class="dl-card-desc">
-          Only the AppImage updates itself. All builds need glibc 2.39 or newer (Ubuntu 24.04+, Debian 13+, Fedora 40+), and the rpm needs mpv-libs installed.
+          The AppImage updates automatically. All builds require glibc 2.39 or newer (Ubuntu 24.04+, Debian 13+, Fedora 40+), and rpm requires mpv-libs.
         </div>
       </div>
 
@@ -1162,10 +1546,10 @@ footer {
         </div>
         <div class="dl-btn-stack">
           <a href="https://github.com/rry0ku/veluna/releases/latest" id="dl-exe" class="dl-btn">Installer (.exe)</a>
-          <a href="https://github.com/rry0ku/veluna/releases/latest" id="dl-msi" class="dl-btn">MSI package</a>
+          <a href="https://github.com/rry0ku/veluna/releases/latest" id="dl-msi" class="dl-btn">MSI package (.msi)</a>
         </div>
         <div class="dl-card-desc">
-          The installer updates itself. The MSI is a plain install with no auto-update.
+          The installer includes automatic in-app updates. MSI package is a standalone installation.
         </div>
       </div>
 
@@ -1185,7 +1569,7 @@ footer {
           <a href="https://github.com/rry0ku/veluna#building-from-source" id="dl-intel" class="dl-btn">Intel Mac: build from source</a>
         </div>
         <div class="dl-card-desc">
-          The app updates itself, but it is not signed with an Apple certificate, so the first launch needs one Terminal command: <code>xattr -dr com.apple.quarantine /Applications/veluna.app</code>
+          Supports auto-update. Unsigned community build: first launch requires one Terminal command: <code>xattr -dr com.apple.quarantine /Applications/veluna.app</code>
         </div>
       </div>
     </div>
@@ -1194,181 +1578,32 @@ footer {
 
 <hr class="divider">
 
-<section id="compare" class="section">
-  <div class="section-inner">
-    <span class="s-label reveal">Compare</span>
-    <h2 class="s-head reveal d1">They charge you.<br><em style="font-style:italic;color:var(--fg3);">We don't.</em></h2>
-    <p class="s-sub reveal d2">Veluna versus the streaming giants — feature for feature.</p>
-    <div class="compare-wrap reveal d3">
-      <table class="compare-tbl">
-        <thead>
-          <tr>
-            <th>Feature</th>
-            <th class="hl">Veluna</th>
-            <th>Spotify</th>
-            <th>YouTube Music</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr><td>Price</td><td class="hl v-yes">Free forever</td><td class="v-paid">Free w/ ads · $11.99/mo</td><td class="v-paid">Free w/ ads · $10.99/mo</td></tr>
-          <tr><td>Ads</td><td class="hl v-yes">None, ever</td><td class="v-no">Free tier only</td><td class="v-no">Free tier only</td></tr>
-          <tr><td>Data tracking</td><td class="hl v-yes">Zero</td><td class="v-no">Habits, device, location</td><td class="v-no">Full Google account data</td></tr>
-          <tr><td>Offline playback</td><td class="hl v-yes">Always free</td><td class="v-paid">Premium only</td><td class="v-paid">Premium only</td></tr>
-          <tr><td>Local files (MP3, Opus, M4A)</td><td class="hl v-yes">Full library</td><td class="v-paid">Very limited</td><td class="v-no">Not supported</td></tr>
-          <tr><td>Open source</td><td class="hl v-yes">Fully open</td><td class="v-no">Proprietary</td><td class="v-no">Proprietary</td></tr>
-          <tr><td>Download tracks</td><td class="hl v-yes">Free, any track</td><td class="v-paid">Premium only</td><td class="v-paid">Premium only</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-</section>
-
-<hr class="divider">
-
-<section id="features" class="section">
-  <div class="section-inner">
-    <span class="s-label reveal">Features</span>
-    <h2 class="s-head reveal d1">Built for listeners.<br><em style="font-style:italic;color:var(--fg3);">Not shareholders.</em></h2>
-    <p class="s-sub reveal d2">Every feature exists because someone asked for it — not because it harvests data.</p>
-    <div class="features-grid">
-      <div class="feat reveal d1">
-        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8" fill="currentColor" stroke="none"/></svg></div>
-        <div class="feat-title">YouTube Audio Streaming</div>
-        <div class="feat-desc">Search and stream any track directly from YouTube — no account, no API key, no ads. Pure audio via a native Rust core.</div>
-      </div>
-      <div class="feat reveal d2">
-        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></div>
-        <div class="feat-title">Local Music Library</div>
-        <div class="feat-desc">Import MP3, Opus, M4A, and local audio files. Veluna reads metadata tags and organises your collection automatically.</div>
-      </div>
-      <div class="feat reveal d3">
-        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></div>
-        <div class="feat-title">Offline Downloads</div>
-        <div class="feat-desc">Save any track as high-quality MP3 in High (320kbps+), Medium, or Low. Listen anywhere, without internet.</div>
-      </div>
-      <div class="feat reveal d1">
-        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 17 21 12 16 7"/><polyline points="8 7 3 12 8 17"/></svg></div>
-        <div class="feat-title">Playlist Import</div>
-        <div class="feat-desc">Import from Spotify via Exportify CSV or paste any YouTube playlist URL. Auto-matches every track. No login required.</div>
-      </div>
-      <div class="feat reveal d2">
-        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></div>
-        <div class="feat-title">Playlists &amp; Queue</div>
-        <div class="feat-desc">Create, edit, and reorder unlimited playlists. Full queue management with shuffle and repeat support.</div>
-      </div>
-      <div class="feat reveal d3">
-        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
-        <div class="feat-title">Synced Lyrics</div>
-        <div class="feat-desc">Real-time synced lyrics via LRCLib and Genius. Immersive full-screen lyrics view follows the track as it plays.</div>
-      </div>
-      <div class="feat reveal d1">
-        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg></div>
-        <div class="feat-title">Sleep Timer</div>
-        <div class="feat-desc">Set an auto-pause timer from quick presets (5m–90m) or a custom duration. Perfect for late-night listening.</div>
-      </div>
-      <div class="feat reveal d2">
-        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div>
-        <div class="feat-title">Zero Telemetry</div>
-        <div class="feat-desc">No analytics, no crash reporters, no data collection. Playlists, history, and settings stay on your machine only.</div>
-      </div>
-      <div class="feat reveal d3">
-        <div class="feat-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></div>
-        <div class="feat-title">Backup &amp; Restore</div>
-        <div class="feat-desc">Export your entire library as a portable JSON file. Restore on any machine and pick up exactly where you left off.</div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<hr class="divider">
-
-<section id="faq" class="section">
-  <div class="section-inner">
-    <span class="s-label reveal">Support</span>
-    <h2 class="s-head reveal d1">FAQs</h2>
-    <p class="s-sub reveal d2">Everything you need to know about Veluna.</p>
-    <div class="faq-cols reveal d3">
-      <div>
-        <div class="faq-group-label">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          General
-        </div>
-        <div class="faq-item">
-          <button class="faq-q" aria-expanded="false">Is Veluna completely free?<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/></svg></button>
-          <div class="faq-ans"><div class="faq-ans-inner">Yes. Veluna is 100% free and open-source. No paywalls, no premium tiers, no hidden fees — and never will be.</div></div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-q" aria-expanded="false">Where does the music come from?<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/></svg></button>
-          <div class="faq-ans"><div class="faq-ans-inner">Veluna streams audio directly from YouTube Music using a high-performance native Rust core. Only the audio stream is extracted — no video is downloaded or rendered. You can also play local files (MP3, Opus, M4A) from the Offline section.</div></div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-q" aria-expanded="false">Do I need a YouTube account or API key?<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/></svg></button>
-          <div class="faq-ans"><div class="faq-ans-inner">No. Veluna connects directly to YouTube Music — no YouTube account, no API key, no Premium subscription needed. Everything works out of the box.</div></div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-q" aria-expanded="false">Can I download songs for offline use?<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/></svg></button>
-          <div class="faq-ans"><div class="faq-ans-inner">Yes. Any track can be downloaded as MP3 — choose <strong>High</strong> (320kbps+), <strong>Medium</strong> (~128kbps), or <strong>Low</strong>. Downloaded tracks appear in the Offline section and play without internet.</div></div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-q" aria-expanded="false">Can I import my Spotify playlists?<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/></svg></button>
-          <div class="faq-ans"><div class="faq-ans-inner">Yes. Export your Spotify playlist via <a href="https://exportify.net" target="_blank" rel="noopener">Exportify</a>, then upload the CSV in Veluna. It runs up to 12 parallel YouTube searches to match every track. You can also paste any YouTube Music playlist URL directly.</div></div>
-        </div>
-      </div>
-      <div>
-        <div class="faq-group-label">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-          Technical
-        </div>
-        <div class="faq-item">
-          <button class="faq-q" aria-expanded="false">Do I need to install dependencies?<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/></svg></button>
-          <div class="faq-ans"><div class="faq-ans-inner">On <strong>Linux</strong>, packages (.deb, .rpm, .pkg.tar.zst) and the portable <strong>.AppImage</strong> run smoothly on any modern distribution (glibc 2.39+), with rpm requiring mpv-libs. On <strong>Windows</strong> and <strong>macOS</strong>, all dependencies are fully self-contained in the installers.</div></div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-q" aria-expanded="false">Does it require an internet connection?<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/></svg></button>
-          <div class="faq-ans"><div class="faq-ans-inner">Internet is needed for YouTube streaming. Downloaded tracks and local files work completely offline through the Offline section.</div></div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-q" aria-expanded="false">How is it so fast and lightweight?<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/></svg></button>
-          <div class="faq-ans"><div class="faq-ans-inner">Veluna is built on <strong>Tauri + Rust</strong> instead of Electron, so there's no bundled Chromium. This means a lightweight install that uses a fraction of the RAM of typical music players.</div></div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-q" aria-expanded="false">What powers the audio engine?<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/></svg></button>
-          <div class="faq-ans"><div class="faq-ans-inner">A native Rust Innertube client handles metadata and audio stream extraction. <strong>libmpv</strong> is the audio engine, communicating directly with Rust for gapless playback, loudness normalisation, and real-time audio filters.</div></div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-q" aria-expanded="false">Does Veluna track my listening habits?<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="1" x2="6" y2="11"/><line x1="1" y1="6" x2="11" y2="6"/></svg></button>
-          <div class="faq-ans"><div class="faq-ans-inner">No. Zero telemetry, zero analytics, zero data collection of any kind. The only stats tracked are your local listening time — stored on your machine, never sent anywhere.</div></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<hr class="divider">
-
+<!-- COMMUNITY SECTION -->
 <section id="community" class="section">
   <div class="section-inner">
     <span class="s-label reveal">Community</span>
-    <h2 class="s-head reveal d1">Music is better shared</h2>
-    <p class="s-sub reveal d2">Report bugs, suggest features, or just talk music with people who care about it.</p>
+    <h2 class="s-head reveal d1">Join the Discussion</h2>
+    <p class="s-sub reveal d2">Report bugs, suggest new capabilities, or talk music with developers and listeners who care about software freedom.</p>
+
     <div class="community-grid reveal d3">
       <div class="comm-card">
-        <div class="comm-icon discord">
-          <svg viewBox="0 0 127.14 96.36" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/></svg>
+        <div class="comm-icon">
+          <svg viewBox="0 0 127.14 96.36" fill="currentColor"><path d="M107.7,8.07A105.15,105.15,0,0,0,81.47,0a72.06,72.06,0,0,0-3.36,6.83A97.68,97.68,0,0,0,49,6.83,72.37,72.37,0,0,0,45.64,0,105.89,105.89,0,0,0,19.39,8.09C2.79,32.65-1.71,56.6.54,80.21h0A105.73,105.73,0,0,0,32.71,96.36,77.7,77.7,0,0,0,39.6,85.25a68.42,68.42,0,0,1-10.85-5.18c.91-.66,1.8-1.34,2.66-2a75.57,75.57,0,0,0,64.32,0c.87.71,1.76,1.39,2.66,2a68.68,68.68,0,0,1-10.87,5.19,77,77,0,0,0,6.89,11.1A105.25,105.25,0,0,0,126.6,80.22h0C129.24,52.84,122.09,29.11,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53s5-12.74,11.43-12.74S54,46,53.89,53,48.84,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.25,60,73.25,53s5-12.74,11.44-12.74S96.23,46,96.12,53,91.08,65.69,84.69,65.69Z"/></svg>
         </div>
         <div class="comm-title">Discord Server</div>
-        <div class="comm-desc">Join the community server for announcements, feature discussions, bug reports, and general chat about music and the project.</div>
+        <div class="comm-desc">Connect with the community, participate in feature roadmap discussions, test development builds, and share music playlists.</div>
         <a href="https://discord.gg/u7QXUgPcqr" class="comm-btn" target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
           Join Discord
         </a>
       </div>
+
       <div class="comm-card">
-        <div class="comm-icon github">
+        <div class="comm-icon">
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.7C6.73 19.91 6.14 18 6.14 18c-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0 1 12 6.8c.85.004 1.71.115 2.51.337 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10.01 10.01 0 0 0 22 12c0-5.52-4.48-10-10-10z"/></svg>
         </div>
-        <div class="comm-title">GitHub Issues</div>
-        <div class="comm-desc">Found a bug or have a feature request? Open an issue on GitHub. All contributions are welcome — code, design, documentation.</div>
+        <div class="comm-title">GitHub Repository</div>
+        <div class="comm-desc">Found an issue or want to contribute code? Open an issue or pull request. Veluna is fully open-source and welcomes contributions.</div>
         <a href="https://github.com/rry0ku/veluna/issues" class="comm-btn" target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
           Open an Issue
@@ -1378,75 +1613,18 @@ footer {
   </div>
 </section>
 
-<hr class="divider">
-
-<section id="license" class="section">
-  <div class="section-inner">
-    <span class="s-label reveal">Trust</span>
-    <h2 class="s-head reveal d1">What you install is what it is</h2>
-    <p class="s-sub reveal d2">No hidden terms, no fine print. What you see is what you get — forever.</p>
-    <div class="trust-grid reveal d3">
-
-      <div class="trust-card">
-        <div class="trust-card-header">
-          <div class="trust-badge-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-          </div>
-          <div>
-            <div class="trust-card-title">GPL-3.0 License</div>
-            <div class="trust-card-sub">Free software · Copyleft protected</div>
-          </div>
-        </div>
-        <div class="trust-card-body">
-          Veluna is released under the <strong>GNU General Public License v3.0 (GPL-3.0)</strong> — guaranteeing software freedom for everyone. You are free to run, study, share, and modify the software. Any derivative works must remain free and open source forever.
-        </div>
-        <div class="trust-pills">
-          <span class="trust-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Free & Open Source</span>
-          <span class="trust-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Modify freely</span>
-          <span class="trust-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Share & Distribute</span>
-          <span class="trust-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Copyleft Protected</span>
-        </div>
-      </div>
-
-      <div class="trust-card">
-        <div class="trust-card-header">
-          <div class="trust-badge-icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          </div>
-          <div>
-            <div class="trust-card-title">Privacy Policy</div>
-            <div class="trust-card-sub">Zero data · Zero tracking</div>
-          </div>
-        </div>
-        <div class="trust-card-body">
-          Veluna collects <strong>absolutely nothing</strong>. No analytics, no crash reports phoning home, no account required, no cookies, no third-party SDKs watching you. Your listening history lives only on your machine and is never transmitted anywhere.
-        </div>
-        <div class="trust-pills">
-          <span class="trust-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>No telemetry</span>
-          <span class="trust-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>No accounts</span>
-          <span class="trust-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>No analytics</span>
-          <span class="trust-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Local data only</span>
-        </div>
-      </div>
-
-    </div>
-  </div>
-</section>
-
+<!-- FOOTER -->
 <footer>
   <div class="footer-inner">
     <div class="footer-top">
-
       <div class="footer-brand-col">
         <div class="footer-brand">
-          <svg viewBox="0 0 26 26" width="22" height="22" fill="none">
-            <rect width="26" height="26" rx="5" fill="var(--fg)"/>
-            <polygon points="4,6 8,6 13,19 18,6 22,6 13,21" fill="var(--bg)"/>
-            <polygon points="8,6 10.5,6 13,15 15.5,6 18,6 13,19" fill="var(--fg)"/>
-          </svg>
+          <img src="veluna_icon.png" alt="Veluna" class="nav-logo" width="24" height="24">
           veluna
         </div>
-        <div class="footer-tagline">Free, open-source music player for Windows, macOS, and Linux. No ads, no tracking, no accounts.</div>
+        <div class="footer-tagline">
+          Free, open-source music player for Windows, macOS, and Linux. No ads, no tracking, zero subscriptions.
+        </div>
         <div class="footer-social">
           <a href="https://github.com/rry0ku/veluna" target="_blank" rel="noopener" aria-label="GitHub">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.7C6.73 19.91 6.14 18 6.14 18c-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0 1 12 6.8c.85.004 1.71.115 2.51.337 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10.01 10.01 0 0 0 22 12c0-5.52-4.48-10-10-10z"/></svg>
@@ -1459,30 +1637,33 @@ footer {
 
       <div class="footer-col">
         <div class="footer-col-label">Product</div>
-        <a href="#download">Download</a>
-        <a href="#compare">Compare</a>
         <a href="#features">Features</a>
+        <a href="#download">Download</a>
         <a href="https://github.com/rry0ku/veluna/releases" target="_blank" rel="noopener">Releases</a>
+        <a href="https://github.com/rry0ku/veluna/releases/tag/v0.1.7" target="_blank" rel="noopener">Changelog</a>
       </div>
 
       <div class="footer-col">
         <div class="footer-col-label">Resources</div>
-        <a href="https://github.com/rry0ku/veluna/wiki" target="_blank" rel="noopener">Wiki</a>
-        <a href="https://github.com/rry0ku/veluna/issues" target="_blank" rel="noopener">Report a Bug</a>
-        <a href="#faq">FAQ</a>
+        <a href="https://github.com/rry0ku/veluna" target="_blank" rel="noopener">Source Code</a>
+        <a href="https://github.com/rry0ku/veluna/issues" target="_blank" rel="noopener">Report an Issue</a>
+        <a href="https://github.com/rry0ku/veluna/wiki" target="_blank" rel="noopener">Documentation</a>
         <a href="#community">Community</a>
       </div>
 
       <div class="footer-col">
-        <div class="footer-col-label">Legal</div>
-        <a href="#license">License</a>
-        <a href="#license">Privacy Policy</a>
-        <a href="https://github.com/rry0ku/veluna" target="_blank" rel="noopener">Source Code</a>
+        <div class="footer-col-label">License</div>
+        <a href="https://github.com/rry0ku/veluna/blob/main/LICENSE" target="_blank" rel="noopener">GNU GPL-3.0</a>
       </div>
-
     </div>
+
     <div class="footer-bottom">
-      <div class="footer-copy">© 2026 veluna · gpl-3.0 license · made with ♥ for music lovers</div>
+      <div class="footer-copy">
+        Copyright 2026 Veluna. Released under GNU General Public License v3.0.
+      </div>
+      <div class="footer-badge">
+        Built for listeners who care about software freedom.
+      </div>
     </div>
   </div>
 </footer>
@@ -1493,12 +1674,13 @@ footer {
 
 <script>
 (function() {
-
+  // Sticky nav scrolled style
   var nav = document.getElementById('nav');
   window.addEventListener('scroll', function() {
     nav.classList.toggle('scrolled', window.scrollY > 20);
   }, { passive: true });
 
+  // Reading progress bar
   var bar = document.getElementById('progress-bar');
   window.addEventListener('scroll', function() {
     var h = document.documentElement;
@@ -1506,22 +1688,27 @@ footer {
     bar.style.width = pct + '%';
   }, { passive: true });
 
+  // Scroll reveal animations
   var revealEls = document.querySelectorAll('.reveal');
   var io = new IntersectionObserver(function(entries) {
     entries.forEach(function(e) {
-      if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); }
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        io.unobserve(e.target);
+      }
     });
-  }, { threshold: 0.07, rootMargin: '0px 0px -36px 0px' });
+  }, { threshold: 0.05, rootMargin: '0px 0px -40px 0px' });
   revealEls.forEach(function(el) { io.observe(el); });
 
-  var sections = ['download','compare','features','faq','community','license'];
+  // Nav links active state scrollspy
+  var sections = ['features', 'download', 'community'];
   var navLinks = {};
   sections.forEach(function(id) {
     var el = document.querySelector('.nav-links a[href="#' + id + '"]');
     if (el) navLinks[id] = el;
   });
   window.addEventListener('scroll', function() {
-    var y = window.scrollY + 100;
+    var y = window.scrollY + 120;
     var active = null;
     sections.forEach(function(id) {
       var sec = document.getElementById(id);
@@ -1532,6 +1719,7 @@ footer {
     });
   }, { passive: true });
 
+  // Mobile drawer navigation
   var mobileNav = document.getElementById('mobile-nav');
   document.getElementById('ham').addEventListener('click', function() {
     var isOpen = mobileNav.classList.toggle('open');
@@ -1544,28 +1732,16 @@ footer {
     document.body.style.overflow = '';
   };
 
-  document.querySelectorAll('.faq-q').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      var ans = btn.nextElementSibling;
-      var expanded = btn.getAttribute('aria-expanded') === 'true';
-      btn.closest('.faq-cols > div').querySelectorAll('.faq-q').forEach(function(b) {
-        if (b !== btn) {
-          b.setAttribute('aria-expanded', 'false');
-          b.nextElementSibling.style.maxHeight = null;
-        }
-      });
-      btn.setAttribute('aria-expanded', expanded ? 'false' : 'true');
-      ans.style.maxHeight = expanded ? null : ans.scrollHeight + 'px';
-    });
-  });
-
+  // Back to top button
   var topBtn = document.getElementById('back-top');
   window.addEventListener('scroll', function() {
     topBtn.classList.toggle('show', window.scrollY > 500);
   }, { passive: true });
-  topBtn.addEventListener('click', function() { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  topBtn.addEventListener('click', function() {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
 
-  // OS Detection & Download Card Highlighting
+  // Client OS detection for download recommendation
   var ua = navigator.userAgent || '';
   var isMac = /Macintosh|MacIntel|MacPPC|Mac68K/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   var isWin = /Win32|Win64|Windows|WinCE/i.test(ua);
@@ -1581,14 +1757,34 @@ footer {
     if (badge) badge.style.display = 'inline-block';
   }
 
-  // Fetch latest release assets from GitHub API
+  // Live GitHub star counter
+  var starEl = document.getElementById('gh-star-count');
+  var cachedStars = null;
+  try { cachedStars = localStorage.getItem('veluna_gh_stars'); } catch (e) {}
+  if (cachedStars && starEl) {
+    starEl.textContent = cachedStars;
+  }
+  fetch('https://api.github.com/repos/rry0ku/veluna')
+    .then(function(res) { return res.ok ? res.json() : null; })
+    .then(function(repo) {
+      if (!repo || typeof repo.stargazers_count !== 'number') return;
+      var count = repo.stargazers_count;
+      var formatted = count >= 1000 ? (count / 1000).toFixed(1).replace(/\.0$/, '') + 'k' : count.toString();
+      if (starEl) starEl.textContent = formatted;
+      try { localStorage.setItem('veluna_gh_stars', formatted); } catch (e) {}
+    })
+    .catch(function() {});
+
+  // Fetch release assets from GitHub API
   fetch('https://api.github.com/repos/rry0ku/veluna/releases/latest')
     .then(function(res) { return res.ok ? res.json() : null; })
     .then(function(rel) {
       if (!rel || !rel.assets) return;
       var tag = rel.tag_name || 'v0.1.7';
       var chip = document.getElementById('latest-version-chip');
-      if (chip) chip.innerHTML = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,6 5,9 10,3"/></svg> ' + tag + ' — Latest Release';
+      if (chip) {
+        chip.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;color:var(--accent)"><polyline points="20 6 9 17 4 12"/></svg> ' + tag + ' - Latest Release';
+      }
 
       rel.assets.forEach(function(a) {
         var name = (a.name || '').toLowerCase();
@@ -1619,6 +1815,80 @@ footer {
     })
     .catch(function() {});
 
+  // Mockup Screenshot Switcher (ss1 / ss2)
+  (function initMockupSwitcher() {
+    var slides = [
+      { title: 'Veluna · Home' },
+      { title: 'Veluna · Synced Lyrics' }
+    ];
+    var currentIndex = 0;
+    var trackEl = document.getElementById('mockup-track');
+    var slideEls = document.querySelectorAll('.mockup-slide');
+    if (!trackEl || !slideEls.length) return;
+
+    var titleEl = document.getElementById('mockup-title');
+
+    function showSlide(idx) {
+      if (idx < 0) idx = slides.length - 1;
+      if (idx >= slides.length) idx = 0;
+      currentIndex = idx;
+
+      trackEl.style.transform = 'translateX(-' + (currentIndex * 100) + '%)';
+
+      for (var i = 0; i < slideEls.length; i++) {
+        slideEls[i].classList.toggle('active', i === currentIndex);
+      }
+
+      if (titleEl && slides[currentIndex]) {
+        titleEl.textContent = slides[currentIndex].title;
+      }
+    }
+
+    // Side floating arrow buttons
+    var arrowPrev = document.getElementById('mockup-arrow-prev');
+    var arrowNext = document.getElementById('mockup-arrow-next');
+    if (arrowPrev) arrowPrev.addEventListener('click', function(e) {
+      e.stopPropagation();
+      showSlide(currentIndex - 1);
+    });
+    if (arrowNext) arrowNext.addEventListener('click', function(e) {
+      e.stopPropagation();
+      showSlide(currentIndex + 1);
+    });
+
+    // Keyboard navigation when mockup is focused
+    var mockupWin = document.querySelector('.mockup-window');
+    if (mockupWin) {
+      mockupWin.setAttribute('tabindex', '0');
+      mockupWin.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowLeft') {
+          showSlide(currentIndex - 1);
+        } else if (e.key === 'ArrowRight') {
+          showSlide(currentIndex + 1);
+        }
+      });
+
+      // Touch / swipe support on mobile
+      var touchStartX = 0;
+      mockupWin.addEventListener('touchstart', function(e) {
+        if (e.changedTouches && e.changedTouches[0]) {
+          touchStartX = e.changedTouches[0].clientX;
+        }
+      }, { passive: true });
+
+      mockupWin.addEventListener('touchend', function(e) {
+        if (e.changedTouches && e.changedTouches[0]) {
+          var touchEndX = e.changedTouches[0].clientX;
+          var diff = touchEndX - touchStartX;
+          if (diff > 45) {
+            showSlide(currentIndex - 1);
+          } else if (diff < -45) {
+            showSlide(currentIndex + 1);
+          }
+        }
+      }, { passive: true });
+    }
+  })();
 })();
 </script>
 </body>

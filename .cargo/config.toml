@@ -20,3 +20,7 @@
 
 [target.x86_64-unknown-linux-gnu]
 rustflags = ["-L", "native=/home/dex/veluna/.cargo/lib"]
+
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "link-arg=/NODEFAULTLIB:libcmt.lib"]
+

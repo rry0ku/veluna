@@ -174,7 +174,7 @@ jobs:
       - name: Build Tauri Bundles (.exe NSIS and .msi)
         shell: pwsh
         env:
-          RUSTFLAGS: -L native=${{ github.workspace }}\mpv-dev
+          RUSTFLAGS: -L native=${{ github.workspace }}\mpv-dev -C link-arg=/NODEFAULTLIB:libcmt.lib
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |

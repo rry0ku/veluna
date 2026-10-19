@@ -41,5 +41,10 @@ fn main() {
         }
     }
 
+    if target.contains("msvc") {
+        // Exclude statically linked C runtime to resolve LNK4098 conflict with dynamic msvcrt.lib
+        println!("cargo:rustc-link-arg=/NODEFAULTLIB:libcmt.lib");
+    }
+
     tauri_build::build()
 }

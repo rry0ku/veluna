@@ -32,24 +32,24 @@
 	   neutral below reads it, so the Themes tab can reshade the whole default palette from one
 	   number. Tokens at chroma 0 are pure white/black by design and stay that way. Preset palettes
 	   hardcode their own oklch values, so the tint only applies to this default set. */
-	--hue: 326;
+	--hue: 38;
 	/* Hue of the artwork tint, written by theme.svelte.ts. Only the `.art-tint` rules read it; the
 	   default here just keeps those rules valid if the class ever outlives the variable. */
-	--art-h: 326;
+	--art-h: 38;
 	--background: oklch(1 0 0);
 	--foreground: oklch(0.145 0.008 var(--hue));
 	--card: oklch(1 0 0);
 	--card-foreground: oklch(0.145 0.008 var(--hue));
 	--popover: oklch(1 0 0);
 	--popover-foreground: oklch(0.145 0.008 var(--hue));
-	--primary: oklch(0.514 0.222 16.935);
-	--primary-foreground: oklch(0.969 0.015 12.422);
+	--primary: #ea580c;
+	--primary-foreground: oklch(0.985 0 0);
 	--secondary: oklch(0.967 0.001 var(--hue));
 	--secondary-foreground: oklch(0.21 0.006 var(--hue));
 	--muted: oklch(0.96 0.003 var(--hue));
 	--muted-foreground: oklch(0.542 0.034 var(--hue));
-	--accent: oklch(0.514 0.222 16.935);
-	--accent-foreground: oklch(0.969 0.015 12.422);
+	--accent: #ea580c;
+	--accent-foreground: oklch(0.985 0 0);
 	--destructive: oklch(0.577 0.245 27.325);
 	--border: oklch(0.922 0.005 var(--hue));
 	--input: oklch(0.922 0.005 var(--hue));
@@ -62,8 +62,8 @@
 	--radius: 0.45rem;
 	--sidebar: oklch(0.985 0 0);
 	--sidebar-foreground: oklch(0.145 0.008 var(--hue));
-	--sidebar-primary: oklch(0.586 0.253 17.585);
-	--sidebar-primary-foreground: oklch(0.969 0.015 12.422);
+	--sidebar-primary: #ea580c;
+	--sidebar-primary-foreground: oklch(0.985 0 0);
 	--sidebar-accent: oklch(0.96 0.003 var(--hue));
 	--sidebar-accent-foreground: oklch(0.212 0.019 var(--hue));
 	--sidebar-border: oklch(0.922 0.005 var(--hue));
@@ -90,14 +90,14 @@
 	--card-foreground: oklch(0.985 0 0);
 	--popover: oklch(0.212 0.019 var(--hue));
 	--popover-foreground: oklch(0.985 0 0);
-	--primary: oklch(0.455 0.188 13.697);
-	--primary-foreground: oklch(0.969 0.015 12.422);
+	--primary: #ea580c;
+	--primary-foreground: oklch(0.985 0 0);
 	--secondary: oklch(0.274 0.006 var(--hue));
 	--secondary-foreground: oklch(0.985 0 0);
 	--muted: oklch(0.263 0.024 var(--hue));
 	--muted-foreground: oklch(0.711 0.019 var(--hue));
-	--accent: oklch(0.455 0.188 13.697);
-	--accent-foreground: oklch(0.969 0.015 12.422);
+	--accent: #ea580c;
+	--accent-foreground: oklch(0.985 0 0);
 	--destructive: oklch(0.704 0.191 22.216);
 	--border: oklch(1 0 0 / 10%);
 	--input: oklch(1 0 0 / 15%);
@@ -109,8 +109,8 @@
 	--chart-5: oklch(0.443 0.11 240.79);
 	--sidebar: oklch(0.21 0.006 var(--hue));
 	--sidebar-foreground: oklch(0.985 0 0);
-	--sidebar-primary: oklch(0.645 0.246 16.439);
-	--sidebar-primary-foreground: oklch(0.969 0.015 12.422);
+	--sidebar-primary: #ea580c;
+	--sidebar-primary-foreground: oklch(0.985 0 0);
 	--sidebar-accent: oklch(0.263 0.024 var(--hue));
 	--sidebar-accent-foreground: oklch(0.985 0 0);
 	--sidebar-border: oklch(1 0 0 / 10%);

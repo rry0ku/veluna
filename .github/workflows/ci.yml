@@ -132,7 +132,7 @@ jobs:
       - name: Check Rust Backend
         shell: pwsh
         env:
-          RUSTFLAGS: -L native=${{ github.workspace }}\mpv-dev
+          RUSTFLAGS: -L native=${{ github.workspace }}\mpv-dev -C link-arg=/NODEFAULTLIB:libcmt.lib
         run: |
           cargo check --workspace
 

@@ -38,7 +38,7 @@ export type ThemeId =
 type Theme = { id: ThemeId; label: string; color: string };
 
 export const THEMES: Theme[] = [
-	{ id: 'default', label: 'Default', color: 'oklch(0.514 0.222 16.935)' },
+	{ id: 'default', label: 'Default', color: '#ea580c' },
 	{ id: 'catppuccin', label: 'Catppuccin', color: 'oklch(0.5547 0.2503 297.0156)' },
 	{ id: 'tokyonight', label: 'Tokyo Night', color: 'oklch(0.3593 0.0513 273.1802)' },
 	{ id: 'caffeine', label: 'Caffeine', color: 'oklch(0.4341 0.0392 41.9938)' },
@@ -148,7 +148,7 @@ export function setAppearance(patch: Partial<typeof appearance>): void {
  * hardcoded default that goes stale the moment a preset moves it.
  */
 export const effective = $state({
-	hue: 326,
+	hue: 38,
 	radius: 0.45,
 	accent: '#000000',
 	fontSans: '',
@@ -508,6 +508,17 @@ export function initTheme(): void {
 		}
 	} catch {
 		// unparseable — start clean
+	}
+	// If the user previously selected #ea580c as an accent override on the default theme,
+	// fold it back into the theme's own accent so the preset button is cleanly active.
+	if (theme.id === 'default' && custom.accent?.toLowerCase() === '#ea580c') {
+		custom.accent = null;
+		persist();
+	}
+	// If the old default rose hue (326) was stored as an override, reset it to use the new orange background hue.
+	if (theme.id === 'default' && (custom.hue === 326 || custom.hue === 38)) {
+		custom.hue = null;
+		persist();
 	}
 	if (stored && stored in LEGACY_ACCENTS) {
 		const hex = LEGACY_ACCENTS[stored];

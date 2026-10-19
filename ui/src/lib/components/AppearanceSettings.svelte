@@ -117,8 +117,8 @@
 	// Picked to hold up as a fill under white text in both modes (all of them get the light
 	// foreground from `onAccent`). Anything else is one click away in the custom picker.
 	const ACCENTS = [
+		'#9a0536',
 		'#e11d48',
-		'#ea580c',
 		'#d97706',
 		'#16a34a',
 		'#0d9488',
