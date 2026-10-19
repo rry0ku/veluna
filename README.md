@@ -116,28 +116,63 @@ Veluna is a fast, lightweight desktop music player built with Rust, Tauri, and S
 
 ## Installation
 
+Download ready-to-run release binaries for your operating system from the **[Releases](https://github.com/rry0ku/veluna/releases)** page.
+
 ### Linux
 
-**Arch Linux / Manjaro / EndeavourOS**:
+Veluna offers native packages for major distributions as well as a standalone AppImage:
+
+**Universal AppImage (Any Linux distribution)**:
+Standalone, self-contained binary with built-in updater. No root access required:
+```bash
+chmod +x veluna_<version>_amd64.AppImage
+./veluna_<version>_amd64.AppImage
+```
+
+**Arch Linux / Manjaro / EndeavourOS (`.pkg.tar.zst`)**:
+Native pacman package with desktop shortcut and icon integration:
 ```bash
 sudo pacman -U ./veluna_<version>-1-x86_64.pkg.tar.zst
 ```
 
-**Debian / Ubuntu / Linux Mint (.deb)**:
+**Debian / Ubuntu / Linux Mint (`.deb`)**:
 ```bash
 sudo apt install ./veluna_<version>_amd64.deb
 ```
 
-**Fedora / RHEL / openSUSE (.rpm)**:
+**Fedora / RHEL / openSUSE (`.rpm`)**:
 ```bash
+# Fedora / RHEL:
 sudo dnf install ./veluna_<version>.x86_64.rpm
-# or for openSUSE:
+
+# openSUSE:
 sudo zypper install ./veluna_<version>.x86_64.rpm
 ```
 
 ### Windows
 
-Download and run the `.exe` setup installer from the [Releases](https://github.com/rry0ku/veluna/releases) page. Runtime dependencies are bundled automatically.
+Veluna provides an interactive NSIS setup installer, a standalone MSI package, and a portable archive:
+
+- **NSIS Setup Installer (`.exe`)**:
+  Recommended for desktop users. Download `veluna_<version>_x64-setup.exe` and run the installer. It configures Start Menu shortcuts, desktop icons, and automated self-updates.
+- **Windows Installer (`.msi`)**:
+  Recommended for enterprise or system-wide managed deployments. Double-click the `.msi` file or install via command line:
+  ```powershell
+  msiexec /i veluna_<version>_x64_en-US.msi
+  ```
+- **Portable Archive (`.zip`)**:
+  Extract and run `veluna.exe` directly without installation or administrator privileges.
+
+### macOS
+
+Veluna supports Apple Silicon (M1/M2/M3/M4) devices running macOS 11.0 or higher:
+
+1. Download the `veluna_<version>_aarch64.dmg` disk image from [Releases](https://github.com/rry0ku/veluna/releases).
+2. Double-click the DMG to open it, and drag **Veluna** into your **Applications** folder.
+3. Launch Veluna from Spotlight or Launchpad.
+
+> [!NOTE]
+> If macOS Gatekeeper displays an unverified developer prompt on first launch, right-click (or Control-click) `Veluna.app`, select **Open**, and confirm by clicking **Open** in the dialog (or run `xattr -d com.apple.quarantine /Applications/Veluna.app` in Terminal).
 
 ---
 
@@ -145,39 +180,102 @@ Download and run the `.exe` setup installer from the [Releases](https://github.c
 
 ### Prerequisites
 
-- Node.js 18 or higher
-- Rust (stable toolchain)
-- Tauri CLI v2 (`cargo install tauri-cli --version "^2"`)
-- Linux build dependencies: `mpv`, `ffmpeg`, `libasound2-dev`, `libwebkit2gtk-4.1-dev`
+Before building Veluna, ensure you have the following installed on your system:
 
-### Compilation
+- **Node.js** (v18 or higher) and **npm**
+- **Rust** (stable toolchain):
+  ```bash
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+  ```
+- **Tauri CLI v2**:
+  ```bash
+  cargo install tauri-cli --version "^2"
+  ```
 
-```bash
-git clone https://github.com/rry0ku/veluna.git
-cd veluna
-npm install
-npm run build
-npm run tauri build
-```
+#### Platform Dependencies
 
-To run in development mode:
-```bash
-npm run dev
-```
+- **Debian / Ubuntu / Linux Mint**:
+  ```bash
+  sudo apt install libmpv-dev libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libssl-dev libdbus-1-dev libayatana-appindicator3-dev ffmpeg
+  ```
+- **Arch Linux / Manjaro**:
+  ```bash
+  sudo pacman -S mpv webkit2gtk-4.1 gtk3 librsvg openssl dbus libayatana-appindicator ffmpeg
+  ```
+- **Fedora / RHEL**:
+  ```bash
+  sudo dnf install mpv-libs-devel webkit2gtk4.1-devel gtk3-devel librsvg2-devel openssl-devel dbus-devel libappindicator-gtk3-devel ffmpeg
+  ```
+- **macOS**:
+  ```bash
+  brew install mpv ffmpeg
+  ```
+
+---
+
+### Step-by-Step Instructions
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/rry0ku/veluna.git
+   cd veluna
+   ```
+
+2. **Install frontend dependencies**:
+   ```bash
+   cd ui
+   npm install
+   cd ..
+   ```
+
+3. **Fetch the FFmpeg audio sidecar**:
+   ```bash
+   node scripts/setup-ffmpeg.mjs
+   ```
+
+4. **Start in development mode (`cargo tauri dev`)**:
+   ```bash
+   cargo tauri dev
+   ```
+   This automatically compiles the Rust backend, starts the Vite frontend dev server with hot module replacement (HMR), and launches the native desktop window.
+
+5. **Build release bundles (`cargo tauri build`)**:
+   ```bash
+   cargo tauri build
+   ```
+   Production packages (AppImage, deb, rpm, exe, or dmg depending on your OS) will be generated in `target/release/bundle/`.
 
 ---
 
 ## Tech Stack
 
-| Component | Technology | Role |
+### Architecture Overview
+
+Veluna is architected as a modular workspace powered by a high-performance Rust backend and a modern Svelte 5 reactive frontend, unified through Tauri v2.
+
+| Layer | Technology | Details & Purpose |
 |---|---|---|
-| Shell | Tauri v2 | Native windowing, IPC bridge, system integration |
-| Frontend | Svelte 5 + SvelteKit + TypeScript | Reactive UI state, LayerChart visualizations, Tailwind CSS v4 |
-| Audio Backend | mpv via Rust IPC | Low-latency audio pipeline, software EQ, gapless playback |
-| Media Resolver | yt-dlp | YouTube Music search, streaming stream extraction, downloading |
-| Audio Utilities | ffmpeg / ffprobe | ID3 metadata tagging, format transcoding, waveform generation |
-| Linux Integration | zbus | MPRIS2 D-Bus service (org.mpris.MediaPlayer2.veluna) |
-| Rich Presence | discord-rich-presence | Active playback status and artwork sync |
+| **Application Shell** | Tauri v2 (Rust + WRY + TAO) | Native cross-platform windowing, zero-overhead IPC bridge, system tray, protocol assets, and self-updater |
+| **Frontend Framework** | Svelte 5 + SvelteKit 2 | High-performance reactive state powered by Svelte runes (`$state`, `$derived`, `$effect`), static adapter |
+| **Language & Tooling** | TypeScript + Vite 8 | Strict type safety, fast HMR development, and optimized production bundling |
+| **Styling & Animation** | Tailwind CSS v4 + tw-animate-css | Modern CSS engine, zero-runtime utilities, theme variables, and GPU-accelerated transitions |
+| **UI Primitives** | Bits UI + shadcn-svelte | Headless, accessible UI component primitives (modals, dropdowns, popovers, sliders, tabs) |
+| **Data Visualizations** | LayerChart + D3 | Reactive data visualization engine powering interactive listening statistics, history graphs, and listening trends |
+| **Iconography** | HugeIcons (`@hugeicons/svelte`) | Crisp, lightweight interface icons |
+| **Audio Core** | `libmpv2` / `libmpv-sys` (in-process C FFI) | Low-latency native audio playback, 10-band software EQ, gapless transitions, EBU R128 loudness normalization |
+| **Stream Extraction** | Custom `innertube` crate (Rust) | Native YouTube Music client built on `reqwest` (with `rustls-tls`, gzip, and brotli compression) |
+| **BotGuard & PoToken** | `rustypipe-botguard` (V8 / Deno Core) | Minimal-DOM JavaScript runtime for cipher parsing and Proof-of-Origin token generation to prevent 403 stream throttling |
+| **Stream Proxy** | Hyper (HTTP/1.1 Loopback Server) | High-throughput local loopback HTTP server for streaming music videos and audio to WebKitGTK and WebView2 |
+| **Local Database** | SQLite (`rusqlite` bundled) | Fast, zero-dependency embedded relational database storing offline libraries, playlists, listening stats, and history |
+| **Audio Metadata** | Lofty 0.22 | Fast in-process audio tag reader and writer supporting ID3v2, Vorbis Comments, and MP4 tags without external CLI processes |
+| **Audio Transcoding** | FFmpeg / FFprobe | High-quality audio encoding (MP3, Opus, M4A) and audio waveform preview generation |
+| **Romanization Engine** | Lindera (IPADIC) + WanaKana + Pinyin | In-memory Japanese morphological tokenizer and Pinyin transliterator for synchronized lyrics and song metadata |
+| **Desktop Media Controls** | Souvlaki + Zbus 5 | Cross-platform hardware media key bindings and native Linux MPRIS2 D-Bus interface (`org.mpris.MediaPlayer2.veluna`) |
+| **Windows Integration** | Win32 API (`windows` crate) | Windows Taskbar thumbnail toolbar, HWND window styling, and System Media Transport Controls (SMTC) |
+| **Desktop Notifications** | `notify-rust` + `objc2` | Native desktop track-change notifications across Linux (D-Bus), Windows (WinRT), and macOS |
+| **Discord Rich Presence** | `discord-rich-presence` | Real-time Now Playing status, elapsed track time, and album artwork synchronization over local IPC socket |
+| **Scrobbling** | Last.fm & ListenBrainz APIs | Automated scrobbling and real-time Now Playing tracking via signed API payloads |
+| **Social Listening** | `listen-protocol` crate (WebSocket) | Real-time synchronized playback and group listening over secure WebSockets (`tokio-tungstenite`) |
 
 ---
 
