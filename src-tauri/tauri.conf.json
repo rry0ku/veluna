@@ -40,7 +40,7 @@
     "category": "Music",
     "targets": ["deb", "rpm", "appimage"],
     "externalBin": [
-      "binaries/ffmpeg"
+      "binaries/veluna-ffmpeg"
     ],
     "createUpdaterArtifacts": true,
     "icon": [

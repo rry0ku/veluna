@@ -30,7 +30,7 @@ fn main() {
         let _ = std::fs::create_dir_all(binaries_dir);
     }
     let ext = if target.contains("windows") { ".exe" } else { "" };
-    let sidecar_name = format!("ffmpeg-{target}{ext}");
+    let sidecar_name = format!("veluna-ffmpeg-{target}{ext}");
     let sidecar_path = binaries_dir.join(sidecar_name);
     if !sidecar_path.exists() {
         let _ = std::fs::write(&sidecar_path, b"");

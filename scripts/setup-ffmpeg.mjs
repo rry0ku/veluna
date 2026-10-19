@@ -17,19 +17,19 @@ const FALLBACK_VERSION = 'b6.1.1';
 const TARGETS = {
   'linux-x64': {
     asset: 'ffmpeg-linux-x64.gz',
-    dest: 'ffmpeg-x86_64-unknown-linux-gnu',
+    dest: 'veluna-ffmpeg-x86_64-unknown-linux-gnu',
   },
   'win32-x64': {
     asset: 'ffmpeg-win32-x64.gz',
-    dest: 'ffmpeg-x86_64-pc-windows-msvc.exe',
+    dest: 'veluna-ffmpeg-x86_64-pc-windows-msvc.exe',
   },
   'darwin-arm64': {
     asset: 'ffmpeg-darwin-arm64.gz',
-    dest: 'ffmpeg-aarch64-apple-darwin',
+    dest: 'veluna-ffmpeg-aarch64-apple-darwin',
   },
   'darwin-x64': {
     asset: 'ffmpeg-darwin-x64.gz',
-    dest: 'ffmpeg-x86_64-apple-darwin',
+    dest: 'veluna-ffmpeg-x86_64-apple-darwin',
   },
 };
 

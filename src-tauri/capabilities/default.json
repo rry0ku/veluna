@@ -30,11 +30,11 @@
       "identifier": "shell:allow-execute",
       "allow": [
         {
-          "name": "binaries/ffmpeg",
+          "name": "binaries/veluna-ffmpeg",
           "sidecar": true
         },
         {
-          "name": "ffmpeg",
+          "name": "veluna-ffmpeg",
           "sidecar": true
         }
       ]

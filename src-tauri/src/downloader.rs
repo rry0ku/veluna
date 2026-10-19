@@ -114,7 +114,14 @@ pub async fn check_ffmpeg_installed() -> bool {
 }
 
 pub async fn is_ffmpeg_available(app: &AppHandle) -> bool {
-    if let Ok(cmd) = app.shell().sidecar("binaries/ffmpeg") {
+    if let Ok(cmd) = app.shell().sidecar("veluna-ffmpeg") {
+        if let Ok(out) = cmd.args(["-version"]).output().await {
+            if out.status.success() {
+                return true;
+            }
+        }
+    }
+    if let Ok(cmd) = app.shell().sidecar("binaries/veluna-ffmpeg") {
         if let Ok(out) = cmd.args(["-version"]).output().await {
             if out.status.success() {
                 return true;
@@ -147,28 +154,28 @@ async fn run_ffmpeg_transcode(
     }
     args.push(output_path.to_string_lossy().to_string());
 
-    if let Ok(cmd) = app.shell().sidecar("binaries/ffmpeg") {
+    if let Ok(cmd) = app.shell().sidecar("veluna-ffmpeg") {
         match cmd.args(&args).output().await {
             Ok(out) if out.status.success() => return Ok(()),
             Ok(out) => {
                 let stderr = String::from_utf8_lossy(&out.stderr);
-                tracing::warn!("Sidecar binaries/ffmpeg failed: {stderr}");
+                tracing::warn!("Sidecar veluna-ffmpeg failed: {stderr}");
             }
             Err(e) => {
-                tracing::debug!("Sidecar binaries/ffmpeg could not run: {e}");
+                tracing::debug!("Sidecar veluna-ffmpeg could not run: {e}");
             }
         }
     }
 
-    if let Ok(cmd) = app.shell().sidecar("ffmpeg") {
+    if let Ok(cmd) = app.shell().sidecar("binaries/veluna-ffmpeg") {
         match cmd.args(&args).output().await {
             Ok(out) if out.status.success() => return Ok(()),
             Ok(out) => {
                 let stderr = String::from_utf8_lossy(&out.stderr);
-                tracing::warn!("Sidecar ffmpeg failed: {stderr}");
+                tracing::warn!("Sidecar binaries/veluna-ffmpeg failed: {stderr}");
             }
             Err(e) => {
-                tracing::debug!("Sidecar ffmpeg could not run: {e}");
+                tracing::debug!("Sidecar binaries/veluna-ffmpeg could not run: {e}");
             }
         }
     }
