@@ -88,8 +88,9 @@ jobs:
       - name: Stage Linux packages
         run: |
           mkdir -p linux-dist
-          cp target/release/bundle/appimage/*.AppImage linux-dist/ 2>/dev/null || true
+          cp target/release/bundle/appimage/*.AppImage* linux-dist/ 2>/dev/null || true
           cp target/release/bundle/appimage/*.tar.gz* linux-dist/ 2>/dev/null || true
+          cp target/release/bundle/appimage/*.sig linux-dist/ 2>/dev/null || true
           cp target/release/bundle/deb/*.deb linux-dist/ 2>/dev/null || true
           cp target/release/bundle/rpm/*.rpm linux-dist/ 2>/dev/null || true
           cp veluna-*.pkg.tar.zst linux-dist/ 2>/dev/null || true
@@ -183,9 +184,10 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path windows-dist
-          Get-ChildItem -Path target/release/bundle/nsis/*.exe -ErrorAction SilentlyContinue | Copy-Item -Destination windows-dist
+          Get-ChildItem -Path target/release/bundle/nsis/*.exe* -ErrorAction SilentlyContinue | Copy-Item -Destination windows-dist
           Get-ChildItem -Path target/release/bundle/nsis/*.zip* -ErrorAction SilentlyContinue | Copy-Item -Destination windows-dist
-          Get-ChildItem -Path target/release/bundle/msi/*.msi -ErrorAction SilentlyContinue | Copy-Item -Destination windows-dist
+          Get-ChildItem -Path target/release/bundle/nsis/*.sig -ErrorAction SilentlyContinue | Copy-Item -Destination windows-dist
+          Get-ChildItem -Path target/release/bundle/msi/*.msi* -ErrorAction SilentlyContinue | Copy-Item -Destination windows-dist
           Get-ChildItem -Path windows-dist
 
       - name: Upload Windows artifacts

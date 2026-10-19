@@ -23,6 +23,7 @@ enum MediaUpdate {
     Album(String), // learned after the track's metadata went out; keeps the duration
     Duration(f64),
     Playback { playing: bool, pos: f64 },
+    #[allow(dead_code)]
     Volume(i64), // slider percent, 0-100
 }
 
