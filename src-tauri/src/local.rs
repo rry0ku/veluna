@@ -28,14 +28,17 @@ const FOLDERS_SETTING: &str = "local_folders";
 /// Bumped whenever `read_track` starts producing different titles, artists or album keys. The scan
 /// normally trusts stored rows whose file hasn't changed; after a bump it re-reads everything once,
 /// so a library isn't left half-parsed by the old rules and half by the new ones.
-const SCAN_VERSION: &str = "7";
+const SCAN_VERSION: &str = "8";
 const SCAN_VERSION_SETTING: &str = "local_scan_version";
 
 /// Extensions we pick up. Playback itself is mpv, which decodes far more than this — the list is
-/// only about what a music folder plausibly holds, so a scan doesn't try to probe every stray file.
-const AUDIO_EXT: [&str; 15] = [
-    "mp3", "flac", "m4a", "m4b", "aac", "ogg", "oga", "opus", "wav", "wma", "aiff", "aif", "ape",
-    "wv", "mka",
+/// comprehensive so a scan picks up music of any format the user has.
+const AUDIO_EXT: &[&str] = &[
+    "mp3", "flac", "m4a", "m4b", "m4p", "m4r", "aac", "alac", "ogg", "oga", "opus", "spx",
+    "wav", "wave", "bwf", "aiff", "aif", "aifc", "wma", "ape", "wv", "mka", "webm", "weba",
+    "mpc", "mp+", "mpp", "tta", "ofr", "ofs", "tak", "caf", "dsf", "dff", "ac3", "eac3", "ec3",
+    "dts", "dtshd", "ra", "ram", "mid", "midi", "mod", "s3m", "xm", "it", "au", "snd", "amr",
+    "3gp", "3g2", "voc", "gsm",
 ];
 /// Cover images sitting next to the tracks, in preference order (used when nothing is embedded).
 const COVER_FILES: [&str; 6] =

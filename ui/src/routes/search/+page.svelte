@@ -2,7 +2,7 @@
 	// Survive remounts (module scope), so coming back to /search, from a result you clicked or from
 	// the sidebar, shows the last search on the tab it was on instead of a blank page. The results
 	// themselves come back from the page cache, so the rerun paints instantly and just revalidates.
-	type Cat = 'all' | 'songs' | 'videos' | 'albums' | 'artists' | 'playlists';
+	type Cat = 'all' | 'songs' | 'albums' | 'artists' | 'playlists';
 	let lastQuery = '';
 	let lastCat: Cat = 'all';
 </script>
@@ -20,8 +20,7 @@
 		Search01Icon,
 		SmileIcon,
 		SparklesIcon,
-		StarAward02Icon,
-		Video01Icon
+		StarAward02Icon
 	} from '@hugeicons/core-free-icons';
 	import { Skeleton } from '$lib/components/ui/skeleton';
 	import ErrorState from '$lib/components/ErrorState.svelte';
@@ -54,7 +53,7 @@
 	import { thumb } from '$lib/thumb';
 	import { currentLocale, t } from '$lib/i18n.svelte';
 
-	type Cached = { res: SearchResults; songs: SongItem[]; videos: SongItem[] };
+	type Cached = { res: SearchResults; songs: SongItem[] };
 	type CardCat = 'albums' | 'artists' | 'playlists';
 
 	let query = $state(lastQuery);
@@ -63,9 +62,6 @@
 	// response gives a song row either its artist or its length, never both, so those rows land
 	// duration-less. The filtered endpoint returns "Artist • Album • 3:58" on every row.
 	let songs = $state<SongItem[]>([]);
-	// Videos have no unfiltered fallback: the mixed response's video rows are the ones YouTube
-	// already folded into `res.songs`, so an empty list here just hides the section and its chip.
-	let videos = $state<SongItem[]>([]);
 	let searched = $state('');
 	let searching = $state(false);
 	let error = $state<string | null>(null);
@@ -85,7 +81,6 @@
 		if (hit) {
 			res = hit.res;
 			songs = hit.songs;
-			videos = hit.videos;
 			searched = q;
 			searching = false;
 		} else {
@@ -95,21 +90,19 @@
 		try {
 			// In parallel, and the filtered one may fail on its own: the list falls back to the
 			// unfiltered rows rather than the whole search erroring out.
-			const [fresh, freshSongs, freshVideos] = await Promise.all([
+			const [fresh, freshSongs] = await Promise.all([
 				// The one search the user actually asked for, so this is the one that goes to
 				// YouTube signed in and lands in their search history (#203).
 				api.searchAll(q, true),
 				// Not recorded: the unfiltered search above already wrote this query to the
 				// account's history, and recording it twice is two entries for one search.
-				api.search(q, false).catch(() => [] as SongItem[]),
-				api.searchVideos(q).catch(() => [] as SongItem[])
+				api.search(q, false).catch(() => [] as SongItem[])
 			]);
 			if (latest !== q) return; // a newer search superseded this one
 			res = fresh;
 			songs = freshSongs;
-			videos = freshVideos;
 			searched = q;
-			putCached(key, { res: fresh, songs: freshSongs, videos: freshVideos });
+			putCached(key, { res: fresh, songs: freshSongs });
 		} catch (e) {
 			if (latest !== q) return;
 			if (!hit) error = String(e);
@@ -131,7 +124,6 @@
 		searched = '';
 		res = null;
 		songs = [];
-		videos = [];
 		error = null;
 		searching = false;
 		setCat('all');
@@ -290,34 +282,24 @@
 	const top = $derived(res?.top[0]);
 	// On "All", Songs shares the row with the top result, and five rows is about its height.
 	const songList = $derived(cat === 'songs' ? songRows : songRows.slice(0, 5));
-	const videoList = $derived(cat === 'videos' ? videos : videos.slice(0, 4));
 	const selection = trackSelection(
 		() => songList,
 		() => songList,
 		() => `${auth.epoch}:${cat}:${searched}`
 	);
-	// A second list means a second selection: one shared scope would let a bulk action from the
-	// Songs bar act on video rows the user never checked.
-	const videoSelection = trackSelection(
-		() => videoList,
-		() => videoList,
-		() => `${auth.epoch}:videos:${cat}:${searched}`
-	);
 	const nothing = $derived(
 		!!res &&
 			!top &&
 			!songRows.length &&
-			!videos.length &&
 			!res.albums.length &&
 			!res.artists.length &&
 			!res.playlists.length
 	);
 
-	const CATS: Cat[] = ['all', 'songs', 'videos', 'albums', 'artists', 'playlists'];
+	const CATS: Cat[] = ['all', 'songs', 'albums', 'artists', 'playlists'];
 	const LABEL = $derived<Record<Cat, string>>({
 		all: t('common.all'),
 		songs: t('common.songs'),
-		videos: t('common.videos'),
 		albums: t('common.albums'),
 		artists: t('common.artists'),
 		playlists: t('common.playlists')
@@ -435,22 +417,17 @@
 			<div class="mt-3 flex items-center gap-2">
 				<div class="rail flex min-w-0 flex-1 gap-2 overflow-x-auto" role="group" aria-label={t('search.filters')}>
 					{#each CATS as c (c)}
-						<!-- Hidden with music videos off: there is no such thing as a video search then. -->
-						{#if c !== 'videos' || videos.length}
-							<button
-								class={chipClass(cat === c)}
-								aria-pressed={cat === c}
-								onclick={() => pickCat(c)}
-							>
-								{LABEL[c]}
-							</button>
-						{/if}
+						<button
+							class={chipClass(cat === c)}
+							aria-pressed={cat === c}
+							onclick={() => pickCat(c)}
+						>
+							{LABEL[c]}
+						</button>
 					{/each}
 				</div>
 				{#if cat === 'songs'}
 					<TrackSelectButton {selection} />
-				{:else if cat === 'videos'}
-					<TrackSelectButton selection={videoSelection} />
 				{/if}
 			</div>
 		{/if}
@@ -517,18 +494,6 @@
 				{#if res.artists.length}
 					<Shelf title={t('common.artists')} items={res.artists} onMore={() => pickCat('artists')} />
 				{/if}
-				{#if videoList.length}
-					<section>
-						<SectionHeading
-							title={t('common.videos')}
-							icon={Video01Icon}
-							onMore={() => pickCat('videos')}
-						>
-							<TrackSelectButton selection={videoSelection} />
-						</SectionHeading>
-						{@render rows(videoList, videoSelection)}
-					</section>
-				{/if}
 				{#if res.playlists.length}
 					<Shelf
 						title={t('common.playlists')}
@@ -539,8 +504,6 @@
 			</div>
 		{:else if res && cat === 'songs'}
 			<div class="content-in">{@render rows(songList, selection)}</div>
-		{:else if res && cat === 'videos'}
-			<div class="content-in">{@render rows(videoList, videoSelection)}</div>
 		{:else if res}
 			{#if cardsLoading}
 				<div class="card-grid">

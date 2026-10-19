@@ -25,6 +25,7 @@ thiserror = { workspace = true }
 tauri = { version = "2", features = ["tray-icon", "protocol-asset", "macos-private-api", "image-png"] }
 tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
+tauri-plugin-shell = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-global-shortcut = "2"

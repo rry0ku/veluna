@@ -8,6 +8,7 @@ mod commands;
 mod db;
 mod diagnostics;
 mod discord;
+pub mod downloader;
 mod hotkeys;
 mod http;
 mod import;
@@ -519,6 +520,7 @@ pub fn run() {
         })
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_shell::init())
         // Folder picker for the local-music library (local.rs).
         .plugin(tauri_plugin_dialog::init())
         // Copying goes through Rust, not the webview. WebKitGTK gates JavaScript clipboard writes
@@ -1132,13 +1134,17 @@ pub fn run() {
             commands::theater_fullscreen,
             commands::release_notes,
             commands::can_self_update,
-            commands::check_beta_update,
             commands::open_external,
             commands::quit_app,
             commands::diagnostics,
             commands::diagnostics_summary,
             commands::save_diagnostics,
             commands::log_ui,
+            commands::start_download,
+            commands::cancel_download,
+            commands::get_active_downloads,
+            commands::get_default_download_dir,
+            commands::open_download_dir,
         ]))
         .on_window_event(|window, event| {
             // Close-to-tray: ✕ hides the main window and playback keeps running; real quit is

@@ -4,9 +4,7 @@ import { relaunch } from '@tauri-apps/plugin-process';
 import { toast } from './player.svelte';
 import { t } from './i18n.svelte';
 import { friendlyNetError } from './neterr';
-import { getSettings } from './api';
-
-import { openExternal } from './api';
+import { getSettings, openExternal, canSelfUpdate } from './api';
 
 const RELEASES_URL = 'https://github.com/rry0ku/veluna/releases/latest';
 
@@ -23,7 +21,25 @@ export const updateState = $state({
 let pending: Update | null = null;
 
 async function look(): Promise<boolean> {
-	return false;
+	try {
+		const update = await check();
+		if (!update) {
+			pending = null;
+			updateState.available = null;
+			updateState.canInstall = false;
+			return false;
+		}
+		pending = update;
+		updateState.available = {
+			version: update.version,
+			rollback: false
+		};
+		updateState.canInstall = await canSelfUpdate().catch(() => true);
+		return true;
+	} catch (e) {
+		console.warn('Update check failed:', e);
+		return false;
+	}
 }
 
 /** The line announcing an available version. A rollback worded as "Version 0.8.2 is available!"
@@ -47,13 +63,6 @@ export async function checkForUpdatesQuiet() {
 	} catch (e) {
 		console.error('update check failed', e); // no endpoint / offline — don't nag on launch
 	}
-}
-
-/** After the update channel changes: drop what the old channel offered and ask the new one. */
-export async function recheckForUpdates() {
-	pending = null;
-	updateState.available = null;
-	await checkForUpdatesQuiet();
 }
 
 /** From Settings: return the outcome so the modal can show it inline (a toast renders behind the

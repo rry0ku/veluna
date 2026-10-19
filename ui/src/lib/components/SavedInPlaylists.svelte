@@ -1,7 +1,7 @@
 <script lang="ts">
 	// The "saved" mark on a track row: this song is already in one or more of your own playlists.
 	// Pointing at it opens a card with their covers fanned out like a hand of sleeves (three at
-	// most, "and N more" for the rest) and each one's name, linking through to that playlist;
+	// most, "and N more" for the rest) and each playlist name, linking through to that playlist;
 	// pointing at a name lifts its sleeve out of the hand. The popup is `fixed`, anchored at the
 	// trigger and moved to <body> (`toBody`), same as TrackMenu: a track list scrolls, and half of
 	// them are paint-contained. Living at <body> is also why the links need no stopPropagation,

@@ -64,7 +64,15 @@ jobs:
       - name: Install Tauri CLI
         run: npm install -g @tauri-apps/cli
 
+      - name: Setup FFmpeg sidecar binary
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node ./scripts/setup-ffmpeg.mjs linux-x64
+
       - name: Build Tauri Bundles (.deb, .rpm, .AppImage)
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: tauri build
 
       - name: Patch AppImage for multi-distro portability
@@ -81,6 +89,7 @@ jobs:
         run: |
           mkdir -p linux-dist
           cp target/release/bundle/appimage/*.AppImage linux-dist/ 2>/dev/null || true
+          cp target/release/bundle/appimage/*.tar.gz* linux-dist/ 2>/dev/null || true
           cp target/release/bundle/deb/*.deb linux-dist/ 2>/dev/null || true
           cp target/release/bundle/rpm/*.rpm linux-dist/ 2>/dev/null || true
           cp veluna-*.pkg.tar.zst linux-dist/ 2>/dev/null || true
@@ -155,10 +164,18 @@ jobs:
         shell: pwsh
         run: npm install -g @tauri-apps/cli
 
+      - name: Setup FFmpeg sidecar binary
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node ./scripts/setup-ffmpeg.mjs win32-x64
+
       - name: Build Tauri Bundles (.exe NSIS and .msi)
         shell: pwsh
         env:
           RUSTFLAGS: -L native=${{ github.workspace }}\mpv-dev
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           tauri build --config src-tauri/tauri.windows.conf.json
 
@@ -166,8 +183,9 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path windows-dist
-          Get-ChildItem -Path target/release/bundle/nsis/*.exe | Copy-Item -Destination windows-dist
-          Get-ChildItem -Path target/release/bundle/msi/*.msi | Copy-Item -Destination windows-dist
+          Get-ChildItem -Path target/release/bundle/nsis/*.exe -ErrorAction SilentlyContinue | Copy-Item -Destination windows-dist
+          Get-ChildItem -Path target/release/bundle/nsis/*.zip* -ErrorAction SilentlyContinue | Copy-Item -Destination windows-dist
+          Get-ChildItem -Path target/release/bundle/msi/*.msi -ErrorAction SilentlyContinue | Copy-Item -Destination windows-dist
           Get-ChildItem -Path windows-dist
 
       - name: Upload Windows artifacts
@@ -212,7 +230,15 @@ jobs:
       - name: Install Tauri CLI
         run: npm install -g @tauri-apps/cli
 
+      - name: Setup FFmpeg sidecar binary
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node ./scripts/setup-ffmpeg.mjs darwin-arm64
+
       - name: Build Tauri App Bundle
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           export LIBRARY_PATH="$(brew --prefix)/lib:$LIBRARY_PATH"
           tauri build --config src-tauri/tauri.macos.conf.json --bundles app
@@ -249,6 +275,7 @@ jobs:
         run: |
           mkdir -p macos-dist
           cp target/release/bundle/dmg/*.dmg macos-dist/ 2>/dev/null || true
+          cp target/release/bundle/macos/*.app.tar.gz* macos-dist/ 2>/dev/null || true
           ls -la macos-dist/
 
       - name: Upload macOS artifacts
@@ -263,6 +290,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -283,6 +313,10 @@ jobs:
             TAG="${{ inputs.tag }}"
           fi
           echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: Generate latest.json updater manifest
+        run: |
+          node scripts/generate-latest-json.mjs "${{ steps.vars.outputs.tag }}" dist
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2

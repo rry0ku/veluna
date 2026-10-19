@@ -496,15 +496,8 @@ export interface ReleaseNote {
 }
 /** Changelog for Settings > About, from the GitHub releases API (cached in Rust per run). */
 export const releaseNotes = () => invoke<ReleaseNote[]>('release_notes');
-/** False on Linux builds that aren't the AppImage (.rpm, the AUR package): they update through the
- *  package manager, so the UI offers a download link instead of an install button. */
+/** True when the build can self-update in place (AppImage on Linux, or Windows/macOS). */
 export const canSelfUpdate = () => invoke<boolean>('can_self_update');
-/** The updater plugin's `check()` against the beta channel's manifest, as the metadata the
- *  plugin's `Update` class is built from. `null` when this build is what the channel offers. */
-export const checkBetaUpdate = () =>
-	invoke<ConstructorParameters<typeof import('@tauri-apps/plugin-updater').Update>[0] | null>(
-		'check_beta_update'
-	);
 /** Open an http(s) link in the real browser, never in the webview itself. */
 export const openExternal = (url: string) => invoke<void>('open_external', { url });
 /** Real quit (not close-to-tray). Same path as the tray's Quit item. */
@@ -1322,3 +1315,46 @@ export const onMatugenThemeChanged = (cb: (css: string | null) => void): Promise
 	listen<string | null>('matugen-theme-changed', (event) => cb(event.payload));
 export const startMatugenWatcher = () => invoke<void>('start_matugen_watcher');
 export const stopMatugenWatcher = () => invoke<void>('stop_matugen_watcher');
+
+// --- Song Downloader ----------------------------------------------------------------------
+
+export interface DownloadRequest {
+	video_id: string;
+	title: string;
+	artists: string;
+	album?: string;
+	thumbnail?: string;
+	duration_secs?: number;
+	quality: string;
+	output_dir?: string;
+}
+
+export interface DownloadProgress {
+	id: string;
+	video_id: string;
+	title: string;
+	artists: string;
+	quality: string;
+	status: 'downloading' | 'transcoding' | 'tagging' | 'completed' | 'failed' | 'cancelled';
+	percent: number;
+	bytes_downloaded: number;
+	total_bytes: number;
+	speed_mbps: number;
+	file_path?: string;
+	error?: string;
+}
+
+export const startDownload = (req: DownloadRequest) =>
+	invoke<string>('start_download', { req });
+export const cancelDownload = (id: string) =>
+	invoke<boolean>('cancel_download', { id });
+export const getActiveDownloads = () =>
+	invoke<DownloadProgress[]>('get_active_downloads');
+export const getDefaultDownloadDir = () =>
+	invoke<string>('get_default_download_dir');
+export const openDownloadDir = (path?: string) =>
+	invoke<void>('open_download_dir', { path });
+
+export const onDownloadProgress = (cb: (p: DownloadProgress) => void): Promise<UnlistenFn> =>
+	listen<DownloadProgress>('download_progress', (e) => cb(e.payload));
+

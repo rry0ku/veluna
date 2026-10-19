@@ -1287,5 +1287,23 @@
 			"not_found": "Couldn’t find that on YouTube Music.",
 			"cooldown": "YouTube Music asked Veluna to slow down, so imports are paused until {time}. Everything found so far is saved."
 		}
+	},
+	"download": {
+		"title": "Download Song",
+		"button": "Download",
+		"select_quality": "Choose Format & Quality",
+		"save_location": "Save Location",
+		"save_to": "Save to",
+		"no_folder_selected": "No folder selected yet",
+		"choose_folder": "Choose Folder...",
+		"change_folder": "Change",
+		"open_folder": "Open folder",
+		"always_ask": "Always ask where to save",
+		"remember_choice": "Remember format choice",
+		"start": "Download",
+		"select_folder_title": "Select Where to Save Downloads",
+		"started": "Started downloading {title}",
+		"completed": "Downloaded {title}",
+		"failed": "Failed downloading {title}: {error}"
 	}
 }

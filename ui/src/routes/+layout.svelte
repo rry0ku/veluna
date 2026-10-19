@@ -42,17 +42,16 @@
 	import ListenTogether from '$lib/components/ListenTogether.svelte';
 	import LinkDialog from '$lib/components/LinkDialog.svelte';
 	import ImportDialog from '$lib/components/ImportDialog.svelte';
+	import DownloadDialog from '$lib/components/DownloadDialog.svelte';
 	import { handleImportDrop, initImport } from '$lib/import.svelte';
 	import MiniPlayer from '$lib/components/MiniPlayer.svelte';
 	import NowPlaying from '$lib/components/NowPlaying.svelte';
 	import TheaterMode from '$lib/components/TheaterMode.svelte';
-	import VideoSurface from '$lib/components/VideoSurface.svelte';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import KeyboardShortcuts from '$lib/components/KeyboardShortcuts.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { auth, initApp, np, playback, prefs, ui } from '$lib/player.svelte';
 	import { isLocalId } from '$lib/api';
-	import { video } from '$lib/video.svelte';
 	import { win, initWin } from '$lib/win.svelte';
 	import { initZoom } from '$lib/zoom.svelte';
 	import { initShortcuts } from '$lib/shortcuts';
@@ -267,26 +266,12 @@
 	     Invisible while theater mode shows mpv's picture: theater is transparent over the hole, and
 	     the titlebar, sidebar or player bar under it would paint over the video. -->
 	<div
-		class="relative flex h-screen flex-col overflow-hidden text-foreground {video.hole
-			? ''
-			: 'bg-background'} {win.maximized ||
+		class="relative flex h-screen flex-col overflow-hidden text-foreground bg-background {win.maximized ||
 		ui.theaterOpen ||
 		win.chrome !== 'off'
 			? ''
-			: 'rounded-[12px]'} {ui.theaterOpen && video.hole ? 'invisible' : ''}"
+			: 'rounded-[12px]'}"
 	>
-		{#if video.hole}
-			<!-- Linux: mpv draws the music video underneath the page (nativevideo.rs), so the page
-			     paints its background everywhere except the picture's box: a spread shadow, not a
-			     blur, so it costs one static paint. At -z-10 it sits under everything else, and the
-			     root's own background and <main> step aside while it is up (both paint the box). -->
-			<div
-				aria-hidden="true"
-				class="pointer-events-none visible absolute -z-10 rounded-2xl"
-				style="left:{video.hole.x}px;top:{video.hole.y}px;width:{video.hole.w}px;height:{video.hole
-					.h}px;box-shadow:0 0 0 100vmax var(--background)"
-			></div>
-		{/if}
 		<ResizeBorders />
 		<Titlebar />
 		<!-- relative: the queue and lyrics panels are absolute overlays inside it (see QueuePanel). -->
@@ -295,7 +280,7 @@
 			<!-- dragScroll: dragging a card up to home's Shortcuts grid has to be possible from anywhere in
 			     the feed, so aiming at the top edge scrolls this container while the drag is in flight. -->
 			<main
-				class="min-w-0 flex-1 overflow-y-auto {video.hole ? 'invisible' : ''}"
+				class="min-w-0 flex-1 overflow-y-auto"
 				bind:this={scroller}
 				{@attach dragScroll}
 			>
@@ -305,11 +290,6 @@
 					{@render children()}
 				{/key}
 			</main>
-			<!-- Always mounted, unlike the player view below it: it owns the one <video> element, which
-			     has to keep playing while the view is closed. It renders nothing but a zero-sized
-			     parking container until the view borrows the picture. Not on Linux, where mpv draws the
-			     picture itself (prefs.nativeVideo). -->
-			{#if !prefs.nativeVideo}<VideoSurface />{/if}
 			{#if np.open && playback.now}<NowPlaying
 					queueOpen={showQueue}
 					lyricsOpen={showLyrics || showComments}
@@ -367,6 +347,7 @@
 	<ListenTogether />
 	<LinkDialog />
 	<ImportDialog />
+	<DownloadDialog />
 
 	<!-- The two notification banners below run at z-[100]. Dialogs and menus sit at z-50 and portal to
 	     <body>, so a z-50 banner loses the tie on DOM order and hides behind an open modal. The update

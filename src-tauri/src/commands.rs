@@ -2480,24 +2480,6 @@ pub fn can_self_update(app: tauri::AppHandle) -> bool {
     }
 }
 
-/// What the updater plugin's own `check` command returns, so the UI can wrap it in the plugin's
-/// `Update` class and install it the usual way.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BetaUpdate {
-    rid: tauri::ResourceId,
-    current_version: String,
-    version: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    body: Option<String>,
-    raw_json: serde_json::Value,
-}
-
-#[tauri::command]
-pub async fn check_beta_update(_webview: tauri::Webview) -> Result<Option<BetaUpdate>, String> {
-    Ok(None)
-}
-
 /// Open a link from the UI in the real browser. An `<a href>` inside the webview would navigate
 /// the app itself off the SPA, with no way back.
 #[tauri::command]
@@ -2729,6 +2711,75 @@ pub fn start_matugen_watcher(app: tauri::AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn stop_matugen_watcher() {
     crate::matugen::stop();
+}
+
+// --- Downloader (downloader.rs) -----------------------------------------------------------
+
+#[tauri::command]
+pub async fn start_download(
+    state: St<'_>,
+    req: crate::downloader::DownloadRequest,
+) -> Result<String, String> {
+    state.downloader.start(state.inner().clone(), req).await
+}
+
+#[tauri::command]
+pub async fn cancel_download(state: St<'_>, id: String) -> Result<bool, String> {
+    Ok(state.downloader.cancel(&id).await)
+}
+
+#[tauri::command]
+pub async fn get_active_downloads(
+    state: St<'_>,
+) -> Result<Vec<crate::downloader::DownloadProgress>, String> {
+    Ok(state.downloader.get_all().await)
+}
+
+#[tauri::command]
+pub fn get_default_download_dir(state: St<'_>) -> Result<String, String> {
+    Ok(state.downloader.default_download_dir().to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn open_download_dir(state: St<'_>, path: Option<String>) -> Result<(), String> {
+    let p = path
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| state.downloader.default_download_dir());
+    let _ = std::fs::create_dir_all(&p);
+    #[cfg(target_os = "linux")]
+    {
+        // Prioritize default desktop file manager via xdg-open
+        let mut opened = std::process::Command::new("xdg-open").arg(&p).spawn().is_ok();
+        if !opened {
+            const MANAGERS: &[&str] = &[
+                "nautilus",
+                "dolphin",
+                "nemo",
+                "thunar",
+                "caja",
+                "pcmanfm",
+                "pcmanfm-qt",
+                "io.elementary.files",
+            ];
+            for mgr in MANAGERS {
+                if std::process::Command::new(mgr).arg(&p).spawn().is_ok() {
+                    opened = true;
+                    break;
+                }
+            }
+        }
+        let _ = opened;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = std::process::Command::new("open").arg(&p).spawn();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        let win_path = p.to_string_lossy().replace('/', "\\");
+        let _ = std::process::Command::new("explorer").arg(win_path).spawn();
+    }
+    Ok(())
 }
 
 #[cfg(test)]

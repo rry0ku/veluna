@@ -368,7 +368,6 @@
 				{/if}
 				{@render row({
 					title: t('settings.themes.artwork_accent'),
-					badge: t('settings.themes.experimental'),
 					desc: t('settings.themes.artwork_accent_hint'),
 					control: artworkAccentSwitch
 				})}

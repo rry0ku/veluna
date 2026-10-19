@@ -14,9 +14,7 @@
 		DiscordIcon,
 		LastFmIcon,
 		Globe02Icon,
-		ArrowDown01Icon,
-		Alert02Icon,
-		LinkSquare02Icon
+		ArrowDown01Icon
 	} from '@hugeicons/core-free-icons';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -24,7 +22,6 @@
 	import { Slider } from '$lib/components/ui/slider';
 	import { Alert, AlertDescription } from '$lib/components/ui/alert';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import * as Popover from '$lib/components/ui/popover';
 	import { HELP_COMBO } from '$lib/shortcuts';
 	import { copyText } from '$lib/clipboard';
 	import * as api from '$lib/api';
@@ -39,8 +36,7 @@
 		availableMessage,
 		checkForUpdatesInteractive,
 		installUpdate,
-		openDownloadPage,
-		recheckForUpdates
+		openDownloadPage
 	} from '$lib/updater.svelte';
 	import { getVersion } from '@tauri-apps/api/app';
 	import { t, setLocale, currentLocale, LOCALES } from '$lib/i18n.svelte';
@@ -103,10 +99,6 @@
 	let clearing = $state(false);
 	let version = $state('');
 	getVersion().then((v) => (version = v));
-	// Release candidates ship only what the updater installs, so an .rpm, .deb or AUR install has
-	// nothing to take from the beta channel. Shown in dev, which is never the AppImage either.
-	let betaAvailable = $state(import.meta.env.DEV);
-	api.canSelfUpdate().then((v) => (betaAvailable ||= v)).catch(() => {});
 	// Result of the last "Check for updates" click — shown inline (a toast renders behind the modal).
 	let updateResult = $state<{ message: string; error: boolean } | null>(null);
 
@@ -224,22 +216,12 @@
 		const secs = Number(settings.crossfade_secs ?? '5');
 		return Number.isFinite(secs) ? Math.min(10, Math.max(1, secs)) : 5;
 	});
-	const hideVideosOn = $derived(settings.hide_videos === 'true');
-	// Off until the setting is turned on: still experimental, so nobody gets video they didn't ask
-	// for. Same test in `player.svelte.ts`, which hydrates `prefs` at launch.
-	const musicVideosOn = $derived(settings.music_videos === 'true');
-	// On by default, and only offered with music videos on: album songs that have a video start as
-	// it, with the song on the Song/Video switch (#442, #464). Rust reads it in `get_album`.
-	const videosFirstOn = $derived(settings.videos_first !== 'false');
-	// Off by default, and only offered with music videos on: it costs real GPU time on every frame.
-	const ambientOn = $derived(settings.ambient_light === 'true');
 	const preventDuplicatesOn = $derived(settings.prevent_duplicates === 'true');
 	// Off by default: shuffle applies to the queue it was turned on for (issue #117).
 	const stickyShuffleOn = $derived(settings.sticky_shuffle === 'true');
 	// Off by default: shuffle keeps what was added with Add to queue behind the playlist (#369).
 	const shuffleWholeOn = $derived(settings.shuffle_whole_queue === 'true');
 	const updateBannerOn = $derived(settings.update_banner !== 'false');
-	const betaOn = $derived(settings.update_channel === 'beta');
 	const trayOn = $derived(settings.close_to_tray !== 'false');
 	const trackNotificationsOn = $derived(settings.track_notifications === 'true');
 	const trackNotificationsFocusedOn = $derived(settings.track_notifications_focused === 'true');
@@ -293,31 +275,6 @@
 		await api.setSetting('crossfade_secs', settings.crossfade_secs);
 	}
 
-	// Also lands in `prefs`, which is where the player view reads it: the switch has to take effect
-	// on the track that's already playing, not on the next launch.
-	async function setMusicVideos(on: boolean) {
-		settings.music_videos = on ? 'true' : 'false';
-		prefs.musicVideos = on;
-		await api.setSetting('music_videos', settings.music_videos);
-	}
-
-	async function setVideosFirst(on: boolean) {
-		settings.videos_first = on ? 'true' : 'false';
-		await api.setSetting('videos_first', settings.videos_first);
-	}
-
-	// `prefs` after the write: on Linux the write is also what turns WebGL on for the glow.
-	async function setAmbient(on: boolean) {
-		settings.ambient_light = on ? 'true' : 'false';
-		await api.setSetting('ambient_light', settings.ambient_light);
-		prefs.ambient = on;
-	}
-
-	async function setHideVideos(on: boolean) {
-		settings.hide_videos = on ? 'true' : 'false';
-		await api.setSetting('hide_videos', settings.hide_videos);
-	}
-
 	async function setPreventDuplicates(on: boolean) {
 		settings.prevent_duplicates = on ? 'true' : 'false';
 		await api.setSetting('prevent_duplicates', settings.prevent_duplicates);
@@ -336,12 +293,6 @@
 	async function setUpdateBanner(on: boolean) {
 		settings.update_banner = on ? 'true' : 'false';
 		await api.setSetting('update_banner', settings.update_banner);
-	}
-
-	async function setBeta(on: boolean) {
-		settings.update_channel = on ? 'beta' : 'stable';
-		await api.setSetting('update_channel', settings.update_channel);
-		await recheckForUpdates();
 	}
 
 	async function setTray(on: boolean) {
@@ -623,7 +574,6 @@
 								})}
 								{@render row({
 									title: t('settings.playback.crossfade'),
-									badge: t('settings.themes.experimental'),
 									desc: crossfadeSuspended
 										? t('settings.playback.crossfade_lt_paused')
 										: t('settings.playback.crossfade_hint'),
@@ -654,40 +604,6 @@
 									title: t('settings.playback.shuffle_whole_queue'),
 									desc: t('settings.playback.shuffle_whole_queue_hint'),
 									control: shuffleWholeSwitch,
-									tall: true
-								})}
-							</div>
-						</section>
-						<section class={GROUP}>
-							<h3 class={LABEL}>{t('settings.sections.video')}</h3>
-							<div class={CARD}>
-								{@render row({
-									title: t('settings.playback.music_videos'),
-									badge: t('settings.themes.experimental'),
-									desc: t('settings.playback.music_videos_hint'),
-									control: musicVideoSwitch,
-									tall: true
-								})}
-								{#if musicVideosOn}
-									{@render row({
-										title: t('settings.playback.videos_first'),
-										desc: t('settings.playback.videos_first_hint'),
-										control: videosFirstSwitch,
-										tall: true
-									})}
-									{@render row({
-										title: t('settings.playback.ambient_light'),
-										badge: t('settings.themes.experimental'),
-										desc: t('settings.playback.ambient_light_hint'),
-										extra: ambientGpu,
-										control: ambientSwitch,
-										tall: true
-									})}
-								{/if}
-								{@render row({
-									title: t('settings.playback.hide_videos'),
-									desc: t('settings.playback.hide_videos_hint'),
-									control: hideVideoSwitch,
 									tall: true
 								})}
 							</div>
@@ -773,14 +689,6 @@
 									control: bannerSwitch,
 									tall: true
 								})}
-								{#if betaAvailable}
-									{@render row({
-										title: t('settings.about.beta'),
-										desc: t('settings.about.beta_hint'),
-										control: betaSwitch,
-										tall: true
-									})}
-								{/if}
 							</div>
 						</section>
 
@@ -895,46 +803,7 @@
 		onCheckedChange={setShuffleWhole}
 	/>{/snippet}
 {#snippet normalizeSwitch()}<Switch checked={normalizeOn} onCheckedChange={setNormalize} />{/snippet}
-{#snippet musicVideoSwitch()}<Switch checked={musicVideosOn} onCheckedChange={setMusicVideos} />{/snippet}
-{#snippet videosFirstSwitch()}<Switch checked={videosFirstOn} onCheckedChange={setVideosFirst} />{/snippet}
-{#snippet ambientSwitch()}<Switch checked={ambientOn} onCheckedChange={setAmbient} />{/snippet}
-<!-- The GPU note, behind a warning glyph by the title: it matters to the few whose card is weak,
-     and a paragraph under the switch read as a reason not to try it. A popover rather than a
-     tooltip, so it opens on a click or a key and can hold the link. -->
-{#snippet ambientGpu()}
-	<Popover.Root>
-		<Popover.Trigger
-			class="-m-1 cursor-pointer rounded-md p-1 text-muted-foreground transition-colors hover:text-foreground data-[state=open]:text-foreground"
-			aria-label={t('settings.playback.ambient_light_gpu_title')}
-			title={t('settings.playback.ambient_light_gpu_title')}
-		>
-			<HugeiconsIcon icon={Alert02Icon} size={14} strokeWidth={1.8} />
-		</Popover.Trigger>
-		<Popover.Content side="top" align="start" class="w-80 gap-3">
-			<div class="flex items-start gap-2.5">
-				<HugeiconsIcon icon={Alert02Icon} size={16} strokeWidth={1.8} class="mt-0.5 shrink-0" />
-				<div class="min-w-0">
-					<p class="text-sm font-semibold">{t('settings.playback.ambient_light_gpu_title')}</p>
-					<p class="mt-1 text-xs leading-relaxed text-muted-foreground">
-						{t('settings.playback.ambient_light_gpu')}
-					</p>
-				</div>
-			</div>
-			<Button
-				variant="secondary"
-				size="sm"
-				class="self-start"
-				onclick={() => api.openExternal('https://www.videocardbenchmark.net/gpu_list.php')}
-			>
-				<HugeiconsIcon icon={LinkSquare02Icon} size={15} strokeWidth={1.8} />
-				{t('settings.playback.ambient_light_gpu_check')}
-			</Button>
-		</Popover.Content>
-	</Popover.Root>
-{/snippet}
-{#snippet hideVideoSwitch()}<Switch checked={hideVideosOn} onCheckedChange={setHideVideos} />{/snippet}
 {#snippet bannerSwitch()}<Switch checked={updateBannerOn} onCheckedChange={setUpdateBanner} />{/snippet}
-{#snippet betaSwitch()}<Switch checked={betaOn} onCheckedChange={setBeta} />{/snippet}
 
 <!-- Segmented, not three buttons: the options are one exclusive choice and should look like it. -->
 {#snippet qualityPicker()}

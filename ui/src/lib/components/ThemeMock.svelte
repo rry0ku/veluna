@@ -5,7 +5,7 @@
 	// Appearance tab follow a slider live: dragging restyles a few dozen elements instead of the
 	// whole document (docs/UI-PERFORMANCE.md, "Per-track and per-tick writes land on a leaf").
 	//
-	// Sized in em off the root's font-size. Radii are scaled by --k: a real corner on a card this
+	// Sized in em off the root font-size. Radii are scaled by --k: a real corner on a card this
 	// small would read as a pill.
 	import { onAccent, type Custom, type ThemeId } from '$lib/theme.svelte';
 

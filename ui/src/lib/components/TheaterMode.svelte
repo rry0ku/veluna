@@ -54,16 +54,6 @@
 		ui,
 		wheelVolume
 	} from '$lib/player.svelte';
-	import {
-		canSwitch,
-		claimVideo,
-		parkVideo,
-		pickVersion,
-		setHole,
-		showVideo,
-		video,
-		videoSide
-	} from '$lib/video.svelte';
 	import { artRoom } from '$lib/artroom.svelte';
 	import { appearance, setAppearance } from '$lib/theme.svelte';
 	import { isMissingThumb, thumb } from '$lib/thumb';
@@ -72,7 +62,6 @@
 	import LyricsView from './LyricsView.svelte';
 	import QueueList from './QueueList.svelte';
 	import TrackMenu from './TrackMenu.svelte';
-	import Ambient from './Ambient.svelte';
 
 	const close = () => (ui.theaterOpen = false);
 
@@ -253,12 +242,8 @@
 	);
 	const side = $derived(
 		columns
-			? showVideo()
-				? `min(100cqw, (100cqh - ${titleRoom}) * 16 / 9)`
-				: `min(100cqw, 100cqh - ${titleRoom}, 34rem)`
-			: showVideo()
-				? `min(100cqw, (100cqh - ${titleRoom}) * 16 / 9, 96rem)`
-				: `min(100cqw, 100cqh - ${titleRoom}, 44rem)`
+			? `min(100cqw, 100cqh - ${titleRoom}, 34rem)`
+			: `min(100cqw, 100cqh - ${titleRoom}, 44rem)`
 	);
 
 	// Clicking the picture toggles playback and flashes the action just taken over it. Read `paused`
@@ -311,100 +296,45 @@
 	// fade still shows the app through would flash the desktop. Taken away when the fade out starts,
 	// for the same reason, and only by this view: by the time this is destroyed the player view
 	// underneath may already hold the hole again.
-	let view: HTMLElement;
-	let settled = $state(false);
-	let released = false;
-	let holding = false;
-	$effect(() => {
-		// Mounted without a fade (none is coming), so no introend either.
-		const frame = requestAnimationFrame(() => {
-			if (!view.getAnimations().length) settled = true;
-		});
-		return () => cancelAnimationFrame(frame);
-	});
-	function leave() {
-		released = true;
-		if (holding) setHole(null);
-	}
-	function holeFor(el: HTMLElement) {
-		if (!settled) return;
-		holding = true;
-		const measure = () => {
-			if (released) return;
-			if (document.hidden) return setHole(null);
-			const r = el.getBoundingClientRect();
-			setHole({ x: r.left, y: r.top, w: r.width, h: r.height });
-		};
-		// The box, the window (fullscreen lands after mount), and the picture's column, whose size
-		// changes with every switch of the side column and is what moves the box without resizing it.
-		const ro = new ResizeObserver(measure);
-		ro.observe(el);
-		ro.observe(document.documentElement);
-		const col = el.closest('[data-theater-pic]');
-		if (col) ro.observe(col);
-		document.addEventListener('visibilitychange', measure);
-		return () => {
-			ro.disconnect();
-			document.removeEventListener('visibilitychange', measure);
-			holding = false;
-			if (!released) setHole(null);
-		};
-	}
 </script>
 
 <svelte:window onkeydown={onKey} onpointermove={wake} />
 
-<!-- Above the whole app including the titlebar (the chrome tops out at z-20): fullscreen means
-     fullscreen. Below the dialogs and menus (z-50 and up) and the toast/update banners (z-100),
-     which have to stay reachable from in here: Ctrl+K opened the palette behind this view.
-     Transparent while mpv's picture shows through it; `inert:` is the fade out, when Svelte stops
-     updating classes here and the background has to come back on its own. -->
 <section
-	bind:this={view}
 	transition:fade={{ duration: 220 }}
-	onintroend={() => (settled = true)}
-	onoutrostart={leave}
-	class="fixed inset-0 z-40 flex flex-col overflow-hidden text-foreground inert:bg-background {video.hole
-		? ''
-		: 'bg-background'} {calm ? 'cursor-none' : ''}"
+	class="fixed inset-0 z-40 flex flex-col overflow-hidden text-foreground bg-background {calm ? 'cursor-none' : ''}"
 >
-	{#if showVideo()}
-		<!-- The video lights the room itself (Settings > Video > ambient light), and nothing else
-		     does: on Linux every layer here would paint over mpv's picture. -->
-		{#if prefs.ambient && picBox}<Ambient box={picBox} />{/if}
-	{:else}
-		<!-- === Backdrop, three layers, none of which repaint with the content over them ===
-		     1. the cover, pre-blurred into a small bitmap once per track and upscaled. No live
-		        filter. Behind the artwork-background setting, so it is still a one-click ablation.
-		        Stretched to the window (`100% 100%`) rather than cropped: at this blur nobody can see
-		        the square has been stretched, and `cover` would throw away its top and bottom.
-		        A new track's wash crossfades with the last one's: an entrance alone dropped the old
-		        one at once and dipped the room to the bare background on every song. -->
-		{#if appearance.artworkBackground && room.wash}
-			{#key room.wash}
-				<div
-					transition:fade={{ duration: 700 }}
-					style="background-image:url({room.wash});background-size:100% 100%;{room.washVars}"
-					class="pointer-events-none absolute inset-0 opacity-[min(0.5,var(--wash-light))] dark:opacity-[min(0.6,var(--wash-dark))]"
-				></div>
-			{/key}
-		{/if}
-		<!-- 2. the room light: soft blobs off the cover's own colour. Painted fills and STATIC: an
-		        earlier version drifted this on a keyframe, and a full-viewport element moving every
-		        frame damages the whole screen every frame. -->
-		<div class="pointer-events-none absolute -inset-[15%]" style="background-image:{room.mesh}"></div>
-		<!-- 3. the vignette, centred on the picture, and the floor under the dock: the two things that
-		        keep text legible over whatever the cover happened to be. -->
-		<div
-			class="pointer-events-none absolute inset-0"
-			style="background-image:radial-gradient(110% 90% at {columns
-				? '28%'
-				: '50%'} 42%, transparent 25%, var(--background) 100%)"
-		></div>
-		<div
-			class="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-background to-transparent"
-		></div>
+	<!-- === Backdrop, three layers, none of which repaint with the content over them ===
+	     1. the cover, pre-blurred into a small bitmap once per track and upscaled. No live
+	        filter. Behind the artwork-background setting, so it is still a one-click ablation.
+	        Stretched to the window (`100% 100%`) rather than cropped: at this blur nobody can see
+	        the square has been stretched, and `cover` would throw away its top and bottom.
+	        A new track's wash crossfades with the last one's: an entrance alone dropped the old
+	        one at once and dipped the room to the bare background on every song. -->
+	{#if appearance.artworkBackground && room.wash}
+		{#key room.wash}
+			<div
+				transition:fade={{ duration: 700 }}
+				style="background-image:url({room.wash});background-size:100% 100%;{room.washVars}"
+				class="pointer-events-none absolute inset-0 opacity-[min(0.5,var(--wash-light))] dark:opacity-[min(0.6,var(--wash-dark))]"
+			></div>
+		{/key}
 	{/if}
+	<!-- 2. the room light: soft blobs off the cover's own colour. Painted fills and STATIC: an
+	        earlier version drifted this on a keyframe, and a full-viewport element moving every
+	        frame damages the whole screen every frame. -->
+	<div class="pointer-events-none absolute -inset-[15%]" style="background-image:{room.mesh}"></div>
+	<!-- 3. the vignette, centred on the picture, and the floor under the dock: the two things that
+	        keep text legible over whatever the cover happened to be. -->
+	<div
+		class="pointer-events-none absolute inset-0"
+		style="background-image:radial-gradient(110% 90% at {columns
+			? '28%'
+			: '50%'} 42%, transparent 25%, var(--background) 100%)"
+	></div>
+	<div
+		class="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-background to-transparent"
+	></div>
 
 	<!-- === Top strip: where the queue came from, and the way out. === -->
 	<header
@@ -453,14 +383,12 @@
 			<div style="--side:{side};width:var(--side)">
 				<!-- svelte-ignore a11y_no_static_element_interactions -- wheel is the volume gesture -->
 				<div bind:this={picBox} class="relative" onwheel={onArtWheel}>
-					{#if !showVideo()}
-						<!-- The light the cover sits in: bigger than it and behind it, so it reads as a
-						     spill, where a shadow this size would be re-blurred on every repaint. -->
-						<div
-							class="pointer-events-none absolute -inset-[14%] -z-10 opacity-70"
-							style="background-image:{room.glow}"
-						></div>
-					{/if}
+					<!-- The light the cover sits in: bigger than it and behind it, so it reads as a
+					     spill, where a shadow this size would be re-blurred on every repaint. -->
+					<div
+						class="pointer-events-none absolute -inset-[14%] -z-10 opacity-70"
+						style="background-image:{room.glow}"
+					></div>
 					<button
 						type="button"
 						onclick={toggle}
@@ -485,56 +413,35 @@
 								</div>
 							</div>
 						{/if}
-						<!-- The music video. VideoSurface owns the element (or mpv draws it, on Linux and
-						     Windows) and this borrows it while theater is up, the same way the player
-						     view does; the player view hands it over and takes it back. -->
-						{#if prefs.nativeVideo}
-							{#if showVideo()}
-								<div
-									class="aspect-video w-full rounded-2xl inert:bg-black {video.hole ? '' : 'bg-black'}"
-									{@attach holeFor}
-								></div>
-							{/if}
-						{:else}
-							<div
-								class="contents"
-								{@attach (box: HTMLElement) => {
-									claimVideo(box);
-									return () => parkVideo(box);
-								}}
-							></div>
-						{/if}
-						{#if !showVideo()}
-							<!-- A new track's cover settles in from a little smaller: the one motion on
-							     the stage, and it says the song changed. -->
-							{#key playback.now?.videoId}
-								<div in:scale={{ start: 0.94, duration: 420, easing: cubicOut }} class="relative">
-									{#if src && attempt < srcs.length}
-										<!-- The 120 underneath is the one the player bar already has, so it
-										     paints on the frame the track changes (#77). -->
-										<img
-											{src}
-											alt=""
-											onerror={() => attempt++}
-											onload={(e) => isMissingThumb(e) && attempt++}
-											style={srcs[2] ? `background-image:url(${srcs[2]})` : undefined}
-											class="aspect-square w-full rounded-2xl bg-cover object-cover"
-										/>
-									{:else}
-										<div
-											class="flex aspect-square w-full items-center justify-center rounded-2xl bg-muted text-muted-foreground/40"
-										>
-											<HugeiconsIcon icon={MusicNote01Icon} class="h-20 w-20" />
-										</div>
-									{/if}
-									<!-- A hairline round the edge, so a cover that is mostly the background's
-									     colour still has one. A ring, not a shadow. -->
+						<!-- A new track's cover settles in from a little smaller: the one motion on
+						     the stage, and it says the song changed. -->
+						{#key playback.now?.videoId}
+							<div in:scale={{ start: 0.94, duration: 420, easing: cubicOut }} class="relative">
+								{#if src && attempt < srcs.length}
+									<!-- The 120 underneath is the one the player bar already has, so it
+									     paints on the frame the track changes (#77). -->
+									<img
+										{src}
+										alt=""
+										onerror={() => attempt++}
+										onload={(e) => isMissingThumb(e) && attempt++}
+										style={srcs[2] ? `background-image:url(${srcs[2]})` : undefined}
+										class="aspect-square w-full rounded-2xl bg-cover object-cover"
+									/>
+								{:else}
 									<div
-										class="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-inset ring-foreground/10"
-									></div>
-								</div>
-							{/key}
-						{/if}
+										class="flex aspect-square w-full items-center justify-center rounded-2xl bg-muted text-muted-foreground/40"
+									>
+										<HugeiconsIcon icon={MusicNote01Icon} class="h-20 w-20" />
+									</div>
+								{/if}
+								<!-- A hairline round the edge, so a cover that is mostly the background's
+								     colour still has one. A ring, not a shadow. -->
+								<div
+									class="pointer-events-none absolute inset-0 rounded-2xl ring-1 ring-inset ring-foreground/10"
+								></div>
+							</div>
+						{/key}
 					</button>
 				</div>
 
@@ -727,12 +634,6 @@
 						triggerClass="flex size-10 cursor-pointer items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground"
 					/>
 				{/if}
-				{#if canSwitch()}
-					<div class="ml-2 flex rounded-full bg-foreground/[0.07] p-1" role="group">
-						{@render mode(false, t('player.song'))}
-						{@render mode(true, t('player.video'))}
-					</div>
-				{/if}
 			</div>
 
 			<!-- Transport. Bigger than the player bar's: at arm's length this is the only control
@@ -861,20 +762,6 @@
 		<div class="h-full origin-left bg-primary" style="transform:scaleX({pct / 100})"></div>
 	</div>
 </section>
-
-{#snippet mode(on: boolean, label: string)}
-	<button
-		type="button"
-		onclick={() => pickVersion(on)}
-		aria-pressed={videoSide() === on}
-		class="cursor-pointer rounded-full px-3.5 py-1 text-sm font-medium transition-colors {videoSide() ===
-		on
-			? 'bg-background text-foreground shadow-sm'
-			: 'text-muted-foreground hover:text-foreground'}"
-	>
-		{label}
-	</button>
-{/snippet}
 
 {#snippet sideButton(icon: typeof Mic01Icon, label: string, on: boolean, toggle: () => void)}
 	<button

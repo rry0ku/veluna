@@ -57,15 +57,9 @@ export const np = $state({ open: false, tab: 'queue' as 'queue' | 'lyrics' | 'co
  * without a reload.
  */
 export const prefs = $state({
-	musicVideos: false,
 	/** `discord_rpc`. Two places toggle it (the titlebar button and the Discord settings tab) and
 	 *  each drew its own indicator, so turning it off in one left the other stale. One owner. */
 	discordRpc: false,
-	/** Linux: mpv draws the music video under the page (nativevideo.rs) instead of a `<video>`
-	 *  element. Cleared if it turns out there is no GL surface, which hands the picture back. */
-	nativeVideo: false,
-	/** `ambient_light`: the player view glows with the music video's colours (Ambient.svelte). */
-	ambient: false,
 	/** `autoplay`: the queue keeps going with similar songs. Switched from the queue panel as well
 	 *  as Settings, so both read it here. */
 	autoplay: true,
@@ -79,57 +73,6 @@ export const prefs = $state({
 export function setAutoplay(on: boolean): void {
 	prefs.autoplay = on;
 	api.setSetting('autoplay', on ? 'true' : 'false').catch((e) => toast.error(String(e)));
-}
-
-/** Linux: the tracks mpv has the music video for (`video-ready`), so the view knows a picture is
- *  coming rather than showing a black box for a track with none.
- *  ponytail: grows by one short key per music video played, for the session. */
-export const videoReady: Record<string, true> = $state({});
-
-/** videoId → the in-flight or settled loopback URL for its music video (null when it has none).
- *
- *  It lives here, not in `NowPlaying`, because the layout unmounts that component whenever the
- *  player view is closed. Without this, reopening the view re-runs `video_stream`, which is up to
- *  two `/player` round trips to YouTube that the user sits through every single time. Storing the
- *  promise rather than the value also means the prefetch below and the view's own request are the
- *  same request when they overlap.
- *
- *  ponytail: bounded by insertion order, not use. The Rust side keeps eight too, so anything
- *  evicted here is still a cheap answer there. */
-const videoUrls = new Map<string, Promise<string | null>>();
-
-/** The picture ladder YouTube publishes, snapped up so the box is never upscaled, capped at 720
- *  because that is already more than the player view's box gets on a 1080p screen. What the window
- *  keeps from the box's height, at the default root font size, mirrors NowPlaying.svelte's two
- *  layouts. Original: `176` is `11rem`, the chrome above and below the box (the `--vid` calc).
- *  New layout: `344` is the titlebar and the player bar (~110), the view's top row and padding
- *  (80), and the title block under the picture (9.5rem, `VIDEO_SIDE`). If any of those changes
- *  height, this does. */
-export function wantedVideoHeight() {
-	const px = appearance.classicPlayer
-		? (window.innerHeight - 176) * 0.85
-		: window.innerHeight - 344;
-	return [360, 480, 720].find((h) => h >= px) ?? 720;
-}
-
-/** The loopback URL for a track's music video, resolving it at most once. */
-export function videoUrlFor(videoId: string): Promise<string | null> {
-	let p = videoUrls.get(videoId);
-	if (!p) {
-		// Silent on failure: a null answer is the ordinary case (the track has no video stream),
-		// and the artwork staying put is already the right thing to show.
-		p = api.videoStream(videoId, wantedVideoHeight()).catch(() => null);
-		if (videoUrls.size >= 8) videoUrls.delete(videoUrls.keys().next().value!);
-		videoUrls.set(videoId, p);
-	}
-	return p;
-}
-
-/** Forget a URL the element could not load, here and in Rust, so the next open resolves a fresh
- *  one instead of failing the same way. */
-export function forgetVideoUrl(videoId: string) {
-	videoUrls.delete(videoId);
-	api.forgetVideoStream(videoId).catch(() => {});
 }
 
 /** No-op when the user has turned the auto-open off (#64): playback starts, the view stays put. */
@@ -1511,15 +1454,7 @@ export function initApp(mini = false): () => void {
 			// threshold (#497).
 			pl.touchPick(personal, n.videoId);
 			savePersonal();
-			// Warm the music video now rather than when the view opens: the resolve is a round trip
-			// to YouTube, and paid here it overlaps the track starting instead of the user's click.
-			// Not in the mini player, which has no player view to show it in.
-			if (!mini && prefs.musicVideos && !prefs.nativeVideo && n.isVideo) videoUrlFor(n.videoId);
 		}),
-		// YouTube's own answer for a track whose row never stated one (issue #93). Into the
-		// override map as well as the player bar: the same song is on screen as a list row too,
-		// and `ratingOf` reads that map for every row that is not the playing one.
-		api.onVideoReady((videoId) => (videoReady[videoId] = true)),
 		api.onRating((videoId, rating) => {
 			ratings[videoId] = rating;
 			capOverrides(ratings);
@@ -1629,9 +1564,6 @@ export function initApp(mini = false): () => void {
 	if (mini) return teardown;
 	api.getSettings()
 		.then((s) => {
-			prefs.musicVideos = s.music_videos === 'true';
-			prefs.nativeVideo = s.native_video === 'true';
-			prefs.ambient = s.ambient_light === 'true';
 			prefs.discordRpc = s.discord_rpc === 'true';
 			prefs.autoplay = s.autoplay !== 'false';
 			prefs.scrobbling = parseScrobbleConfig(s.lastfm_config).enabled;

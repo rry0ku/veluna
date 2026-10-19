@@ -9,11 +9,11 @@
 <p align="center">
 Stream anything from YouTube. Download high-quality offline tracks. Manage your local library.<br/>
 No subscriptions. No advertisements. No accounts. Zero telemetry.<br/>
-Native desktop performance built with Rust and Tauri for Linux and Windows.
+Native desktop performance built with Rust and Tauri for Windows, macOS, and Linux.
 </p>
 
 <p align="center">
-  <a href="https://github.com/rry0ku/veluna/releases"><img src="https://img.shields.io/badge/Download%20for%20Windows%20%26%20Linux-39FF14?style=for-the-badge" alt="Download" /></a>
+  <a href="https://github.com/rry0ku/veluna/releases"><img src="https://img.shields.io/badge/Download%20for%20Windows%2C%20macOS%20%26%20Linux-39FF14?style=for-the-badge" alt="Download" /></a>
   <a href="https://discord.com/invite/u7QXUgPcqr"><img src="https://img.shields.io/badge/Discord-Join%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord" /></a>
 </p>
 
@@ -26,8 +26,8 @@ Native desktop performance built with Rust and Tauri for Linux and Windows.
 </p>
 
 <p align="center">
-  <a href="https://github.com/rry0ku/veluna/releases"><img src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows-informational?style=flat-square&logo=linux&logoColor=white" alt="Platform" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-39FF14?style=flat-square" alt="License" /></a>
+  <a href="https://github.com/rry0ku/veluna/releases"><img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-informational?style=flat-square&logo=apple&logoColor=white" alt="Platform" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-39FF14?style=flat-square" alt="License" /></a>
   <a href="https://tauri.app"><img src="https://img.shields.io/badge/Tauri-v2-FFC131?style=flat-square&logo=tauri&logoColor=white" alt="Tauri" /></a>
   <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/Rust-stable-CE422B?style=flat-square&logo=rust&logoColor=white" alt="Rust" /></a>
   <a href="https://react.dev"><img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React" /></a>
@@ -228,4 +228,4 @@ Veluna is a client-side media player. It does not host, cache, or redistribute c
 
 ## License
 
-MIT License. Copyright (c) [rry0ku](https://github.com/rry0ku).
+GNU General Public License v3.0. Copyright (c) 2026 [rry0ku](https://github.com/rry0ku).

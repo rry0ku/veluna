@@ -71,6 +71,7 @@ pub struct AppState {
     /// Last.fm + ListenBrainz scrobbler. Same feed again; each half parks until its own
     /// credential is set (session key via the titlebar button, user token via Scrobbling settings).
     pub lastfm: crate::lastfm::LastfmHandle,
+    pub downloader: Arc<crate::downloader::DownloadManager>,
     queue: Mutex<QueueState>,
     /// Bumped on every explicit `play`/jump so superseded async resolves discard their result
     /// (cancellation without JoinHandle bookkeeping). context/06 §6.
@@ -483,6 +484,7 @@ impl AppState {
             clients,
             player,
             db,
+            downloader: Arc::new(crate::downloader::DownloadManager::new(app.clone())),
             app,
             orchestrator,
             lt,
@@ -1187,7 +1189,7 @@ impl AppState {
 
     /// `is_upload` comes off the queue row, never off `/player`: the response that has to be
     /// handled here (LOGIN_REQUIRED) carries no `videoDetails` to read it from. Issue #71.
-    async fn resolve(
+    pub(crate) async fn resolve(
         &self,
         video_id: &str,
         is_upload: bool,

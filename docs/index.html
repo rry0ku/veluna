@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Veluna — Free, Open-Source & Ad-Free Music Player</title>
-<meta name="description" content="Veluna is the ultimate free, open-source, ad-free desktop music streaming app for Windows & Linux. Stream millions of tracks powered by YouTube, enjoy high-fidelity audio, synced lyrics, and offline downloads with zero paywalls or tracking.">
-<meta name="keywords" content="music player, free music player, ad-free music, spotify alternative, free spotify alternative, ad free spotify alternative, apple music alternative, youtube music alternative, tidal alternative, youtube music desktop, youtube music client, desktop youtube music, stream youtube music, free music streaming, open source music player, high fidelity music, lossless audio, mp3 player, music downloader, youtube music downloader, mp3 downloader, offline music downloader, synchronized lyrics, lrc lyrics, audio equalizer, discord rich presence music, mpris music player, crossfade music player, spotify playlist import, exportify csv import, privacy music player, zero tracking music, tauri music player, veluna, veluna player, veluna music, desktop music streamer, windows music player, linux music player">
+<meta name="description" content="Veluna is the ultimate free, open-source, ad-free desktop music streaming app for Windows, macOS & Linux. Stream millions of tracks powered by YouTube, enjoy high-fidelity audio, synced lyrics, and offline downloads with zero paywalls or tracking.">
+<meta name="keywords" content="music player, free music player, ad-free music, spotify alternative, free spotify alternative, ad free spotify alternative, apple music alternative, youtube music alternative, tidal alternative, youtube music desktop, youtube music client, desktop youtube music, stream youtube music, free music streaming, open source music player, high fidelity music, lossless audio, mp3 player, music downloader, youtube music downloader, mp3 downloader, offline music downloader, synchronized lyrics, lrc lyrics, audio equalizer, discord rich presence music, mpris music player, crossfade music player, spotify playlist import, exportify csv import, privacy music player, zero tracking music, tauri music player, veluna, veluna player, veluna music, desktop music streamer, windows music player, linux music player, mac music player, macos music player">
 <meta name="author" content="rry0ku">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <link rel="canonical" href="https://rry0ku.github.io/veluna/">
@@ -14,7 +14,7 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Veluna">
 <meta property="og:title" content="Veluna — Free, Open-Source & Ad-Free Music Player">
-<meta property="og:description" content="Stream millions of songs with zero ads, zero paywalls, and zero tracking. High-fidelity audio, offline downloads, and synced lyrics for Windows & Linux.">
+<meta property="og:description" content="Stream millions of songs with zero ads, zero paywalls, and zero tracking. High-fidelity audio, offline downloads, and synced lyrics for Windows, macOS & Linux.">
 <meta property="og:url" content="https://rry0ku.github.io/veluna/">
 <meta property="og:image" content="https://rry0ku.github.io/veluna/og-image.png">
 <meta property="og:image:width" content="1907">
@@ -24,7 +24,7 @@
 <!-- Twitter Card -->
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Veluna — Free, Open-Source & Ad-Free Music Player">
-<meta name="twitter:description" content="Stream millions of songs with zero ads, zero paywalls, and zero tracking. High-fidelity audio, offline downloads, and synced lyrics for Windows & Linux.">
+<meta name="twitter:description" content="Stream millions of songs with zero ads, zero paywalls, and zero tracking. High-fidelity audio, offline downloads, and synced lyrics for Windows, macOS & Linux.">
 <meta name="twitter:image" content="https://rry0ku.github.io/veluna/og-image.png">
 <meta name="twitter:image:alt" content="Veluna Desktop Music Player Interface">
 
@@ -34,7 +34,7 @@
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "Veluna",
-  "operatingSystem": "Windows, Linux",
+  "operatingSystem": "Windows, macOS, Linux",
   "applicationCategory": "MultimediaApplication",
   "offers": {
     "@type": "Offer",
@@ -46,7 +46,7 @@
   "downloadUrl": "https://github.com/rry0ku/veluna/releases",
   "image": "https://rry0ku.github.io/veluna/og-image.png",
   "softwareVersion": "0.1.7",
-  "license": "https://opensource.org/licenses/MIT",
+  "license": "https://www.gnu.org/licenses/gpl-3.0.html",
   "author": {
     "@type": "Person",
     "name": "rry0ku",
@@ -378,6 +378,24 @@ nav.scrolled { background: var(--bg2); box-shadow: 0 8px 24px -16px rgba(0,0,0,.
 }
 .hero-desc strong { color: var(--fg); font-weight: 600; }
 .hero-ctas { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.hero-proof {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin-top: 30px;
+  font-family: var(--mono); font-size: 12px; color: var(--fg3);
+  letter-spacing: .03em;
+}
+.hero-proof-item {
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.hero-proof-item svg {
+  width: 14px; height: 14px; color: var(--accent); flex-shrink: 0;
+}
+.hero-proof-item strong {
+  color: var(--fg); font-weight: 600;
+}
+.hero-proof-sep {
+  color: var(--bdr3);
+}
 
 .hero-v-wrap {
   display: flex; align-items: center; justify-content: center;
@@ -873,6 +891,7 @@ footer {
   .hero-title { font-size: clamp(48px, 13vw, 72px); margin-bottom: 24px; }
   .hero-desc { font-size: 15px; margin-bottom: 36px; max-width: 100%; }
   .hero-ctas { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .hero-proof { margin-top: 22px; gap: 8px 12px; font-size: 11px; }
   .btn-primary, .btn-secondary { width: 100%; justify-content: center; font-size: 14px; padding: 15px 20px; }
 
   /* nav */
@@ -1057,7 +1076,7 @@ footer {
         your<br><em>music</em><br><strong>deserves better.</strong>
       </h1>
       <p class="hero-desc reveal d2">
-        <strong>Veluna</strong> is a free, open-source desktop music player for Windows and Linux.
+        <strong>Veluna</strong> is a free, open-source desktop music player for Windows, macOS, and Linux.
         Stream from YouTube, manage your local library, download tracks —
         no ads, no accounts, nothing watching you.
       </p>
@@ -1070,6 +1089,22 @@ footer {
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.7C6.73 19.91 6.14 18 6.14 18c-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0 1 12 6.8c.85.004 1.71.115 2.51.337 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10.01 10.01 0 0 0 22 12c0-5.52-4.48-10-10-10z"/></svg>
           View Source
         </a>
+      </div>
+      <div class="hero-proof reveal d4">
+        <div class="hero-proof-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span><strong>1,000+</strong> downloads</span>
+        </div>
+        <span class="hero-proof-sep">·</span>
+        <div class="hero-proof-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          <span>Windows, macOS &amp; Linux</span>
+        </div>
+        <span class="hero-proof-sep">·</span>
+        <div class="hero-proof-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          <span>GPL-3.0 licensed</span>
+        </div>
       </div>
     </div>
   </div>
@@ -1358,18 +1393,18 @@ footer {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           </div>
           <div>
-            <div class="trust-card-title">MIT License</div>
-            <div class="trust-card-sub">Open source · Free forever</div>
+            <div class="trust-card-title">GPL-3.0 License</div>
+            <div class="trust-card-sub">Free software · Copyleft protected</div>
           </div>
         </div>
         <div class="trust-card-body">
-          Veluna is released under the <strong>MIT License</strong> — one of the most permissive open-source licenses in existence. You can use it, copy it, modify it, and distribute it freely. No strings attached, no CLAs, no enterprise tiers.
+          Veluna is released under the <strong>GNU General Public License v3.0 (GPL-3.0)</strong> — guaranteeing software freedom for everyone. You are free to run, study, share, and modify the software. Any derivative works must remain free and open source forever.
         </div>
         <div class="trust-pills">
-          <span class="trust-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Use commercially</span>
+          <span class="trust-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Free & Open Source</span>
           <span class="trust-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Modify freely</span>
-          <span class="trust-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Distribute</span>
-          <span class="trust-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Private use</span>
+          <span class="trust-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Share & Distribute</span>
+          <span class="trust-pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Copyleft Protected</span>
         </div>
       </div>
 
@@ -1411,7 +1446,7 @@ footer {
           </svg>
           veluna
         </div>
-        <div class="footer-tagline">Free, open-source music player for Windows and Linux. No ads, no tracking, no accounts.</div>
+        <div class="footer-tagline">Free, open-source music player for Windows, macOS, and Linux. No ads, no tracking, no accounts.</div>
         <div class="footer-social">
           <a href="https://github.com/rry0ku/veluna" target="_blank" rel="noopener" aria-label="GitHub">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.22.68-.48v-1.7C6.73 19.91 6.14 18 6.14 18c-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02A9.56 9.56 0 0 1 12 6.8c.85.004 1.71.115 2.51.337 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10.01 10.01 0 0 0 22 12c0-5.52-4.48-10-10-10z"/></svg>
@@ -1447,7 +1482,7 @@ footer {
 
     </div>
     <div class="footer-bottom">
-      <div class="footer-copy">© 2026 veluna · mit license · made with ♥ for music lovers</div>
+      <div class="footer-copy">© 2026 veluna · gpl-3.0 license · made with ♥ for music lovers</div>
     </div>
   </div>
 </footer>
