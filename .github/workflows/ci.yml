@@ -54,6 +54,11 @@ jobs:
           npm ci
           npm run build
 
+      - name: Setup FFmpeg sidecar binary
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node ./scripts/setup-ffmpeg.mjs linux-x64
+
       - name: Check Rust Backend & Tests
         run: |
           cargo check --workspace
@@ -118,6 +123,12 @@ jobs:
           npm run build
           cd ..
 
+      - name: Setup FFmpeg sidecar binary
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node ./scripts/setup-ffmpeg.mjs win32-x64
+
       - name: Check Rust Backend
         shell: pwsh
         env:
@@ -157,6 +168,11 @@ jobs:
           cd ui
           npm ci
           npm run build
+
+      - name: Setup FFmpeg sidecar binary
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node ./scripts/setup-ffmpeg.mjs darwin-arm64
 
       - name: Check Rust Backend
         run: |
