@@ -151,7 +151,7 @@ sudo zypper install ./veluna_<version>.x86_64.rpm
 
 ### Windows
 
-Veluna provides an interactive NSIS setup installer, a standalone MSI package, and a portable archive:
+Veluna provides an interactive NSIS setup installer as well as a standalone MSI package:
 
 - **NSIS Setup Installer (`.exe`)**:
   Recommended for desktop users. Download `veluna_<version>_x64-setup.exe` and run the installer. It configures Start Menu shortcuts, desktop icons, and automated self-updates.
@@ -160,8 +160,6 @@ Veluna provides an interactive NSIS setup installer, a standalone MSI package, a
   ```powershell
   msiexec /i veluna_<version>_x64_en-US.msi
   ```
-- **Portable Archive (`.zip`)**:
-  Extract and run `veluna.exe` directly without installation or administrator privileges.
 
 ### macOS
 
