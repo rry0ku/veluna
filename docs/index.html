@@ -1183,15 +1183,16 @@ footer {
 .footer-bottom {
   border-top: 1px solid var(--bdr);
   padding-top: 28px;
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 16px; flex-wrap: wrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
 }
 .footer-copy {
-  font-size: 12px; color: var(--fg4); letter-spacing: -0.01em;
-}
-.footer-badge {
-  font-size: 11px; color: var(--fg3);
-  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px;
+  color: var(--fg4);
+  letter-spacing: -0.01em;
+  text-align: center;
 }
 
 /* Back to top button */
@@ -1237,7 +1238,7 @@ footer {
   .features-grid { grid-template-columns: 1fr; gap: 12px; }
   .community-grid { grid-template-columns: 1fr; }
   .footer-top { grid-template-columns: 1fr; gap: 32px; }
-  .footer-bottom { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .footer-bottom { justify-content: center; text-align: center; }
   .horizon-arc { width: 220%; height: 280px; top: 110px; }
 }
 </style>
@@ -1660,9 +1661,6 @@ footer {
     <div class="footer-bottom">
       <div class="footer-copy">
         Copyright 2026 Veluna. Released under GNU General Public License v3.0.
-      </div>
-      <div class="footer-badge">
-        Built for listeners who care about software freedom.
       </div>
     </div>
   </div>
